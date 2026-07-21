@@ -274,18 +274,6 @@
             </button>
             <p id="farm-status" class="status" role="status"></p>
           </form>
-
-          <div id="farm-log-wrap" class="log-panel hidden" aria-live="polite">
-            <div class="log-head">
-              <img src="assets/notice_b19.png" alt="" width="22" height="22" />
-              <h3>สถานะการวิ่ง</h3>
-            </div>
-            <ul id="farm-log" class="log-list"></ul>
-            <div id="farm-empty" class="log-empty hidden">
-              <img src="assets/pet81_jelly.png" alt="" />
-              <p>ยังไม่มีการวิ่ง — กดเริ่มฟาร์มเมื่อพร้อม</p>
-            </div>
-          </div>
         </div>
       </div>
     </section>
@@ -295,6 +283,35 @@
     <img src="assets/logo_4k.png" alt="" width="28" height="28" />
     <p>CKR WWDC by j3da1</p>
   </footer>
+
+  <!-- Run status popup (pipeline cards) -->
+  <div id="run-status-root" class="run-status-root hidden" aria-hidden="true">
+    <div class="run-status-backdrop"></div>
+    <div
+      class="run-status-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="run-status-title"
+    >
+      <div class="run-status-head">
+        <div class="run-status-title-row">
+          <img src="assets/notice_b19.png" alt="" width="22" height="22" />
+          <h2 id="run-status-title">สถานะการวิ่ง</h2>
+        </div>
+        <button
+          type="button"
+          id="run-status-close"
+          class="run-status-close"
+          aria-label="ปิด"
+          disabled
+        >
+          ×
+        </button>
+      </div>
+      <p id="run-status-subtitle" class="run-status-subtitle">กำลังฟาร์ม… ห้ามปิดจนกว่าจะเสร็จ</p>
+      <ul id="farm-log" class="run-status-list" aria-live="polite"></ul>
+    </div>
+  </div>
 
   <!-- Modals -->
   <div id="modal-root" class="modal-root hidden" aria-hidden="true">

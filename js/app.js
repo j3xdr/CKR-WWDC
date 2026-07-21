@@ -215,6 +215,8 @@
   let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | null
   let farmRunning = false;
   let lastGate = null;
+  let runStatusClosable = false;
+  let pendingAfterRunStatus = null;
 
   const ERR_TH = {
     insufficient_tokens: "coins หมด กรุณาเติม",
@@ -752,6 +754,7 @@
     stopBalancePoll();
     stopQueuePoll();
     forceCloseModal();
+    forceCloseRunStatusPopup();
     loginView.classList.remove("hidden");
     userView.classList.add("hidden");
     $("logout-btn").classList.add("hidden");
@@ -790,6 +793,66 @@
     const num = Number(n);
     if (!Number.isFinite(num)) return String(n ?? "");
     return String(Math.trunc(num)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function setRunStatusSubtitle(done, ok) {
+    const sub = $("run-status-subtitle");
+    if (!sub) return;
+    sub.classList.remove("is-done", "is-fail");
+    if (!done) {
+      sub.textContent = "กำลังฟาร์ม… ห้ามปิดจนกว่าจะเสร็จ";
+      return;
+    }
+    if (ok) {
+      sub.textContent = "เสร็จแล้ว — กด × เพื่อปิด";
+      sub.classList.add("is-done");
+    } else {
+      sub.textContent = "ไม่สำเร็จ — กด × เพื่อปิด";
+      sub.classList.add("is-fail");
+    }
+  }
+
+  function setRunStatusClosable(done) {
+    runStatusClosable = !!done;
+    const btn = $("run-status-close");
+    if (btn) btn.disabled = !runStatusClosable;
+  }
+
+  function openRunStatusPopup(running) {
+    const root = $("run-status-root");
+    if (!root) return;
+    root.classList.remove("hidden");
+    root.setAttribute("aria-hidden", "false");
+    setRunStatusClosable(!running);
+    if (running) {
+      pendingAfterRunStatus = null;
+      setRunStatusSubtitle(false);
+    }
+  }
+
+  function closeRunStatusPopup() {
+    if (!runStatusClosable) return;
+    const root = $("run-status-root");
+    if (!root) return;
+    root.classList.add("hidden");
+    root.setAttribute("aria-hidden", "true");
+    const cb = pendingAfterRunStatus;
+    pendingAfterRunStatus = null;
+    if (typeof cb === "function") cb();
+  }
+
+  function forceCloseRunStatusPopup() {
+    runStatusClosable = true;
+    pendingAfterRunStatus = null;
+    const root = $("run-status-root");
+    if (root) {
+      root.classList.add("hidden");
+      root.setAttribute("aria-hidden", "true");
+    }
+    const btn = $("run-status-close");
+    if (btn) btn.disabled = true;
+    runStatusClosable = false;
+    setRunStatusSubtitle(false);
   }
 
   function freshPipeline() {
@@ -910,12 +973,13 @@
   }
 
   function renderPipeline() {
-    const wrap = $("farm-log-wrap");
+    const root = $("run-status-root");
     const list = $("farm-log");
-    const empty = $("farm-empty");
-    if (!wrap || !list) return;
-    wrap.classList.remove("hidden");
-    if (empty) empty.classList.add("hidden");
+    if (!list) return;
+    if (root) {
+      root.classList.remove("hidden");
+      root.setAttribute("aria-hidden", "false");
+    }
     list.innerHTML = "";
     if (!pipelineState) return;
 
@@ -960,6 +1024,7 @@
   function startLiveStages() {
     clearStageTimer();
     pipelineState = freshPipeline();
+    openRunStatusPopup(true);
     setPipelineActive(0);
     let tick = 0;
     stageTimer = setInterval(() => {
@@ -982,25 +1047,29 @@
     if (ok) {
       applyLogsToPipeline(rawLogs);
       finalizePipelineSuccess(result);
-      return;
+    } else {
+      applyLogsToPipeline(rawLogs);
+      const errCode = String(result?.error || "");
+      let failId = "done";
+      if (/login/i.test(errCode)) failId = "login";
+      else if (/corrupt/i.test(errCode)) failId = "clear";
+      else if (/matchmaking/i.test(errCode)) failId = "match";
+      else if (/claim/i.test(errCode)) failId = "claim";
+      else if (/ingame|farm/i.test(errCode)) failId = "run";
+      const alreadyErr = PIPELINE_STEPS.some((s) => pipelineState.kinds[s.id] === "err");
+      if (!alreadyErr) {
+        markPipelineError(failId, farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"));
+      } else if (!(pipelineState.extras || []).length) {
+        pipelineState.extras = [
+          { text: farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"), kind: "err" },
+        ];
+        renderPipeline();
+      } else {
+        renderPipeline();
+      }
     }
-    applyLogsToPipeline(rawLogs);
-    const errCode = String(result?.error || "");
-    let failId = "done";
-    if (/login/i.test(errCode)) failId = "login";
-    else if (/corrupt/i.test(errCode)) failId = "clear";
-    else if (/matchmaking/i.test(errCode)) failId = "match";
-    else if (/claim/i.test(errCode)) failId = "claim";
-    else if (/ingame|farm/i.test(errCode)) failId = "run";
-    const alreadyErr = PIPELINE_STEPS.some((s) => pipelineState.kinds[s.id] === "err");
-    if (!alreadyErr) {
-      markPipelineError(failId, farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"));
-    } else if (!(pipelineState.extras || []).length) {
-      pipelineState.extras = [
-        { text: farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"), kind: "err" },
-      ];
-      renderPipeline();
-    }
+    setRunStatusClosable(true);
+    setRunStatusSubtitle(true, !!ok);
   }
 
   function farmErrorMessage(result, fallback) {
@@ -1076,30 +1145,32 @@
         setStatus($("farm-status"), "ฟาร์มสำเร็จ · หัก 1 โทเค็น", "ok");
         const summary = result?.reward_summary || {};
         const reward = result?.reward || {};
-        showResultModal({
-          account:
-            (summary.nickname || result?.account?.nickname || "—") +
-            " · level " +
-            (summary.level ?? reward.level ?? "—"),
-          coinDelta: formatNumTh(summary.coin_delta ?? reward.coin?.delta ?? 0),
-          coinTotal: formatNumTh(summary.coin_total ?? reward.coin?.total ?? "—"),
-          xpDelta: formatNumTh(summary.exp_delta ?? reward.exp?.delta ?? 0),
-          xpTotal: formatNumTh(summary.exp_total ?? reward.exp?.total ?? "—"),
-          tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
-          tokensAfter: formatNumTh(
-            data.tokens_after ?? data.token_balance ?? tokenBalance()
-          ),
-        });
+        pendingAfterRunStatus = () =>
+          showResultModal({
+            account:
+              (summary.nickname || result?.account?.nickname || "—") +
+              " · level " +
+              (summary.level ?? reward.level ?? "—"),
+            coinDelta: formatNumTh(summary.coin_delta ?? reward.coin?.delta ?? 0),
+            coinTotal: formatNumTh(summary.coin_total ?? reward.coin?.total ?? "—"),
+            xpDelta: formatNumTh(summary.exp_delta ?? reward.exp?.delta ?? 0),
+            xpTotal: formatNumTh(summary.exp_total ?? reward.exp?.total ?? "—"),
+            tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
+            tokensAfter: formatNumTh(
+              data.tokens_after ?? data.token_balance ?? tokenBalance()
+            ),
+          });
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
       } else {
         const msg = farmErrorMessage(result, "ฟาร์มจบแล้วแต่มีปัญหา · โทเค็นถูกหักแล้ว");
         setStatus($("farm-status"), msg, "err");
-        showErrorModal(msg, "ฟาร์มไม่สำเร็จ");
+        // Error stays in status cards; no stacked error modal
       }
     } catch (e) {
       clearStageTimer();
       if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
         const gate = e.gate || e.data?.detail?.gate;
         if (gate) renderQueueModal(gate);
         else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
@@ -1111,15 +1182,13 @@
         buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
 
         if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
+          forceCloseRunStatusPopup();
           profile.token_balance = 0;
           paintProfile();
           showEmptyCoinsModal();
-        } else {
-          showErrorModal(msg, "ฟาร์มไม่สำเร็จ");
-          if (typeof e.data?.token_balance === "number") {
-            profile.token_balance = e.data.token_balance;
-            paintProfile();
-          }
+        } else if (typeof e.data?.token_balance === "number") {
+          profile.token_balance = e.data.token_balance;
+          paintProfile();
         }
       }
     } finally {
@@ -1262,6 +1331,24 @@
     }
 
     await runFarm();
+  });
+
+  $("run-status-close")?.addEventListener("click", () => {
+    closeRunStatusPopup();
+  });
+
+  $("run-status-root")
+    ?.querySelector(".run-status-backdrop")
+    ?.addEventListener("click", () => {
+      if (runStatusClosable) closeRunStatusPopup();
+    });
+
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    const root = $("run-status-root");
+    if (!root || root.classList.contains("hidden")) return;
+    if (runStatusClosable) closeRunStatusPopup();
+    else ev.preventDefault();
   });
 
   bootstrap();

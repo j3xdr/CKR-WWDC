@@ -779,7 +779,161 @@ input {
 .status.ok { color: var(--mint); }
 .status.muted { color: var(--cream-dim); }
 
-/* ---- Log panel ---- */
+/* ---- Run status popup (card list) ---- */
+.run-status-root {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.run-status-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 4, 2, 0.82);
+  backdrop-filter: blur(8px);
+}
+
+.run-status-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
+  max-height: min(78vh, 640px);
+  display: flex;
+  flex-direction: column;
+  padding: 18px 16px 16px;
+  border-radius: var(--radius);
+  background:
+    linear-gradient(165deg, rgba(74, 50, 36, 0.97) 0%, rgba(26, 15, 10, 0.98) 100%);
+  border: 1px solid var(--line-strong);
+  box-shadow: var(--shadow), 0 0 40px rgba(240, 180, 41, 0.12);
+  animation: rise 0.28s ease;
+}
+
+.run-status-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.run-status-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.run-status-title-row h2 {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.25rem;
+  color: var(--cream);
+}
+
+.run-status-close {
+  appearance: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--cream);
+  font-size: 1.45rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.run-status-close:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: var(--cream-dim);
+}
+
+.run-status-close:not(:disabled):hover {
+  background: rgba(226, 61, 46, 0.35);
+  border-color: rgba(255, 107, 107, 0.45);
+}
+
+.run-status-subtitle {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  color: var(--cream-dim);
+}
+
+.run-status-subtitle.is-done {
+  color: var(--mint);
+}
+
+.run-status-subtitle.is-fail {
+  color: var(--danger);
+}
+
+/* Show ~4 cards; scroll the rest */
+.run-status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  max-height: calc(4 * 72px + 3 * 10px);
+  min-height: 0;
+  flex: 1;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(240, 180, 41, 0.45) transparent;
+}
+
+.run-status-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 62px;
+  padding: 14px 14px;
+  border-radius: 14px;
+  background: rgba(46, 28, 20, 0.72);
+  border: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--cream);
+  animation: rise 0.25s ease;
+  box-shadow: inset 0 1px 0 rgba(246, 231, 200, 0.06);
+}
+
+.run-status-list li::before {
+  content: "";
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 8px rgba(240, 180, 41, 0.55);
+}
+
+.run-status-list li.pending::before {
+  background: var(--cream-dim);
+  box-shadow: none;
+  animation: blink 1s ease-in-out infinite;
+}
+
+.run-status-list li.ok::before {
+  background: var(--mint);
+  box-shadow: 0 0 8px rgba(62, 207, 142, 0.5);
+}
+
+.run-status-list li.err::before {
+  background: var(--danger);
+  box-shadow: 0 0 8px rgba(255, 107, 107, 0.45);
+}
+
+/* ---- Log panel (legacy unused inline) ---- */
 .log-panel {
   margin-top: 20px;
   padding: 16px;
