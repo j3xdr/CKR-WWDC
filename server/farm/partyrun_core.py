@@ -504,16 +504,53 @@ def main():
     for _ in range(8):
         res = claim(ingame_id)
         if not res.get("__error__"):
+            coin = res.get("coin") if isinstance(res.get("coin"), dict) else {}
+            exp = res.get("exp") if isinstance(res.get("exp"), dict) else {}
+            # Require a readable reward payload (avoid treating empty/garbage as success)
+            if not coin and not exp and not res.get("level") and not res.get("members"):
+                print("   claim returned empty reward payload, retrying ...")
+                time.sleep(3)
+                continue
             print("\n=================  REWARD CLAIMED  =================")
             def amt(x):
                 return f"+{x.get('delta','0')} (total {x.get('total','?')})"
-            print("  coin :", amt(res.get("coin", {})))
-            print("  exp  :", amt(res.get("exp", {})))
-            print("  gem  :", amt(res.get("gem", {})))
-            print("  ticket:", amt(res.get("party_run_ticket", {})))
+            print("  coin :", amt(coin))
+            print("  exp  :", amt(exp))
+            print("  gem  :", amt(res.get("gem", {}) if isinstance(res.get("gem"), dict) else {}))
+            print("  ticket:", amt(res.get("party_run_ticket", {}) if isinstance(res.get("party_run_ticket"), dict) else {}))
             print("  level:", res.get("level"), " rank:", res.get("final_rank"))
             print("===================================================")
-            return {"ok": True, "reward": res, "ingame_id": ingame_id}
+
+            nick = None
+            level = res.get("level")
+            try:
+                members = res.get("members") or []
+                if members and isinstance(members[0], dict):
+                    nick = members[0].get("nickname")
+            except Exception:
+                nick = None
+            if not nick:
+                try:
+                    snap = get_my_equipment()
+                    nick = snap.get("nick")
+                except Exception:
+                    nick = None
+
+            reward_summary = {
+                "coin_delta": coin.get("delta"),
+                "coin_total": coin.get("total"),
+                "exp_delta": exp.get("delta"),
+                "exp_total": exp.get("total"),
+                "level": level,
+                "nickname": nick,
+            }
+            return {
+                "ok": True,
+                "reward": res,
+                "reward_summary": reward_summary,
+                "account": {"nickname": nick, "level": level},
+                "ingame_id": ingame_id,
+            }
         print("   not finalized yet, retrying in 3s ...")
         time.sleep(3)
     print("!! could not claim (match may still be finishing) — run again to retry")

@@ -544,112 +544,177 @@
     showApp();
   }
 
-  /* ---------- Friendly farm logs ---------- */
-  const LIVE_STAGES = [
-    "กำลังเตรียมการวิ่ง…",
-    "กำลังเข้าสู่ระบบเกม…",
-    "กำลังเคลียร์รางวัลค้าง…",
-    "กำลังจับคู่…",
-    "กำลังวิ่งฟาร์ม…",
-    "กำลังส่งผลคะแนน…",
-    "กำลังรับรางวัล…",
+  /* ---------- Friendly farm status pipeline ---------- */
+  const PIPELINE_STEPS = [
+    { id: "login", label: "เข้าสู่ระบบเกม" },
+    { id: "clear", label: "เคลียร์รางวัลค้าง" },
+    { id: "match", label: "จับคู่" },
+    { id: "run", label: "วิ่งฟาร์ม" },
+    { id: "claim", label: "รับรางวัล" },
+    { id: "done", label: "สรุปผล" },
   ];
 
-  const LOG_RULES = [
-    { re: /LOGIN OK|login ok|devsisters|เข้าสู่ระบบเกม/i, text: "เข้าสู่ระบบเกมแล้ว", kind: "ok" },
-    { re: /LOGIN FAILED/i, text: "เข้าสู่ระบบเกมไม่สำเร็จ", kind: "err" },
-    { re: /\[1\/4\]|clearing pending/i, text: "กำลังเคลียร์รางวัลค้าง…", kind: "pending" },
-    { re: /cleared pending/i, text: "เคลียร์รางวัลค้างแล้ว", kind: "ok" },
-    { re: /BLOCKED|corrupt_pending|CORRUPT/i, text: "บัญชีติดรางวัลค้าง — ลองใหม่ภายหลัง", kind: "err" },
-    { re: /\[2\/4\]|matchmaking \.\.\./i, text: "กำลังจับคู่…", kind: "pending" },
-    { re: /matchmaking failed|MATCHMAKING ERROR/i, text: "จับคู่ไม่สำเร็จ ลองใหม่อีกครั้ง", kind: "err" },
-    { re: /ingame_id\s*=/i, text: "จับคู่สำเร็จ กำลังเริ่มวิ่ง", kind: "ok" },
-    { re: /\[3\/4\]|playing \+|submitted run_end|state ->/i, text: "กำลังวิ่งฟาร์ม…", kind: "pending" },
-    { re: /quit acknowledged/i, text: "จบการวิ่งแล้ว", kind: "ok" },
-    { re: /\[4\/4\]|claiming reward/i, text: "กำลังรับรางวัล…", kind: "pending" },
-    { re: /not finalized yet|retrying/i, text: "รอรับรางวัลอีกสักครู่…", kind: "pending" },
-    { re: /REWARD CLAIMED/i, text: "สำเร็จแล้ว รับรางวัลเรียบร้อย", kind: "ok" },
-    { re: /claim_timeout|could not claim/i, text: "รับรางวัลไม่ทัน ลองใหม่อีกครั้ง", kind: "err" },
-    { re: /INGAME ERROR|ingame rpc|finalize rpc/i, text: "การวิ่งสะดุด ลองใหม่อีกครั้ง", kind: "err" },
-  ];
+  let pipelineState = null; // { activeIdx, kinds: {id: pending|ok|err}, extras: [] }
 
-  const TECH_NOISE =
-    /traceback|grpc|RpcError|Stack|Exception|0x[0-9a-f]+|partyrun|protobuf|descriptor|endpoint|Bearer|authorization|python|File "|line \d+|http[s]?:\/\//i;
-
-  function farmErrorMessage(result, fallback) {
-    const err = result?.error || fallback || "";
-    return thError(err);
+  function formatNumTh(n) {
+    const num = Number(n);
+    if (!Number.isFinite(num)) return String(n ?? "");
+    return String(Math.trunc(num)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   }
 
-  function sanitizeLogs(rawLogs, result, ok) {
-    const lines = Array.isArray(rawLogs) ? rawLogs : [];
-    const steps = [];
-    const seen = new Set();
+  function freshPipeline() {
+    const kinds = {};
+    for (const s of PIPELINE_STEPS) kinds[s.id] = "idle";
+    return { activeIdx: 0, kinds, extras: [] };
+  }
 
-    function push(text, kind) {
-      if (!text || seen.has(text)) return;
-      seen.add(text);
-      steps.push({ text, kind: kind || "pending" });
+  function setPipelineActive(idx) {
+    if (!pipelineState) pipelineState = freshPipeline();
+    const max = PIPELINE_STEPS.length - 1;
+    const next = Math.max(0, Math.min(idx, max));
+    // Mark all before active as ok; active as pending; after as idle
+    for (let i = 0; i < PIPELINE_STEPS.length; i++) {
+      const id = PIPELINE_STEPS[i].id;
+      if (i < next) pipelineState.kinds[id] = "ok";
+      else if (i === next) pipelineState.kinds[id] = "pending";
+      else if (pipelineState.kinds[id] === "pending") pipelineState.kinds[id] = "idle";
     }
+    pipelineState.activeIdx = next;
+    renderPipeline();
+  }
 
+  function markPipelineError(stepId, message) {
+    if (!pipelineState) pipelineState = freshPipeline();
+    let hit = false;
+    for (const s of PIPELINE_STEPS) {
+      if (s.id === stepId) {
+        pipelineState.kinds[s.id] = "err";
+        hit = true;
+      } else if (!hit && pipelineState.kinds[s.id] !== "ok") {
+        pipelineState.kinds[s.id] = "ok";
+      } else if (hit && pipelineState.kinds[s.id] === "pending") {
+        pipelineState.kinds[s.id] = "idle";
+      }
+    }
+    if (message) {
+      pipelineState.extras = [{ text: message, kind: "err" }];
+    }
+    renderPipeline();
+  }
+
+  function finalizePipelineSuccess(result) {
+    if (!pipelineState) pipelineState = freshPipeline();
+    for (const s of PIPELINE_STEPS) {
+      pipelineState.kinds[s.id] = "ok";
+    }
+    pipelineState.activeIdx = PIPELINE_STEPS.length - 1;
+    const extras = [];
+    const summary = result?.reward_summary;
+    const reward = result?.reward;
+    const coinDelta = summary?.coin_delta ?? reward?.coin?.delta;
+    const coinTotal = summary?.coin_total ?? reward?.coin?.total;
+    const expDelta = summary?.exp_delta ?? reward?.exp?.delta;
+    const expTotal = summary?.exp_total ?? reward?.exp?.total;
+    const bits = [];
+    if (coinDelta != null && coinDelta !== "") bits.push("เหรียญ +" + formatNumTh(coinDelta));
+    if (expDelta != null && expDelta !== "") bits.push("EXP +" + formatNumTh(expDelta));
+    if (bits.length) extras.push({ text: "ได้รับ: " + bits.join(" · "), kind: "ok" });
+    if (coinTotal != null && coinTotal !== "") {
+      extras.push({
+        text: "เหรียญในเกมหลังเคลม: " + formatNumTh(coinTotal),
+        kind: "ok",
+      });
+    }
+    if (expTotal != null && expTotal !== "") {
+      extras.push({
+        text: "EXP รวมหลังเคลม: " + formatNumTh(expTotal),
+        kind: "ok",
+      });
+    }
+    const nick = summary?.nickname || result?.account?.nickname;
+    if (nick) extras.push({ text: "บัญชีเกม: " + nick, kind: "ok" });
+    extras.push({
+      text: "ถ้าในเกมยังไม่เห็น ให้ปิดเกมแล้วเข้าใหม่",
+      kind: "ok",
+    });
+    pipelineState.extras = extras;
+    renderPipeline();
+  }
+
+  function applyLogsToPipeline(rawLogs) {
+    if (!pipelineState) pipelineState = freshPipeline();
+    const lines = Array.isArray(rawLogs) ? rawLogs : [];
+    let idx = pipelineState.activeIdx || 0;
+    let hardErr = null;
     for (const line of lines) {
       const s = String(line || "");
-      if (!s.trim() || TECH_NOISE.test(s)) continue;
-      for (const rule of LOG_RULES) {
-        if (rule.re.test(s)) {
-          push(rule.text, rule.kind);
-          break;
-        }
+      if (!s.trim()) continue;
+      if (/LOGIN FAILED/i.test(s)) {
+        hardErr = { id: "login", msg: ERR_TH.login_failed };
+        break;
+      }
+      if (/LOGIN OK|login ok/i.test(s)) idx = Math.max(idx, 1);
+      if (/\[1\/4\]|clearing pending|cleared pending/i.test(s)) idx = Math.max(idx, 2);
+      if (/BLOCKED|CORRUPT|corrupt_pending/i.test(s)) {
+        hardErr = { id: "clear", msg: ERR_TH.corrupt_pending };
+        break;
+      }
+      if (/\[2\/4\]|matchmaking|ingame_id\s*=/i.test(s)) idx = Math.max(idx, 3);
+      if (/matchmaking failed|MATCHMAKING ERROR/i.test(s)) {
+        hardErr = { id: "match", msg: ERR_TH.matchmaking_failed };
+        break;
+      }
+      if (/\[3\/4\]|playing \+|submitted run_end|quit acknowledged/i.test(s)) {
+        idx = Math.max(idx, 4);
+      }
+      if (/\[4\/4\]|claiming reward|not finalized|REWARD CLAIMED/i.test(s)) {
+        idx = Math.max(idx, 5);
+      }
+      if (/claim_timeout|could not claim/i.test(s)) {
+        hardErr = { id: "claim", msg: ERR_TH.claim_timeout };
+        break;
       }
     }
-
-    if (Array.isArray(result?.steps)) {
-      for (const step of result.steps) {
-        if (typeof step === "string") push(step, "pending");
-        else if (step?.th || step?.text) push(step.th || step.text, step.kind || "pending");
-      }
-    }
-
-    if (ok) {
-      push("สำเร็จแล้ว", "ok");
-      const reward = result?.reward;
-      if (reward && typeof reward === "object") {
-        const bits = [];
-        if (reward.coin?.delta) bits.push("เหรียญ +" + reward.coin.delta);
-        if (reward.exp?.delta) bits.push("EXP +" + reward.exp.delta);
-        if (reward.gem?.delta) bits.push("เพชร +" + reward.gem.delta);
-        if (bits.length) push("ได้รับ: " + bits.join(" · "), "ok");
-      }
-    } else if (result?.error === "corrupt_pending") {
-      push(ERR_TH.corrupt_pending, "err");
-    } else if (result?.error === "matchmaking_failed") {
-      push(ERR_TH.matchmaking_failed, "err");
-    } else if (result?.error === "claim_timeout") {
-      push(ERR_TH.claim_timeout, "err");
-    } else if (result?.error === "login_failed" || /LOGIN FAILED/i.test(String(result?.error || ""))) {
-      push(ERR_TH.login_failed, "err");
-    } else if (!steps.length) {
-      push(farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"), "err");
-    }
-
-    return steps;
+    setPipelineActive(idx);
+    if (hardErr) markPipelineError(hardErr.id, hardErr.msg);
   }
 
-  function renderLog(steps) {
+  function renderPipeline() {
     const wrap = $("farm-log-wrap");
     const list = $("farm-log");
     const empty = $("farm-empty");
+    if (!wrap || !list) return;
     wrap.classList.remove("hidden");
+    if (empty) empty.classList.add("hidden");
     list.innerHTML = "";
-    if (!steps.length) {
-      empty.classList.remove("hidden");
-      return;
-    }
-    empty.classList.add("hidden");
-    for (const step of steps) {
+    if (!pipelineState) return;
+
+    for (const s of PIPELINE_STEPS) {
+      const kind = pipelineState.kinds[s.id] || "idle";
+      if (kind === "idle") continue;
       const li = document.createElement("li");
-      li.textContent = step.text;
-      if (step.kind) li.classList.add(step.kind);
+      const label =
+        kind === "pending"
+          ? "กำลัง" + s.label + "…"
+          : kind === "ok"
+            ? s.label + "แล้ว"
+            : s.label + "ไม่สำเร็จ";
+      // Special polish for done step
+      if (s.id === "done" && kind === "ok") li.textContent = "สำเร็จแล้ว";
+      else if (s.id === "done" && kind === "pending") li.textContent = "กำลังสรุปผล…";
+      else if (s.id === "login" && kind === "ok") li.textContent = "เข้าสู่ระบบเกมแล้ว";
+      else if (s.id === "clear" && kind === "ok") li.textContent = "เคลียร์รางวัลค้างแล้ว";
+      else if (s.id === "match" && kind === "ok") li.textContent = "จับคู่สำเร็จ";
+      else if (s.id === "run" && kind === "ok") li.textContent = "จบการวิ่งแล้ว";
+      else if (s.id === "claim" && kind === "ok") li.textContent = "รับรางวัลเรียบร้อย";
+      else li.textContent = label;
+      li.classList.add(kind === "pending" ? "pending" : kind);
+      list.appendChild(li);
+    }
+    for (const extra of pipelineState.extras || []) {
+      const li = document.createElement("li");
+      li.textContent = extra.text;
+      li.classList.add(extra.kind || "ok");
       list.appendChild(li);
     }
     list.scrollTop = list.scrollHeight;
@@ -664,22 +729,53 @@
 
   function startLiveStages() {
     clearStageTimer();
-    let i = 0;
-    const shown = [{ text: LIVE_STAGES[0], kind: "pending" }];
-    renderLog(shown);
+    pipelineState = freshPipeline();
+    setPipelineActive(0);
+    let tick = 0;
     stageTimer = setInterval(() => {
-      i = Math.min(i + 1, LIVE_STAGES.length - 1);
-      shown.push({ text: LIVE_STAGES[i], kind: "pending" });
-      const dedup = [];
-      const seen = new Set();
-      for (const s of shown) {
-        if (seen.has(s.text)) continue;
-        seen.add(s.text);
-        dedup.push(s);
+      tick += 1;
+      const softIdx = Math.min(tick, 4);
+      if (
+        pipelineState &&
+        pipelineState.kinds.done !== "ok" &&
+        !PIPELINE_STEPS.some((s) => pipelineState.kinds[s.id] === "err")
+      ) {
+        if (softIdx > pipelineState.activeIdx) setPipelineActive(softIdx);
       }
-      renderLog(dedup);
-      if (i >= LIVE_STAGES.length - 1) clearStageTimer();
-    }, 4500);
+      if (tick >= 4) clearStageTimer();
+    }, 5000);
+  }
+
+  function buildFinalPipeline(rawLogs, result, ok) {
+    clearStageTimer();
+    pipelineState = freshPipeline();
+    if (ok) {
+      applyLogsToPipeline(rawLogs);
+      finalizePipelineSuccess(result);
+      return;
+    }
+    applyLogsToPipeline(rawLogs);
+    const errCode = String(result?.error || "");
+    let failId = "done";
+    if (/login/i.test(errCode)) failId = "login";
+    else if (/corrupt/i.test(errCode)) failId = "clear";
+    else if (/matchmaking/i.test(errCode)) failId = "match";
+    else if (/claim/i.test(errCode)) failId = "claim";
+    else if (/ingame|farm/i.test(errCode)) failId = "run";
+    const alreadyErr = PIPELINE_STEPS.some((s) => pipelineState.kinds[s.id] === "err");
+    if (!alreadyErr) {
+      markPipelineError(failId, farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"));
+    } else if (!(pipelineState.extras || []).length) {
+      pipelineState.extras = [
+        { text: farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง"), kind: "err" },
+      ];
+      renderPipeline();
+    }
+  }
+
+  function farmErrorMessage(result, fallback) {
+    const err = result?.error || fallback || "";
+    return thError(err);
   }
 
   /* ---------- DevPlay autofill guards ---------- */
@@ -742,13 +838,13 @@
         await refreshMe().catch(() => {});
       }
 
-      const steps = sanitizeLogs(data.logs || data.steps, data.result || data, !!data.ok);
-      renderLog(steps);
+      const result = data.result || data;
+      buildFinalPipeline(data.logs || data.steps || [], result, !!data.ok);
 
       if (data.ok) {
-        setStatus($("farm-status"), "ฟาร์มสำเร็จแล้ว · หัก 1 โทเค็น", "ok");
+        setStatus($("farm-status"), "ฟาร์มสำเร็จ · หัก 1 โทเค็น", "ok");
       } else {
-        const msg = farmErrorMessage(data.result, "ฟาร์มจบแล้วแต่มีปัญหา · โทเค็นถูกหักแล้ว");
+        const msg = farmErrorMessage(result, "ฟาร์มจบแล้วแต่มีปัญหา · โทเค็นถูกหักแล้ว");
         setStatus($("farm-status"), msg, "err");
         showErrorModal(msg, "ฟาร์มไม่สำเร็จ");
       }
@@ -756,12 +852,7 @@
       clearStageTimer();
       const msg = thError(e.message) || "ฟาร์มไม่สำเร็จ";
       setStatus($("farm-status"), msg, "err");
-      const steps = sanitizeLogs(e.data?.logs || [], e.data?.result, false);
-      if (!steps.length) {
-        renderLog([{ text: msg, kind: "err" }]);
-      } else {
-        renderLog(steps);
-      }
+      buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
 
       if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
         profile.token_balance = 0;
