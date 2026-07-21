@@ -12,10 +12,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -506,32 +505,13 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
 
 
 # ---------------------------------------------------------------------------
-# Static frontend (single Render service)
+# API root (UI is on GitHub Pages — not served here)
 # ---------------------------------------------------------------------------
 @app.get("/")
-async def index():
-    index_path = STATIC_DIR / "index.html"
-    if not index_path.exists():
-        return JSONResponse({"ok": True, "hint": "static/index.html missing"})
-    return FileResponse(index_path)
-
-
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-
-# SPA-ish fallback for bare asset paths used by index.html relative links
-@app.get("/{path:path}")
-async def spa_fallback(path: str, request: Request):
-    # Never expose farm source
-    if path.startswith("server") or "partyrun_core" in path:
-        raise HTTPException(status_code=404)
-    candidate = STATIC_DIR / path
-    if candidate.is_file() and STATIC_DIR in candidate.resolve().parents:
-        return FileResponse(candidate)
-    # Prefer index for unknown GET navigations
-    if request.method == "GET" and not path.startswith("api/"):
-        index_path = STATIC_DIR / "index.html"
-        if index_path.exists():
-            return FileResponse(index_path)
-    raise HTTPException(status_code=404)
+async def root():
+    return {
+        "ok": True,
+        "service": "ckr-wwdc-api",
+        "docs": "/api/health",
+        "ui": "https://j3xdr.github.io/CKR-WWDC/",
+    }
