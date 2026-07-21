@@ -583,6 +583,34 @@ input {
   overflow: hidden;
 }
 
+.field-stat-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+
+.field-stat-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.field-stat-hint {
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.field-stat-hint:empty {
+  display: none;
+}
+
 .field-stat input {
   background: rgba(10, 6, 4, 0.4);
   min-height: 40px;

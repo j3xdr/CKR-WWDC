@@ -78,9 +78,9 @@ class LoginBody(BaseModel):
 class FarmRunBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
-    score: int = Field(default=800000, ge=0, le=9_999_999)
-    coin: int = Field(default=1, ge=0, le=999_999)
-    exp: int = Field(default=1, ge=0, le=50_000)
+    score: int = Field(default=800000, ge=0, le=2_147_483_647)
+    coin: int = Field(default=1, ge=0, le=2_147_483_647)
+    exp: int = Field(default=1, ge=0, le=2_147_483_647)
 
 
 class AdminCreateUserBody(BaseModel):

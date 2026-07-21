@@ -12,6 +12,106 @@
   const REMEMBER_KEY = "ckr_wwdc_remember";
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
+  const INT32_MAX = 2147483647;
+
+  const DIGIT_TH = [
+    "ศูนย์",
+    "หนึ่ง",
+    "สอง",
+    "สาม",
+    "สี่",
+    "ห้า",
+    "หก",
+    "เจ็ด",
+    "แปด",
+    "เก้า",
+  ];
+  // index = จำนวนหลัก - 1 ของเลขตัวต้น
+  const PLACE_TH = [
+    "",
+    "สิบ",
+    "ร้อย",
+    "พัน",
+    "หมื่น",
+    "แสน",
+    "ล้าน",
+    "สิบล้าน",
+    "ร้อยล้าน",
+    "พันล้าน",
+  ];
+
+  function digitsOnly(raw) {
+    return String(raw || "").replace(/\D/g, "");
+  }
+
+  function formatCommas(digitStr) {
+    if (!digitStr) return "";
+    return digitStr.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
+
+  function parseFarmNum(raw) {
+    const d = digitsOnly(raw);
+    if (!d) return 0;
+    const n = Number(d);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  /** บอกหลักจากเลขตัวต้นเท่านั้น เช่น 800000 → แปดแสน, 500 → ห้าร้อย */
+  function thaiMagnitude(n) {
+    if (!Number.isFinite(n) || n <= 0) return "";
+    const s = String(Math.floor(Math.abs(n)));
+    const first = Number(s[0]);
+    const placeIdx = s.length - 1;
+    if (placeIdx === 0) return DIGIT_TH[first] || "";
+    const place = PLACE_TH[placeIdx];
+    if (!place) return DIGIT_TH[first] || "";
+    // กรณีพิเศษภาษาไทย: 10 → สิบ, 20 → ยี่สิบ
+    if (placeIdx === 1) {
+      if (first === 1) return "สิบ";
+      if (first === 2) return "ยี่สิบ";
+    }
+    // 1 ที่หลักพันล้าน → "พันล้าน" ตามตัวอย่าง
+    if (first === 1 && placeIdx === 9) return "พันล้าน";
+    return (DIGIT_TH[first] || "") + place;
+  }
+
+  function syncFarmNumField(input, opts = {}) {
+    const hint = $(input.id + "-hint");
+    let digits = digitsOnly(input.value);
+    if (!digits) {
+      input.value = "";
+      if (hint) hint.textContent = "";
+      return 0;
+    }
+    // ตัดศูนย์นำหน้า ยกเว้นค่า 0 ล้วน
+    digits = digits.replace(/^0+(?=\d)/, "");
+    const n = Number(digits);
+    if (!Number.isFinite(n) || n > INT32_MAX) {
+      input.value = "";
+      if (hint) hint.textContent = "";
+      if (!opts.silent) {
+        showErrorModal(
+          "ใส่ได้สูงสุด 2,147,483,647 เท่านั้น — ล้างช่องนี้แล้ว",
+          "ตัวเลขเกินกำหนด"
+        );
+      }
+      return 0;
+    }
+    input.value = formatCommas(digits);
+    if (hint) hint.textContent = thaiMagnitude(n);
+    return n;
+  }
+
+  function setupFarmNumberInputs() {
+    ["farm-score", "farm-coin", "farm-exp"].forEach((id) => {
+      const el = $(id);
+      if (!el || el.dataset.numBound === "1") return;
+      el.dataset.numBound = "1";
+      el.addEventListener("input", () => syncFarmNumField(el));
+      el.addEventListener("blur", () => syncFarmNumField(el, { silent: true }));
+      syncFarmNumField(el, { silent: true });
+    });
+  }
 
   function wantsRemember() {
     const pref = localStorage.getItem(REMEMBER_KEY);
@@ -549,9 +649,9 @@
         body: {
           email: $("dp-acct-mail").value.trim(),
           password: $("dp-acct-secret").value,
-          score: Number($("farm-score").value) || 0,
-          coin: Number($("farm-coin").value) || 0,
-          exp: Number($("farm-exp").value) || 0,
+          score: parseFarmNum($("farm-score").value),
+          coin: parseFarmNum($("farm-coin").value),
+          exp: parseFarmNum($("farm-exp").value),
         },
       });
       clearStageTimer();
@@ -609,6 +709,7 @@
     }
 
     setupDevPlayAutofillGuards();
+    setupFarmNumberInputs();
 
     // Re-check balance when user returns from Telegram
     document.addEventListener("visibilitychange", async () => {

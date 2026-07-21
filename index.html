@@ -187,25 +187,58 @@
 
             <div class="stat-grid">
               <label class="field field-stat">
-                <span>
-                  <img src="assets/score.png" alt="" width="16" height="16" />
-                  คะแนน
+                <span class="field-stat-label">
+                  <span class="field-stat-name">
+                    <img src="assets/score.png" alt="" width="16" height="16" />
+                    คะแนน
+                  </span>
+                  <span class="field-stat-hint" id="farm-score-hint" aria-live="polite"></span>
                 </span>
-                <input id="farm-score" name="ckr_farm_score" type="number" min="0" value="800000" autocomplete="off" />
+                <input
+                  id="farm-score"
+                  name="ckr_farm_score"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  data-farm-num="1"
+                  value="800,000"
+                />
               </label>
               <label class="field field-stat">
-                <span>
-                  <img src="assets/coin.png" alt="" width="16" height="16" />
-                  เหรียญ
+                <span class="field-stat-label">
+                  <span class="field-stat-name">
+                    <img src="assets/coin.png" alt="" width="16" height="16" />
+                    เหรียญ
+                  </span>
+                  <span class="field-stat-hint" id="farm-coin-hint" aria-live="polite"></span>
                 </span>
-                <input id="farm-coin" name="ckr_farm_coin" type="number" min="0" value="1" autocomplete="off" />
+                <input
+                  id="farm-coin"
+                  name="ckr_farm_coin"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  data-farm-num="1"
+                  value="1"
+                />
               </label>
               <label class="field field-stat">
-                <span>
-                  <img src="assets/level.png" alt="" width="16" height="16" />
-                  EXP
+                <span class="field-stat-label">
+                  <span class="field-stat-name">
+                    <img src="assets/level.png" alt="" width="16" height="16" />
+                    EXP
+                  </span>
+                  <span class="field-stat-hint" id="farm-exp-hint" aria-live="polite"></span>
                 </span>
-                <input id="farm-exp" name="ckr_farm_exp" type="number" min="0" value="1" autocomplete="off" />
+                <input
+                  id="farm-exp"
+                  name="ckr_farm_exp"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  data-farm-num="1"
+                  value="1"
+                />
               </label>
             </div>
 
