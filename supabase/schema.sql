@@ -391,3 +391,31 @@ create policy "profiles_admin_insert"
 grant select on public.profiles to authenticated;
 grant update on public.profiles to authenticated;
 grant insert on public.profiles to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Farm queue + lock (FIFO, 2-minute turn)
+-- ---------------------------------------------------------------------------
+create table if not exists public.farm_queue (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  status text not null default 'waiting'
+    check (status in ('waiting', 'active', 'done', 'expired', 'cancelled')),
+  joined_at timestamptz not null default now(),
+  activated_at timestamptz null,
+  turn_expires_at timestamptz null,
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists farm_queue_one_open_per_user
+  on public.farm_queue (user_id)
+  where status in ('waiting', 'active');
+
+create table if not exists public.farm_lock (
+  id int primary key default 1 check (id = 1),
+  holder_user_id uuid null references public.profiles (id) on delete set null,
+  job_id uuid null,
+  started_at timestamptz null,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.farm_lock (id) values (1) on conflict (id) do nothing;

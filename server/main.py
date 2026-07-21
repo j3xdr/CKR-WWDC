@@ -24,6 +24,10 @@ FARM_DIR = SERVER_DIR / "farm"
 
 if str(FARM_DIR) not in sys.path:
     sys.path.insert(0, str(FARM_DIR))
+if str(SERVER_DIR) not in sys.path:
+    sys.path.insert(0, str(SERVER_DIR))
+
+import farm_queue as fq  # noqa: E402
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
@@ -326,6 +330,38 @@ async def auth_login(body: LoginBody):
     }
 
 
+def _svc():
+    """Service-role headers for queue/lock tables."""
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+    return _service_headers()
+
+
+async def _gate_for(user_id: str) -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        return await fq.queue_snapshot(
+            client, SUPABASE_URL, _svc(), user_id, _farm_busy
+        )
+
+
+# ---------------------------------------------------------------------------
+# Farm gate / queue
+# ---------------------------------------------------------------------------
+@app.get("/api/farm/gate")
+async def farm_gate(user: dict[str, Any] = Depends(verify_user)):
+    snap = await _gate_for(user["id"])
+    return {"ok": True, **snap}
+
+
+@app.post("/api/farm/queue/join")
+async def farm_queue_join(user: dict[str, Any] = Depends(verify_user)):
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        snap = await fq.join_queue(
+            client, SUPABASE_URL, _svc(), user["id"], _farm_busy
+        )
+    return {"ok": True, **snap}
+
+
 # ---------------------------------------------------------------------------
 # Farm run (JWT + consume 1 token + sequential execution)
 # ---------------------------------------------------------------------------
@@ -335,10 +371,28 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
     profile = await load_profile(user)
     token = user["_access_token"]
     uid = user["id"]
+    tokens_before = int(profile.get("token_balance") or 0)
 
-    bal = int(profile.get("token_balance") or 0)
-    if bal < 1:
+    if tokens_before < 1:
         raise HTTPException(status_code=402, detail="insufficient_tokens")
+
+    # Queue / busy gate BEFORE spending a token
+    gate = await _gate_for(uid)
+    if _farm_busy or not gate.get("can_run"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "farm_busy",
+                "message": "farm_busy",
+                "gate": gate,
+            },
+        )
+    # If someone holds an active turn and it's not me, block
+    if gate.get("active") and not gate["active"].get("is_me") and gate.get("me", {}).get("status") != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
+        )
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         cons = await client.post(
@@ -376,7 +430,11 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
 
     if not _farm_lock.acquire(blocking=False):
         await _refund_token(uid, "farm_busy_refund")
-        raise HTTPException(status_code=409, detail="farm_busy")
+        gate2 = await _gate_for(uid)
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate2},
+        )
 
     _farm_busy = True
     logs: list[str] = []
@@ -385,6 +443,11 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         logs.append(msg)
 
     try:
+        if _has_service_role():
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                await fq.mark_queue_done(client, SUPABASE_URL, _svc(), uid)
+                await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, job_id)
+
         if job_id and _has_service_role():
             await _patch_job(job_id, {"status": "running", "started_at": _now()})
 
@@ -413,6 +476,8 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         return {
             "ok": ok,
             "token_balance": cons_data.get("token_balance"),
+            "tokens_before": tokens_before,
+            "tokens_after": cons_data.get("token_balance"),
             "job_id": job_id,
             "result": result,
             "logs": logs[-80:],
@@ -434,13 +499,25 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 "detail": "farm_error",
                 "error": str(exc),
                 "token_balance": cons_data.get("token_balance"),
+                "tokens_before": tokens_before,
                 "logs": logs[-80:],
                 "trace": traceback.format_exc()[-2000:],
             },
         )
     finally:
         _farm_busy = False
-        _farm_lock.release()
+        try:
+            _farm_lock.release()
+        except RuntimeError:
+            pass
+        if _has_service_role():
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
+                    await fq.expire_stale_turns(client, SUPABASE_URL, _svc())
+                    await fq.promote_next(client, SUPABASE_URL, _svc())
+            except Exception:
+                pass
 
 
 def _run_farm_sync(email, password, score, coin, exp, log_cb):

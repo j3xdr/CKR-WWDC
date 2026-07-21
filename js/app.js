@@ -211,8 +211,10 @@
   let profile = null;
   let stageTimer = null;
   let balancePollTimer = null;
-  let modalMode = null; // "empty" | "confirm" | "error" | null
+  let queuePollTimer = null;
+  let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | null
   let farmRunning = false;
+  let lastGate = null;
 
   const ERR_TH = {
     insufficient_tokens: "coins หมด กรุณาเติม",
@@ -224,7 +226,7 @@
     login_failed: "เข้าสู่ระบบเกมไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน DevPlay",
     LOGIN_FAILED: "เข้าสู่ระบบเกมไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน DevPlay",
     corrupt_pending:
-      "บัญชีติดรางวัลค้างจากรอบก่อน รอรีเซ็ตประจำวันแล้วลองใหม่ (ลด EXP)",
+      "บัญชีติดรางวัลค้างจากรอบก่อน รอรีเซ็ตประจำวันแล้วลองใหม่ (ลด XP)",
     BLOCKED: "บัญชีติดรางวัลค้างจากรอบก่อน รอรีเซ็ตประจำวันแล้วลองใหม่",
     matchmaking_failed: "จับคู่ไม่สำเร็จ ลองใหม่อีกครั้ง",
     claim_timeout: "รับรางวัลไม่ทัน ลองใหม่อีกครั้ง (แมตช์อาจจบแล้ว)",
@@ -309,10 +311,14 @@
     return el;
   }
 
-  function openModal({ mode, title, body, icon, locked }) {
+  function openModal({ mode, title, body, icon, locked, bodyHtml }) {
     modalMode = mode;
     modalTitle.textContent = title;
-    modalBody.textContent = body;
+    if (bodyHtml) {
+      modalBody.innerHTML = bodyHtml;
+    } else {
+      modalBody.textContent = body || "";
+    }
     modalIcon.src = icon || "assets/coin.png";
     modalRoot.classList.toggle("locked", !!locked);
     modalRoot.classList.remove("hidden");
@@ -320,7 +326,7 @@
   }
 
   function closeModal() {
-    if (modalMode === "empty") return; // cannot dismiss empty-coins
+    if (modalMode === "empty" || modalMode === "queue") return;
     modalMode = null;
     clearModalActions();
     modalRoot.classList.add("hidden");
@@ -383,6 +389,224 @@
     modalActions.appendChild(
       makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
     );
+  }
+
+  function showResultModal(summary) {
+    const rows = [
+      ["บัญชีเกม", escapeHtml(summary.account || "—")],
+      [
+        "เหรียญ",
+        `<span class="result-delta">+${escapeHtml(summary.coinDelta)}</span> → ยอดรวม ${escapeHtml(summary.coinTotal)}`,
+      ],
+      [
+        "XP",
+        `<span class="result-delta">+${escapeHtml(summary.xpDelta)}</span> → ยอดรวม ${escapeHtml(summary.xpTotal)}`,
+      ],
+      [
+        "โทเค็นเว็บ",
+        `${escapeHtml(summary.tokensBefore)} → ${escapeHtml(summary.tokensAfter)} <span class="result-delta">(หัก 1)</span>`,
+      ],
+    ];
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows
+        .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+        .join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ถ้าในเกมยังไม่เห็นยอด ให้ปิดเกมแล้วเข้าใหม่</p>';
+
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: "สรุปผลการฟาร์ม",
+      bodyHtml: html,
+      icon: "assets/coin.png",
+      locked: false,
+    });
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function stopQueuePoll() {
+    if (queuePollTimer) {
+      clearInterval(queuePollTimer);
+      queuePollTimer = null;
+    }
+  }
+
+  function startQueuePoll() {
+    stopQueuePoll();
+    queuePollTimer = setInterval(() => {
+      refreshGateAndQueueUi().catch(() => {});
+    }, 2500);
+  }
+
+  function turnCountdownText(iso) {
+    if (!iso) return "";
+    const end = Date.parse(iso);
+    if (!Number.isFinite(end)) return "";
+    const sec = Math.max(0, Math.ceil((end - Date.now()) / 1000));
+    const m = Math.floor(sec / 60);
+    const s = String(sec % 60).padStart(2, "0");
+    return m + ":" + s;
+  }
+
+  function renderQueueModal(gate, opts = {}) {
+    lastGate = gate || lastGate;
+    const g = lastGate || {};
+    const me = g.me || {};
+    const waking = !!opts.waking;
+    let bodyHtml = '<div class="queue-panel">';
+    bodyHtml += '<div class="queue-spinner" aria-hidden="true"></div>';
+
+    if (waking) {
+      bodyHtml +=
+        '<p class="queue-note">กำลังปลุกเซิร์ฟเวอร์… รอสักครู่แล้วระบบจะเข้าคิวให้อัตโนมัติ</p>';
+    } else if (me.status === "active" || g.is_my_turn) {
+      const left = turnCountdownText(me.turn_expires_at);
+      bodyHtml +=
+        '<div class="queue-stat"><span>สถานะ</span><strong>ถึงคิวของคุณแล้ว</strong></div>';
+      bodyHtml +=
+        '<div class="queue-stat"><span>เหลือเวลาเริ่มฟาร์ม</span><strong>' +
+        escapeHtml(left || "2:00") +
+        "</strong></div>";
+      bodyHtml +=
+        '<p class="queue-note warn">ต้องกดเริ่มฟาร์มภายใน 2 นาที ไม่งั้นคิวจะข้ามไปคนถัดไป</p>';
+    } else if (me.status === "waiting") {
+      bodyHtml +=
+        '<div class="queue-stat"><span>คิวของคุณ</span><strong>อันดับ ' +
+        escapeHtml(me.position ?? "—") +
+        "</strong></div>";
+      bodyHtml +=
+        '<div class="queue-stat"><span>ในคิวทั้งหมด</span><strong>' +
+        escapeHtml(g.queue_length ?? 0) +
+        "</strong></div>";
+      bodyHtml +=
+        '<p class="queue-note">รอคิวอยู่ — ปิดหน้าต่างไม่ได้ จนกว่าจะถึงคิวของคุณ</p>';
+    } else if (g.farm_busy) {
+      bodyHtml +=
+        '<div class="queue-stat"><span>สถานะ</span><strong>มีคนกำลังฟาร์ม</strong></div>';
+      bodyHtml +=
+        '<div class="queue-stat"><span>ในคิว</span><strong>' +
+        escapeHtml(g.queue_length ?? 0) +
+        "</strong></div>";
+      bodyHtml +=
+        '<p class="queue-note">กดเข้าคิวเพื่อจองลำดับ — คนกดก่อนได้คิวก่อน</p>';
+    } else {
+      bodyHtml +=
+        '<p class="queue-note">ระบบกำลังจัดคิว…</p>';
+    }
+    bodyHtml += "</div>";
+
+    clearModalActions();
+    openModal({
+      mode: "queue",
+      title: waking ? "กำลังเชื่อมต่อเซิร์ฟเวอร์" : "คิวฟาร์ม",
+      bodyHtml,
+      icon: "assets/tr_event_116.png",
+      locked: true,
+    });
+
+    if (!waking && !me.status && g.farm_busy) {
+      modalActions.appendChild(
+        makeBtn("เข้าคิว", "btn-candy", async () => {
+          try {
+            const data = await api("/api/farm/queue/join", { method: "POST", body: {} });
+            renderQueueModal(data);
+            startQueuePoll();
+          } catch (e) {
+            showErrorModal(thError(e.message) || "เข้าคิวไม่สำเร็จ", "คิว");
+          }
+        })
+      );
+    } else if (me.status === "active" || g.is_my_turn) {
+      modalActions.appendChild(
+        makeBtn("เริ่มฟาร์มเลย", "btn-run", () => {
+          forceCloseModal();
+          stopQueuePoll();
+          $("farm-btn")?.focus();
+          setStatus($("farm-status"), "ถึงคิวแล้ว — กดเริ่มฟาร์มได้เลย", "ok");
+        })
+      );
+    }
+  }
+
+  async function refreshGateAndQueueUi() {
+    if (!accessToken) return null;
+    try {
+      const data = await api("/api/farm/gate");
+      lastGate = data;
+      if (data.is_my_turn || data.me?.status === "waiting" || data.me?.status === "active") {
+        renderQueueModal(data);
+        startQueuePoll();
+      } else if (modalMode === "queue" && !data.farm_busy && !data.me?.status) {
+        forceCloseModal();
+        stopQueuePoll();
+      } else if (modalMode === "queue") {
+        renderQueueModal(data);
+      }
+      return data;
+    } catch (e) {
+      if (/network|Failed to fetch|network_error/i.test(String(e.message))) {
+        renderQueueModal(lastGate || { farm_busy: true, queue_length: 0 }, { waking: true });
+        startQueuePoll();
+      }
+      return null;
+    }
+  }
+
+  function setupXpCalculator() {
+    const card = $("xp-calc-card");
+    const openBtn = $("xp-calc-open");
+    const closeBtn = $("xp-calc-close");
+    const applyBtn = $("xp-calc-apply");
+    const cur = $("xp-cur");
+    const tgt = $("xp-tgt");
+    const out = $("xp-calc-result");
+    if (!card || !openBtn || !window.CKR_LEVEL_XP) return;
+
+    function refresh() {
+      const xp = window.CKR_LEVEL_XP.calculateRequiredXp(cur.value, tgt.value);
+      if (xp == null) {
+        out.innerHTML = "ใส่เลเวล 1–110 ให้ถูกต้อง";
+        return;
+      }
+      out.innerHTML =
+        "ต้องใช้ <strong>" + formatNumTh(xp) + "</strong> XP";
+      out.dataset.xp = String(xp);
+    }
+
+    openBtn.addEventListener("click", () => {
+      card.classList.remove("hidden");
+      card.hidden = false;
+      refresh();
+    });
+    closeBtn?.addEventListener("click", () => {
+      card.classList.add("hidden");
+      card.hidden = true;
+    });
+    cur?.addEventListener("input", refresh);
+    tgt?.addEventListener("input", refresh);
+    applyBtn?.addEventListener("click", () => {
+      refresh();
+      const xp = Number(out.dataset.xp || 0);
+      const expInput = $("farm-exp");
+      if (!expInput || !Number.isFinite(xp) || xp < 0) return;
+      expInput.value = formatCommas(String(Math.trunc(xp)));
+      syncFarmNumField(expInput, { silent: true });
+      card.classList.add("hidden");
+      card.hidden = true;
+      setStatus($("farm-status"), "ใส่ XP จากเครื่องคิดเลขแล้ว", "ok");
+    });
   }
 
   function showConfirmModal() {
@@ -452,6 +676,12 @@
   function formatApiDetail(detail) {
     if (detail == null) return "";
     if (typeof detail === "string") return detail;
+    if (typeof detail === "object" && !Array.isArray(detail)) {
+      if (detail.code === "farm_busy" || detail.message === "farm_busy") {
+        return "farm_busy";
+      }
+      return detail.msg || detail.message || detail.reason || detail.code || "request_failed";
+    }
     if (Array.isArray(detail)) {
       const parts = detail.map((item) => {
         if (!item || typeof item !== "object") return String(item);
@@ -464,14 +694,11 @@
         }
         if (loc.includes("password")) return "รหัสผ่าน DevPlay ว่างหรือไม่ถูกต้อง";
         if (loc.includes("score") || loc.includes("coin") || loc.includes("exp")) {
-          return "ค่าคะแนน/เหรียญ/EXP ไม่ถูกต้องหรือเกินกำหนด";
+          return "ค่าคะแนน/เหรียญ/XP ไม่ถูกต้องหรือเกินกำหนด";
         }
         return loc ? loc + ": " + msg : msg;
       });
       return parts.filter(Boolean).join(" · ") || "ข้อมูลไม่ถูกต้อง";
-    }
-    if (typeof detail === "object") {
-      return detail.msg || detail.message || detail.reason || JSON.stringify(detail).slice(0, 160);
     }
     return String(detail);
   }
@@ -506,18 +733,10 @@
       const err = new Error(detail);
       err.status = res.status;
       err.data = data;
+      if (raw && typeof raw === "object" && raw.gate) err.gate = raw.gate;
       throw err;
     }
     return data;
-  }
-
-  function showLogin() {
-    stopBalancePoll();
-    forceCloseModal();
-    loginView.classList.remove("hidden");
-    userView.classList.add("hidden");
-    $("logout-btn").classList.add("hidden");
-    $("nav-balance").classList.add("hidden");
   }
 
   function showApp() {
@@ -526,6 +745,17 @@
     $("logout-btn").classList.remove("hidden");
     $("nav-balance").classList.remove("hidden");
     updateFarmAvailability();
+    refreshGateAndQueueUi().catch(() => {});
+  }
+
+  function showLogin() {
+    stopBalancePoll();
+    stopQueuePoll();
+    forceCloseModal();
+    loginView.classList.remove("hidden");
+    userView.classList.add("hidden");
+    $("logout-btn").classList.add("hidden");
+    $("nav-balance").classList.add("hidden");
   }
 
   function paintProfile() {
@@ -617,7 +847,7 @@
     const expTotal = summary?.exp_total ?? reward?.exp?.total;
     const bits = [];
     if (coinDelta != null && coinDelta !== "") bits.push("เหรียญ +" + formatNumTh(coinDelta));
-    if (expDelta != null && expDelta !== "") bits.push("EXP +" + formatNumTh(expDelta));
+    if (expDelta != null && expDelta !== "") bits.push("XP +" + formatNumTh(expDelta));
     if (bits.length) extras.push({ text: "ได้รับ: " + bits.join(" · "), kind: "ok" });
     if (coinTotal != null && coinTotal !== "") {
       extras.push({
@@ -627,7 +857,7 @@
     }
     if (expTotal != null && expTotal !== "") {
       extras.push({
-        text: "EXP รวมหลังเคลม: " + formatNumTh(expTotal),
+        text: "XP รวมหลังเคลม: " + formatNumTh(expTotal),
         kind: "ok",
       });
     }
@@ -814,6 +1044,7 @@
     }
 
     const btn = $("farm-btn");
+    const tokensBefore = tokenBalance();
     farmRunning = true;
     btn.disabled = true;
     setStatus($("farm-status"), "กำลังฟาร์ม… อาจใช้เวลาสักครู่", "muted");
@@ -843,6 +1074,24 @@
 
       if (data.ok) {
         setStatus($("farm-status"), "ฟาร์มสำเร็จ · หัก 1 โทเค็น", "ok");
+        const summary = result?.reward_summary || {};
+        const reward = result?.reward || {};
+        showResultModal({
+          account:
+            (summary.nickname || result?.account?.nickname || "—") +
+            " · level " +
+            (summary.level ?? reward.level ?? "—"),
+          coinDelta: formatNumTh(summary.coin_delta ?? reward.coin?.delta ?? 0),
+          coinTotal: formatNumTh(summary.coin_total ?? reward.coin?.total ?? "—"),
+          xpDelta: formatNumTh(summary.exp_delta ?? reward.exp?.delta ?? 0),
+          xpTotal: formatNumTh(summary.exp_total ?? reward.exp?.total ?? "—"),
+          tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
+          tokensAfter: formatNumTh(
+            data.tokens_after ?? data.token_balance ?? tokenBalance()
+          ),
+        });
+        stopQueuePoll();
+        refreshGateAndQueueUi().catch(() => {});
       } else {
         const msg = farmErrorMessage(result, "ฟาร์มจบแล้วแต่มีปัญหา · โทเค็นถูกหักแล้ว");
         setStatus($("farm-status"), msg, "err");
@@ -850,19 +1099,27 @@
       }
     } catch (e) {
       clearStageTimer();
-      const msg = thError(e.message) || "ฟาร์มไม่สำเร็จ";
-      setStatus($("farm-status"), msg, "err");
-      buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
-
-      if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
-        profile.token_balance = 0;
-        paintProfile();
-        showEmptyCoinsModal();
+      if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
+        const gate = e.gate || e.data?.detail?.gate;
+        if (gate) renderQueueModal(gate);
+        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
+        startQueuePoll();
+        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
       } else {
-        showErrorModal(msg, "ฟาร์มไม่สำเร็จ");
-        if (typeof e.data?.token_balance === "number") {
-          profile.token_balance = e.data.token_balance;
+        const msg = thError(e.message) || "ฟาร์มไม่สำเร็จ";
+        setStatus($("farm-status"), msg, "err");
+        buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
+
+        if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
+          profile.token_balance = 0;
           paintProfile();
+          showEmptyCoinsModal();
+        } else {
+          showErrorModal(msg, "ฟาร์มไม่สำเร็จ");
+          if (typeof e.data?.token_balance === "number") {
+            profile.token_balance = e.data.token_balance;
+            paintProfile();
+          }
         }
       }
     } finally {
@@ -881,14 +1138,19 @@
 
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
+    setupXpCalculator();
 
     // Re-check balance when user returns from Telegram
     document.addEventListener("visibilitychange", async () => {
       if (document.visibilityState !== "visible" || !accessToken) return;
-      if (modalMode !== "empty") return;
-      try {
-        await refreshMe();
-      } catch (_) {}
+      if (modalMode === "empty") {
+        try {
+          await refreshMe();
+        } catch (_) {}
+      }
+      if (modalMode === "queue" || lastGate?.me?.status) {
+        refreshGateAndQueueUi().catch(() => {});
+      }
     });
 
     const { data } = await sb.auth.getSession();
