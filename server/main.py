@@ -234,31 +234,74 @@ async def me(user: dict[str, Any] = Depends(verify_user)):
 async def auth_login(body: LoginBody):
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         raise HTTPException(status_code=503, detail="auth_not_configured")
-    if not _has_service_role():
-        raise HTTPException(status_code=503, detail="service_role_not_configured")
 
     username = body.username.strip()
+    resolved: dict[str, Any] = {}
+    candidates: list[str] = []
+
+    # Prefer DB resolve when service_role is available
+    if _has_service_role():
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            looked = await client.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/resolve_username_email",
+                headers=_service_headers(),
+                json={"p_username": username},
+            )
+            if looked.status_code == 200:
+                data = looked.json() or {}
+                if data.get("ok") and data.get("email"):
+                    resolved = data
+                    candidates.append(str(data["email"]))
+
+    # Fallback: username-as-email (admin) + synthetic local email (customers)
+    if "@" in username:
+        candidates.append(username)
+    candidates.append(_synthetic_email(username))
+
+    seen: set[str] = set()
+    emails: list[str] = []
+    for e in candidates:
+        key = e.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            emails.append(e.strip())
+
+    session: Optional[dict[str, Any]] = None
     async with httpx.AsyncClient(timeout=30.0) as client:
-        looked = await client.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/resolve_username_email",
-            headers=_service_headers(),
-            json={"p_username": username},
-        )
-        if looked.status_code != 200:
-            raise HTTPException(status_code=500, detail="resolve_failed")
-        resolved = looked.json()
-        if not resolved.get("ok"):
+        for auth_email in emails:
+            sign = await client.post(
+                f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+                headers=_sb_headers(SUPABASE_ANON_KEY),
+                json={"email": auth_email, "password": body.password},
+            )
+            if sign.status_code == 200:
+                session = sign.json()
+                break
+        if not session or not session.get("access_token"):
             raise HTTPException(status_code=401, detail="invalid_credentials")
 
-        auth_email = resolved["email"]
-        sign = await client.post(
-            f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
-            headers=_sb_headers(SUPABASE_ANON_KEY),
-            json={"email": auth_email, "password": body.password},
-        )
-        if sign.status_code != 200:
-            raise HTTPException(status_code=401, detail="invalid_credentials")
-        session = sign.json()
+        access = session["access_token"]
+        uid = (session.get("user") or {}).get("id") or resolved.get("id")
+        profile_row: dict[str, Any] = {}
+        if uid:
+            pr = await client.get(
+                f"{SUPABASE_URL}/rest/v1/profiles",
+                params={"id": f"eq.{uid}", "select": "*"},
+                headers={
+                    **_sb_headers(SUPABASE_ANON_KEY, access),
+                    "Accept": "application/json",
+                },
+            )
+            if pr.status_code == 200 and pr.json():
+                profile_row = pr.json()[0]
+
+    profile_out = {
+        "id": profile_row.get("id") or resolved.get("id") or uid,
+        "role": profile_row.get("role") or resolved.get("role"),
+        "username": profile_row.get("username") or resolved.get("username") or username,
+        "display_name": profile_row.get("display_name") or resolved.get("display_name"),
+        "token_balance": profile_row.get("token_balance", resolved.get("token_balance", 0)),
+    }
 
     return {
         "ok": True,
@@ -267,16 +310,10 @@ async def auth_login(body: LoginBody):
         "expires_in": session.get("expires_in"),
         "token_type": session.get("token_type", "bearer"),
         "user": {
-            "id": session.get("user", {}).get("id") or resolved.get("id"),
-            "username": resolved.get("username") or username,
+            "id": profile_out["id"],
+            "username": profile_out["username"],
         },
-        "profile": {
-            "id": resolved.get("id"),
-            "role": resolved.get("role"),
-            "username": resolved.get("username") or username,
-            "display_name": resolved.get("display_name"),
-            "token_balance": resolved.get("token_balance", 0),
-        },
+        "profile": profile_out,
     }
 
 
