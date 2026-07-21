@@ -125,6 +125,15 @@ IngIn   = msgcls(POOL.FindMessageTypeByName("service.multiplay.IngameInboundMess
 IngOut  = msgcls(POOL.FindMessageTypeByName("service.multiplay.IngameOutboundMessage"))
 
 
+class FarmError(Exception):
+    """Structured farm failure for API consumers (not a process exit)."""
+
+    def __init__(self, code: str, detail=None):
+        self.code = code
+        self.detail = detail
+        super().__init__(code)
+
+
 # ------------------------------- login -------------------------------------
 def login():
     lc = copy.deepcopy(DEFAULT_LC); lc["devsisters_id"] = ""
@@ -132,7 +141,8 @@ def login():
                       json={"email": EMAIL, "password": PASSWORD,
                             "oven_access_token": "", "lc": lc}, timeout=20).json()
     if d.get("code") != 20000:
-        raise SystemExit("LOGIN FAILED: " + json.dumps(d)[:400])
+        print("LOGIN FAILED:", json.dumps(d, ensure_ascii=False)[:400])
+        raise FarmError("login_failed", d)
     return d["game_access_token"], d["member"]["mid"], lc
 
 
@@ -540,6 +550,13 @@ def run_farm(email, password, score=800000, coin=1, exp=1, log_cb=None,
     builtins.print = _print
     try:
         return main()
+    except FarmError as exc:
+        return {"ok": False, "error": exc.code, "detail": exc.detail}
+    except SystemExit as exc:
+        msg = str(exc)
+        if "LOGIN FAILED" in msg:
+            return {"ok": False, "error": "login_failed"}
+        return {"ok": False, "error": "farm_error", "detail": msg}
     finally:
         builtins.print = old_print
 
