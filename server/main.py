@@ -141,8 +141,15 @@ async def require_admin(user: dict[str, Any] = Depends(verify_user)) -> dict[str
     return user
 
 
+def _has_service_role() -> bool:
+    key = (SUPABASE_SERVICE_ROLE_KEY or "").strip()
+    if not key or key.startswith("REPLACE"):
+        return False
+    return len(key) > 20
+
+
 def _service_headers() -> dict[str, str]:
-    if not SUPABASE_SERVICE_ROLE_KEY:
+    if not _has_service_role():
         raise HTTPException(status_code=503, detail="service_role_not_configured")
     return _sb_headers(SUPABASE_SERVICE_ROLE_KEY)
 
@@ -157,7 +164,7 @@ async def health():
         "service": "ckr-wwdc",
         "farm_busy": _farm_busy,
         "supabase_configured": bool(SUPABASE_URL and SUPABASE_ANON_KEY),
-        "service_role_configured": bool(SUPABASE_SERVICE_ROLE_KEY),
+        "service_role_configured": _has_service_role(),
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -213,7 +220,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
 
     # Insert run_jobs via service role if available, else skip audit row
     job_id = None
-    if SUPABASE_SERVICE_ROLE_KEY:
+    if _has_service_role():
         async with httpx.AsyncClient(timeout=20.0) as client:
             jr = await client.post(
                 f"{SUPABASE_URL}/rest/v1/run_jobs",
@@ -245,7 +252,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         logs.append(msg)
 
     try:
-        if job_id and SUPABASE_SERVICE_ROLE_KEY:
+        if job_id and _has_service_role():
             await _patch_job(job_id, {"status": "running", "started_at": _now()})
 
         result = await asyncio.to_thread(
@@ -259,7 +266,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         )
 
         ok = bool(result and result.get("ok"))
-        if job_id and SUPABASE_SERVICE_ROLE_KEY:
+        if job_id and _has_service_role():
             await _patch_job(
                 job_id,
                 {
@@ -278,7 +285,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
             "logs": logs[-80:],
         }
     except Exception as exc:
-        if job_id and SUPABASE_SERVICE_ROLE_KEY:
+        if job_id and _has_service_role():
             await _patch_job(
                 job_id,
                 {
@@ -331,7 +338,7 @@ async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:
 
 
 async def _refund_token(user_id: str, reason: str) -> None:
-    if not SUPABASE_SERVICE_ROLE_KEY:
+    if not _has_service_role():
         return
     async with httpx.AsyncClient(timeout=20.0) as client:
         await client.post(
@@ -345,13 +352,16 @@ async def _refund_token(user_id: str, reason: str) -> None:
 # Admin (Render backend uses service role — never expose to browser)
 # ---------------------------------------------------------------------------
 @app.get("/api/admin/lookup")
-async def admin_lookup(q: str, _admin: dict[str, Any] = Depends(require_admin)):
+async def admin_lookup(q: str, admin: dict[str, Any] = Depends(require_admin)):
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
     async with httpx.AsyncClient(timeout=20.0) as client:
         r = await client.post(
             f"{SUPABASE_URL}/rest/v1/rpc/admin_lookup_user",
-            headers=_service_headers() if SUPABASE_SERVICE_ROLE_KEY else _sb_headers(
-                SUPABASE_ANON_KEY, _admin["_access_token"]
-            ),
+            headers=headers,
             json={"p_query": q},
         )
     if r.status_code != 200:
@@ -367,7 +377,7 @@ async def admin_add_tokens(
     # Lookup then credit
     headers = (
         _service_headers()
-        if SUPABASE_SERVICE_ROLE_KEY
+        if _has_service_role()
         else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
     )
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -402,7 +412,7 @@ async def admin_create_user(
     body: AdminCreateUserBody,
     _admin: dict[str, Any] = Depends(require_admin),
 ):
-    if not SUPABASE_SERVICE_ROLE_KEY:
+    if not _has_service_role():
         raise HTTPException(status_code=503, detail="service_role_not_configured")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
