@@ -376,8 +376,10 @@ input {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  width: 100%;
   max-width: 720px;
   margin: 0 auto;
+  min-width: 0;
 }
 
 .status-strip {
@@ -453,6 +455,16 @@ input {
 /* ---- Oven / farm ---- */
 .oven-panel {
   padding: 26px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.farm-form {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .oven-head {
@@ -511,6 +523,9 @@ input {
 
 .field input {
   appearance: none;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: rgba(10, 6, 4, 0.55);
@@ -537,15 +552,20 @@ input {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .field-stat {
@@ -554,12 +574,18 @@ input {
   border-radius: var(--radius-sm);
   padding: 10px;
   margin-bottom: 12px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .field-stat input {
   background: rgba(10, 6, 4, 0.4);
   min-height: 40px;
   padding: 8px 10px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .remember-row {
