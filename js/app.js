@@ -252,7 +252,7 @@
     if (/invalid|wrong|credential|password|user/i.test(s)) {
       return "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง";
     }
-    if (/network|fetch|Failed to fetch/i.test(s)) {
+    if (/network|fetch|Failed to fetch|network_error/i.test(s)) {
       return "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง";
     }
     if (/traceback|grpc|RpcError|Stack|Exception|at 0x|python/i.test(s)) {
@@ -449,17 +449,51 @@
     }
   }
 
+  function formatApiDetail(detail) {
+    if (detail == null) return "";
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      const parts = detail.map((item) => {
+        if (!item || typeof item !== "object") return String(item);
+        const loc = Array.isArray(item.loc)
+          ? item.loc.filter((x) => x !== "body").join(".")
+          : "";
+        const msg = item.msg || item.type || "invalid";
+        if (loc.includes("email") || /email/i.test(msg)) {
+          return "อีเมล DevPlay ไม่ถูกต้อง";
+        }
+        if (loc.includes("password")) return "รหัสผ่าน DevPlay ว่างหรือไม่ถูกต้อง";
+        if (loc.includes("score") || loc.includes("coin") || loc.includes("exp")) {
+          return "ค่าคะแนน/เหรียญ/EXP ไม่ถูกต้องหรือเกินกำหนด";
+        }
+        return loc ? loc + ": " + msg : msg;
+      });
+      return parts.filter(Boolean).join(" · ") || "ข้อมูลไม่ถูกต้อง";
+    }
+    if (typeof detail === "object") {
+      return detail.msg || detail.message || detail.reason || JSON.stringify(detail).slice(0, 160);
+    }
+    return String(detail);
+  }
+
   async function api(path, options = {}) {
     const headers = Object.assign(
       { "Content-Type": "application/json" },
       options.headers || {}
     );
     if (accessToken) headers.Authorization = "Bearer " + accessToken;
-    const res = await fetch(API + path, {
-      ...options,
-      headers,
-      body: options.body ? JSON.stringify(options.body) : undefined,
-    });
+    let res;
+    try {
+      res = await fetch(API + path, {
+        ...options,
+        headers,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+    } catch (netErr) {
+      const err = new Error("network_error");
+      err.cause = netErr;
+      throw err;
+    }
     let data = null;
     try {
       data = await res.json();
@@ -467,8 +501,9 @@
       data = null;
     }
     if (!res.ok) {
-      const detail = data?.detail || data?.reason || data?.error || res.statusText;
-      const err = new Error(typeof detail === "string" ? detail : "request_failed");
+      const raw = data?.detail ?? data?.reason ?? data?.error ?? null;
+      const detail = formatApiDetail(raw) || res.statusText || "request_failed";
+      const err = new Error(detail);
       err.status = res.status;
       err.data = data;
       throw err;
@@ -844,6 +879,16 @@
 
     if (!hasTokens()) {
       showEmptyCoinsModal();
+      return;
+    }
+
+    const dpEmail = ($("dp-acct-mail").value || "").trim();
+    const dpPass = $("dp-acct-secret").value || "";
+    if (!dpEmail || !dpPass) {
+      showErrorModal(
+        "กรอกอีเมลและรหัสผ่าน DevPlay ของเกมให้ครบก่อนเริ่มฟาร์ม",
+        "ข้อมูลไม่ครบ"
+      );
       return;
     }
 

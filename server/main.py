@@ -16,7 +16,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_DIR = Path(__file__).resolve().parent
@@ -76,11 +76,20 @@ class LoginBody(BaseModel):
 
 
 class FarmRunBody(BaseModel):
-    email: EmailStr
+    # DevPlay login id — keep as str (not EmailStr) so unusual accounts still reach the farm core
+    email: str = Field(min_length=3, max_length=256)
     password: str = Field(min_length=1)
-    score: int = Field(default=800000, ge=0, le=2_147_483_647)
-    coin: int = Field(default=1, ge=0, le=2_147_483_647)
-    exp: int = Field(default=1, ge=0, le=2_147_483_647)
+    score: int = Field(default=0, ge=0, le=2_147_483_647)
+    coin: int = Field(default=0, ge=0, le=2_147_483_647)
+    exp: int = Field(default=0, ge=0, le=2_147_483_647)
+
+    @field_validator("email")
+    @classmethod
+    def _trim_email(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("email_required")
+        return s
 
 
 class AdminCreateUserBody(BaseModel):
