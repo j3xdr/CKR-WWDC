@@ -1,8 +1,9 @@
-"""CKR WWDC API — FastAPI app serving static UI + authenticated farm endpoints."""
+"""CKR WWDC API — FastAPI farm backend (no HTML UI)."""
 from __future__ import annotations
 
 import asyncio
 import os
+import re
 import sys
 import threading
 import traceback
@@ -19,7 +20,6 @@ from pydantic import BaseModel, EmailStr, Field
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_DIR = Path(__file__).resolve().parent
-STATIC_DIR = ROOT / "static"
 FARM_DIR = SERVER_DIR / "farm"
 
 if str(FARM_DIR) not in sys.path:
@@ -29,9 +29,17 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-# Sequential farm queue (Render Free = single instance, sleep OK)
+# Sequential farm queue (Render Free = single instance)
 _farm_lock = threading.Lock()
 _farm_busy = False
+
+ALLOWED_ORIGINS = [
+    "https://j3xdr.github.io",
+    "http://localhost:5500",
+    "http://127.0.0.1:5500",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
 
 
 def _require_env() -> None:
@@ -49,10 +57,10 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="CKR WWDC", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="CKR WWDC API", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -62,6 +70,11 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Models
 # ---------------------------------------------------------------------------
+class LoginBody(BaseModel):
+    username: str = Field(min_length=2, max_length=128)
+    password: str = Field(min_length=1)
+
+
 class FarmRunBody(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1)
@@ -71,29 +84,54 @@ class FarmRunBody(BaseModel):
 
 
 class AdminCreateUserBody(BaseModel):
-    email: EmailStr
+    username: str = Field(min_length=2, max_length=64)
     password: str = Field(min_length=6)
-    username: Optional[str] = None
-    display_name: Optional[str] = None
     initial_tokens: int = Field(default=0, ge=0, le=1_000_000)
 
 
 class AdminAddTokensBody(BaseModel):
-    query: str = Field(min_length=2, description="email or username")
+    query: str = Field(min_length=2, description="username (or legacy email)")
     amount: int = Field(ge=1, le=1_000_000)
     reason: str = "admin_credit"
 
 
 # ---------------------------------------------------------------------------
-# Supabase helpers
+# Helpers
 # ---------------------------------------------------------------------------
 def _sb_headers(key: str, jwt: Optional[str] = None) -> dict[str, str]:
-    h = {
+    return {
         "apikey": key,
         "Authorization": f"Bearer {jwt or key}",
         "Content-Type": "application/json",
     }
-    return h
+
+
+def _has_service_role() -> bool:
+    key = (SUPABASE_SERVICE_ROLE_KEY or "").strip()
+    if not key or key.startswith("REPLACE"):
+        return False
+    return len(key) > 20
+
+
+def _service_headers() -> dict[str, str]:
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+    return _sb_headers(SUPABASE_SERVICE_ROLE_KEY)
+
+
+def _synthetic_email(username: str) -> str:
+    """Internal Auth email — never shown as a customer-facing field."""
+    raw = (username or "").strip().lower()
+    safe = re.sub(r"[^a-z0-9._+-]+", "_", raw).strip("._+-")
+    if not safe:
+        safe = "user"
+    if len(safe) > 64:
+        safe = safe[:64]
+    return f"{safe}@users.ckr.local"
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 async def verify_user(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
@@ -140,22 +178,30 @@ async def require_admin(user: dict[str, Any] = Depends(verify_user)) -> dict[str
     return user
 
 
-def _has_service_role() -> bool:
-    key = (SUPABASE_SERVICE_ROLE_KEY or "").strip()
-    if not key or key.startswith("REPLACE"):
-        return False
-    return len(key) > 20
-
-
-def _service_headers() -> dict[str, str]:
-    if not _has_service_role():
-        raise HTTPException(status_code=503, detail="service_role_not_configured")
-    return _sb_headers(SUPABASE_SERVICE_ROLE_KEY)
+def _public_profile(profile: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": profile["id"],
+        "role": profile.get("role"),
+        "username": profile.get("username"),
+        "display_name": profile.get("display_name"),
+        "token_balance": profile.get("token_balance", 0),
+    }
 
 
 # ---------------------------------------------------------------------------
-# Health + me
+# Health + root (JSON only — UI lives on GitHub Pages)
 # ---------------------------------------------------------------------------
+@app.get("/")
+async def root():
+    return {
+        "ok": True,
+        "service": "ckr-wwdc-api",
+        "docs": "/api/health",
+        "ui": "https://j3xdr.github.io/CKR-WWDC/",
+        "admin": "https://j3xdr.github.io/Login_j3xdr/",
+    }
+
+
 @app.get("/api/health")
 async def health():
     return {
@@ -175,15 +221,61 @@ async def me(user: dict[str, Any] = Depends(verify_user)):
         "ok": True,
         "user": {
             "id": user["id"],
-            "email": user.get("email") or profile.get("email"),
+            "username": profile.get("username"),
+        },
+        "profile": _public_profile(profile),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Auth: username + password → Supabase session (Pages never need email)
+# ---------------------------------------------------------------------------
+@app.post("/api/auth/login")
+async def auth_login(body: LoginBody):
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        raise HTTPException(status_code=503, detail="auth_not_configured")
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+
+    username = body.username.strip()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        looked = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/resolve_username_email",
+            headers=_service_headers(),
+            json={"p_username": username},
+        )
+        if looked.status_code != 200:
+            raise HTTPException(status_code=500, detail="resolve_failed")
+        resolved = looked.json()
+        if not resolved.get("ok"):
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+
+        auth_email = resolved["email"]
+        sign = await client.post(
+            f"{SUPABASE_URL}/auth/v1/token?grant_type=password",
+            headers=_sb_headers(SUPABASE_ANON_KEY),
+            json={"email": auth_email, "password": body.password},
+        )
+        if sign.status_code != 200:
+            raise HTTPException(status_code=401, detail="invalid_credentials")
+        session = sign.json()
+
+    return {
+        "ok": True,
+        "access_token": session.get("access_token"),
+        "refresh_token": session.get("refresh_token"),
+        "expires_in": session.get("expires_in"),
+        "token_type": session.get("token_type", "bearer"),
+        "user": {
+            "id": session.get("user", {}).get("id") or resolved.get("id"),
+            "username": resolved.get("username") or username,
         },
         "profile": {
-            "id": profile["id"],
-            "role": profile.get("role"),
-            "username": profile.get("username"),
-            "display_name": profile.get("display_name"),
-            "token_balance": profile.get("token_balance", 0),
-            "email": profile.get("email"),
+            "id": resolved.get("id"),
+            "role": resolved.get("role"),
+            "username": resolved.get("username") or username,
+            "display_name": resolved.get("display_name"),
+            "token_balance": resolved.get("token_balance", 0),
         },
     }
 
@@ -202,7 +294,6 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
     if bal < 1:
         raise HTTPException(status_code=402, detail="insufficient_tokens")
 
-    # Atomic consume via RPC
     async with httpx.AsyncClient(timeout=30.0) as client:
         cons = await client.post(
             f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
@@ -217,7 +308,6 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         code = 402 if reason == "insufficient_tokens" else 400
         raise HTTPException(status_code=code, detail=reason)
 
-    # Insert run_jobs via service role if available, else skip audit row
     job_id = None
     if _has_service_role():
         async with httpx.AsyncClient(timeout=20.0) as client:
@@ -238,9 +328,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
             if jr.status_code < 300 and jr.json():
                 job_id = jr.json()[0]["id"]
 
-    # Sequential farm
     if not _farm_lock.acquire(blocking=False):
-        # Refund token if we can't start
         await _refund_token(uid, "farm_busy_refund")
         raise HTTPException(status_code=409, detail="farm_busy")
 
@@ -322,10 +410,6 @@ def _run_farm_sync(email, password, score, coin, exp, log_cb):
     )
 
 
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
 async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:
     async with httpx.AsyncClient(timeout=20.0) as client:
         await client.patch(
@@ -348,7 +432,7 @@ async def _refund_token(user_id: str, reason: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Admin (Render backend uses service role — never expose to browser)
+# Admin (Login_j3xdr only — JWT admin + service_role on Render)
 # ---------------------------------------------------------------------------
 @app.get("/api/admin/lookup")
 async def admin_lookup(q: str, admin: dict[str, Any] = Depends(require_admin)):
@@ -365,7 +449,11 @@ async def admin_lookup(q: str, admin: dict[str, Any] = Depends(require_admin)):
         )
     if r.status_code != 200:
         raise HTTPException(status_code=500, detail=r.text)
-    return r.json()
+    data = r.json()
+    if data.get("ok"):
+        # Prefer username in admin UI; keep email only as internal fallback
+        data.pop("email", None)
+    return data
 
 
 @app.post("/api/admin/add-tokens")
@@ -373,7 +461,6 @@ async def admin_add_tokens(
     body: AdminAddTokensBody,
     admin: dict[str, Any] = Depends(require_admin),
 ):
-    # Lookup then credit
     headers = (
         _service_headers()
         if _has_service_role()
@@ -403,29 +490,53 @@ async def admin_add_tokens(
     out = credit.json()
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("reason", "credit_failed"))
-    return out
+    return {
+        "ok": True,
+        "id": out.get("id"),
+        "username": data.get("username"),
+        "token_balance": out.get("token_balance"),
+    }
 
 
 @app.post("/api/admin/create-user")
 async def admin_create_user(
     body: AdminCreateUserBody,
-    _admin: dict[str, Any] = Depends(require_admin),
+    admin: dict[str, Any] = Depends(require_admin),
 ):
     if not _has_service_role():
         raise HTTPException(status_code=503, detail="service_role_not_configured")
 
+    username = body.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="username_required")
+
+    # Block reserved / colliding usernames that look like internal domains
+    lower = username.lower()
+    if lower.endswith("@users.ckr.local") or lower.endswith("@ckr.local"):
+        raise HTTPException(status_code=400, detail="invalid_username")
+
+    auth_email = _synthetic_email(username)
+
     async with httpx.AsyncClient(timeout=30.0) as client:
-        # Create auth user
+        # Username uniqueness (also blocks collision with existing auth emails)
+        exists = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/admin_lookup_user",
+            headers=_service_headers(),
+            json={"p_query": username},
+        )
+        if exists.status_code == 200 and (exists.json() or {}).get("ok"):
+            raise HTTPException(status_code=409, detail="username_taken")
+
         cr = await client.post(
             f"{SUPABASE_URL}/auth/v1/admin/users",
             headers=_service_headers(),
             json={
-                "email": body.email,
+                "email": auth_email,
                 "password": body.password,
                 "email_confirm": True,
                 "user_metadata": {
-                    "username": body.username,
-                    "display_name": body.display_name or body.username,
+                    "username": username,
+                    "display_name": username,
                 },
             },
         )
@@ -436,22 +547,17 @@ async def admin_create_user(
         if not uid:
             raise HTTPException(status_code=500, detail="create_user_no_id")
 
-        # Patch profile
-        patch = {
-            "email": body.email,
-            "role": "normal",
-            "token_balance": body.initial_tokens,
-        }
-        if body.username:
-            patch["username"] = body.username
-        if body.display_name or body.username:
-            patch["display_name"] = body.display_name or body.username
-
         await client.patch(
             f"{SUPABASE_URL}/rest/v1/profiles",
             params={"id": f"eq.{uid}"},
             headers={**_service_headers(), "Prefer": "return=representation"},
-            json=patch,
+            json={
+                "email": auth_email,
+                "username": username,
+                "display_name": username,
+                "role": "normal",
+                "token_balance": body.initial_tokens,
+            },
         )
 
         if body.initial_tokens > 0:
@@ -463,15 +569,14 @@ async def admin_create_user(
                     "delta": body.initial_tokens,
                     "reason": "initial_grant",
                     "balance_after": body.initial_tokens,
-                    "created_by": _admin["id"],
+                    "created_by": admin["id"],
                 },
             )
 
     return {
         "ok": True,
         "id": uid,
-        "email": body.email,
-        "username": body.username,
+        "username": username,
         "token_balance": body.initial_tokens,
     }
 
@@ -487,13 +592,11 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
     if r.status_code != 200:
         raise HTTPException(status_code=500, detail=r.text)
     rows = r.json()
-    # Strip sensitive session fields from response
     safe = []
     for p in rows or []:
         safe.append(
             {
                 "id": p.get("id"),
-                "email": p.get("email"),
                 "username": p.get("username"),
                 "display_name": p.get("display_name"),
                 "role": p.get("role"),
@@ -502,16 +605,3 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
             }
         )
     return {"ok": True, "users": safe}
-
-
-# ---------------------------------------------------------------------------
-# API root (UI is on GitHub Pages — not served here)
-# ---------------------------------------------------------------------------
-@app.get("/")
-async def root():
-    return {
-        "ok": True,
-        "service": "ckr-wwdc-api",
-        "docs": "/api/health",
-        "ui": "https://j3xdr.github.io/CKR-WWDC/",
-    }

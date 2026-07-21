@@ -8,15 +8,15 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/css/styles.css" />
+  <link rel="stylesheet" href="css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="canvas-deco" aria-hidden="true">
-    <img class="deco deco-cookie" src="/static/assets/deco_cookie.png" alt="" />
-    <img class="deco deco-token" src="/static/assets/deco_token.png" alt="" />
-    <img class="deco deco-star" src="/static/assets/deco_star.png" alt="" />
-    <img class="deco deco-glow" src="/static/assets/deco_glow.png" alt="" />
+    <img class="deco deco-cookie" src="assets/deco_cookie.png" alt="" />
+    <img class="deco deco-token" src="assets/deco_token.png" alt="" />
+    <img class="deco deco-star" src="assets/deco_star.png" alt="" />
+    <img class="deco deco-glow" src="assets/deco_glow.png" alt="" />
   </div>
 
   <header class="top-nav">
@@ -26,7 +26,6 @@
     </div>
     <nav class="nav-links desktop-only" aria-label="Primary">
       <a href="#run">Farm</a>
-      <a href="#tokens" class="admin-only hidden">Admin</a>
     </nav>
     <div class="nav-actions">
       <span id="nav-balance" class="balance-chip hidden"></span>
@@ -35,19 +34,18 @@
   </header>
 
   <main class="shell">
-    <!-- Login -->
     <section id="login-view" class="view">
       <div class="hero">
         <p class="eyebrow">Cookie Run · token farm</p>
         <h1 class="display">CKR WWDC</h1>
-        <p class="lead">1 token = 1 farm run. Admin creates accounts — no self-register.</p>
+        <p class="lead">1 token = 1 farm run. Ask admin for an account — no self-register.</p>
       </div>
       <div class="card login-card">
         <h2 class="card-title">Sign in</h2>
         <form id="login-form" autocomplete="on">
           <label class="field">
-            <span>Email</span>
-            <input id="login-email" type="email" required autocomplete="username" placeholder="you@email.com" />
+            <span>Username</span>
+            <input id="login-user" type="text" required autocomplete="username" placeholder="your username" />
           </label>
           <label class="field">
             <span>Password</span>
@@ -59,7 +57,6 @@
       </div>
     </section>
 
-    <!-- User dashboard -->
     <section id="user-view" class="view hidden">
       <div class="layout-desktop">
         <aside class="side-panel">
@@ -70,8 +67,7 @@
           </div>
           <div class="card who-card">
             <p class="eyebrow">Signed in</p>
-            <p id="who-email" class="who"></p>
-            <p id="who-role" class="muted"></p>
+            <p id="who-user" class="who"></p>
           </div>
         </aside>
 
@@ -112,90 +108,16 @@
             </form>
             <pre id="farm-log" class="log hidden" aria-live="polite"></pre>
           </div>
-
-          <!-- Admin panel -->
-          <div class="card admin-only hidden" id="tokens">
-            <h2 class="card-title">Admin · tokens</h2>
-            <p class="hint">Lookup by email or username, then credit tokens. Create users here — no public signup.</p>
-
-            <form id="lookup-form" class="inline-form">
-              <label class="field grow">
-                <span>Lookup</span>
-                <input id="lookup-q" type="text" required placeholder="email or username" />
-              </label>
-              <button class="btn btn-secondary" type="submit">Find</button>
-            </form>
-            <div id="lookup-result" class="lookup-box muted">—</div>
-
-            <form id="credit-form" class="inline-form">
-              <label class="field grow">
-                <span>User (email/username)</span>
-                <input id="credit-q" type="text" required />
-              </label>
-              <label class="field narrow">
-                <span>Tokens</span>
-                <input id="credit-amt" type="number" min="1" value="10" required />
-              </label>
-              <button class="btn btn-primary" type="submit">Add tokens</button>
-            </form>
-            <p id="credit-status" class="status" role="status"></p>
-
-            <hr class="hairline" />
-
-            <h3 class="subhead">Create user</h3>
-            <form id="create-form">
-              <div class="grid-2">
-                <label class="field">
-                  <span>Email</span>
-                  <input id="create-email" type="email" required />
-                </label>
-                <label class="field">
-                  <span>Password</span>
-                  <input id="create-pass" type="password" minlength="6" required />
-                </label>
-              </div>
-              <div class="grid-2">
-                <label class="field">
-                  <span>Username</span>
-                  <input id="create-user" type="text" placeholder="optional" />
-                </label>
-                <label class="field">
-                  <span>Initial tokens</span>
-                  <input id="create-tokens" type="number" min="0" value="0" />
-                </label>
-              </div>
-              <button class="btn btn-primary" type="submit">Create user</button>
-              <p id="create-status" class="status" role="status"></p>
-            </form>
-
-            <hr class="hairline" />
-            <div class="table-wrap">
-              <div class="card-head">
-                <h3 class="subhead">Users</h3>
-                <button type="button" class="btn btn-tertiary" id="refresh-users">Refresh</button>
-              </div>
-              <table class="users-table">
-                <thead>
-                  <tr><th>Email</th><th>User</th><th>Role</th><th>Tokens</th></tr>
-                </thead>
-                <tbody id="users-body">
-                  <tr><td colspan="4" class="muted">—</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       </div>
-
-      <!-- Mobile stacked layout uses same cards; CSS reflows -->
     </section>
   </main>
 
   <footer class="footer">
-    <p>CKR WWDC · fan tool · Intercom-inspired UI</p>
+    <p>CKR WWDC · fan tool · accounts via admin only</p>
   </footer>
 
-  <script src="/static/js/config.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

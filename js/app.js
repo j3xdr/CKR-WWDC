@@ -1,4 +1,4 @@
-/* CKR WWDC client */
+/* CKR WWDC client — public farm UI only (no admin) */
 (function () {
   "use strict";
 
@@ -22,14 +22,6 @@
     if (!el) return;
     el.textContent = text || "";
     el.className = "status " + (kind || "muted");
-  }
-
-  function escapeHtml(s) {
-    return String(s ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
   }
 
   async function api(path, options = {}) {
@@ -64,7 +56,6 @@
     userView.classList.add("hidden");
     $("logout-btn").classList.add("hidden");
     $("nav-balance").classList.add("hidden");
-    document.querySelectorAll(".admin-only").forEach((el) => el.classList.add("hidden"));
   }
 
   function showApp() {
@@ -72,18 +63,13 @@
     userView.classList.remove("hidden");
     $("logout-btn").classList.remove("hidden");
     $("nav-balance").classList.remove("hidden");
-    const isAdmin = profile?.role === "admin";
-    document.querySelectorAll(".admin-only").forEach((el) => {
-      el.classList.toggle("hidden", !isAdmin);
-    });
   }
 
   function paintProfile() {
     const bal = profile?.token_balance ?? 0;
     $("token-balance").textContent = String(bal);
     $("nav-balance").textContent = bal + " tokens";
-    $("who-email").textContent = profile?.email || "";
-    $("who-role").textContent = "Role: " + (profile?.role || "—");
+    $("who-user").textContent = profile?.username || profile?.display_name || "—";
   }
 
   async function refreshMe() {
@@ -91,9 +77,6 @@
     profile = data.profile;
     paintProfile();
     showApp();
-    if (profile.role === "admin") {
-      await loadUsers();
-    }
   }
 
   async function bootstrap() {
@@ -118,12 +101,24 @@
     setStatus($("login-status"), "Signing in…", "muted");
     $("login-btn").disabled = true;
     try {
-      const email = $("login-email").value.trim();
+      const username = $("login-user").value.trim();
       const password = $("login-pass").value;
-      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      const data = await api("/api/auth/login", {
+        method: "POST",
+        body: { username, password },
+      });
+      if (!data.access_token || !data.refresh_token) {
+        throw new Error("login_no_session");
+      }
+      const { error } = await sb.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
       if (error) throw error;
-      accessToken = data.session.access_token;
-      await refreshMe();
+      accessToken = data.access_token;
+      profile = data.profile;
+      paintProfile();
+      showApp();
       setStatus($("login-status"), "", "muted");
     } catch (e) {
       setStatus($("login-status"), e.message || "Login failed", "err");
@@ -181,103 +176,6 @@
       btn.disabled = false;
     }
   });
-
-  $("lookup-form").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const q = $("lookup-q").value.trim();
-    $("lookup-result").textContent = "Looking up…";
-    try {
-      const data = await api("/api/admin/lookup?q=" + encodeURIComponent(q));
-      if (!data.ok) {
-        $("lookup-result").textContent = data.reason || "not found";
-        return;
-      }
-      $("lookup-result").innerHTML =
-        "<strong>" +
-        escapeHtml(data.email || data.username) +
-        "</strong> · tokens: " +
-        escapeHtml(data.token_balance) +
-        " · role: " +
-        escapeHtml(data.role) +
-        "<br/><span class='muted'>" +
-        escapeHtml(data.id) +
-        "</span>";
-      $("credit-q").value = data.email || data.username || q;
-    } catch (e) {
-      $("lookup-result").textContent = e.message;
-    }
-  });
-
-  $("credit-form").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    setStatus($("credit-status"), "Crediting…", "muted");
-    try {
-      const data = await api("/api/admin/add-tokens", {
-        method: "POST",
-        body: {
-          query: $("credit-q").value.trim(),
-          amount: Number($("credit-amt").value) || 0,
-          reason: "admin_credit",
-        },
-      });
-      setStatus($("credit-status"), "New balance: " + data.token_balance, "ok");
-      await loadUsers();
-    } catch (e) {
-      setStatus($("credit-status"), e.message, "err");
-    }
-  });
-
-  $("create-form").addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    setStatus($("create-status"), "Creating…", "muted");
-    try {
-      const data = await api("/api/admin/create-user", {
-        method: "POST",
-        body: {
-          email: $("create-email").value.trim(),
-          password: $("create-pass").value,
-          username: $("create-user").value.trim() || null,
-          initial_tokens: Number($("create-tokens").value) || 0,
-        },
-      });
-      setStatus($("create-status"), "Created " + data.email + " · " + data.token_balance + " tokens", "ok");
-      $("create-form").reset();
-      await loadUsers();
-    } catch (e) {
-      setStatus($("create-status"), e.message, "err");
-    }
-  });
-
-  async function loadUsers() {
-    const tbody = $("users-body");
-    tbody.innerHTML = "<tr><td colspan='4' class='muted'>Loading…</td></tr>";
-    try {
-      const data = await api("/api/admin/users");
-      const users = data.users || [];
-      if (!users.length) {
-        tbody.innerHTML = "<tr><td colspan='4' class='muted'>No users</td></tr>";
-        return;
-      }
-      tbody.innerHTML = users
-        .map(
-          (u) =>
-            "<tr><td>" +
-            escapeHtml(u.email) +
-            "</td><td>" +
-            escapeHtml(u.username || "—") +
-            "</td><td>" +
-            escapeHtml(u.role) +
-            "</td><td>" +
-            escapeHtml(u.token_balance ?? 0) +
-            "</td></tr>"
-        )
-        .join("");
-    } catch (e) {
-      tbody.innerHTML = "<tr><td colspan='4' class='muted'>" + escapeHtml(e.message) + "</td></tr>";
-    }
-  }
-
-  $("refresh-users").addEventListener("click", () => loadUsers());
 
   bootstrap();
 })();

@@ -1,12 +1,12 @@
-# Frontend: GitHub Pages (this repo root — index.html)
-# Backend API: Render Free — https://ckr-wwdc.onrender.com
+# CKR WWDC
 
-Token-based Cookie Run farm. Admin creates users and credits tokens; **1 token = 1 farm run**.
+Public farm UI (GitHub Pages) + API (Render).
 
-## URLs
+- UI: https://j3xdr.github.io/CKR-WWDC/
+- API: https://ckr-wwdc.onrender.com/
+- Admin (create users / tokens): https://j3xdr.github.io/Login_j3xdr/
 
-- UI (GitHub Pages): https://j3xdr.github.io/CKR-WWDC/
-- API (Render): https://ckr-wwdc.onrender.com/api/health
+Login uses **username + password**. Accounts are created by admin only.
 
 ## Local API
 
@@ -16,4 +16,4 @@ pip install -r requirements.txt
 uvicorn server.main:app --reload --port 8000
 ```
 
-Open `index.html` locally or use Pages; set `API_BASE` in `js/config.js` if needed.
+Open `index.html` locally or use Pages; `API_BASE` is set in `js/config.js`.
