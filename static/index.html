@@ -4,109 +4,244 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CKR WWDC</title>
-  <meta name="description" content="Cookie Run farm runner — token-based access" />
+  <meta name="description" content="CKR WWDC — ฟาร์มคุกกี้รันด้วยโทเค็น" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#1a0f0a" />
+  <link rel="icon" href="assets/logo_4k.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="canvas-deco" aria-hidden="true">
-    <img class="deco deco-cookie" src="assets/deco_cookie.png" alt="" />
-    <img class="deco deco-token" src="assets/deco_token.png" alt="" />
-    <img class="deco deco-star" src="assets/deco_star.png" alt="" />
-    <img class="deco deco-glow" src="assets/deco_glow.png" alt="" />
+  <div class="bakery-bg" aria-hidden="true">
+    <div class="bakery-glow bakery-glow-a"></div>
+    <div class="bakery-glow bakery-glow-b"></div>
+    <div class="crumb-pattern"></div>
+    <img class="float-deco float-a" src="assets/pet81_jelly.png" alt="" />
+    <img class="float-deco float-b" src="assets/tr_event_87.png" alt="" />
+    <img class="float-deco float-c" src="assets/notice_b20.png" alt="" />
+    <img class="float-deco float-d" src="assets/img_snowman_mt_01.png" alt="" />
+    <img class="float-deco float-e" src="assets/upgrade02_40_shop.png" alt="" />
   </div>
 
-  <header class="top-nav">
-    <div class="brand">
-      <span class="brand-mark">CKR</span>
-      <span class="brand-name">WWDC</span>
-    </div>
-    <nav class="nav-links desktop-only" aria-label="Primary">
-      <a href="#run">Farm</a>
-    </nav>
-    <div class="nav-actions">
-      <span id="nav-balance" class="balance-chip hidden"></span>
-      <button type="button" id="logout-btn" class="btn btn-secondary hidden">Log out</button>
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="CKR WWDC">
+      <img class="brand-logo" src="assets/logo_4k.png" width="48" height="48" alt="CKR WWDC" />
+      <span class="brand-text">
+        <span class="brand-title">CKR WWDC</span>
+        <span class="brand-sub">คุกกี้ฟาร์ม</span>
+      </span>
+    </a>
+    <div class="topbar-actions">
+      <div id="nav-balance" class="token-chip hidden" title="โทเค็นคงเหลือ">
+        <img src="assets/coin.png" alt="" width="22" height="22" />
+        <span id="nav-balance-num">0</span>
+      </div>
+      <button type="button" id="logout-btn" class="btn btn-ghost hidden">ออกจากระบบ</button>
     </div>
   </header>
 
   <main class="shell">
+    <!-- LOGIN -->
     <section id="login-view" class="view">
-      <div class="hero">
-        <p class="eyebrow">Cookie Run · token farm</p>
-        <h1 class="display">CKR WWDC</h1>
-        <p class="lead">1 token = 1 farm run. Ask admin for an account — no self-register.</p>
-      </div>
-      <div class="card login-card">
-        <h2 class="card-title">Sign in</h2>
-        <form id="login-form" autocomplete="on">
-          <label class="field">
-            <span>Username</span>
-            <input id="login-user" type="text" required autocomplete="username" placeholder="your username" />
-          </label>
-          <label class="field">
-            <span>Password</span>
-            <input id="login-pass" type="password" required autocomplete="current-password" placeholder="••••••••" />
-          </label>
-          <button class="btn btn-primary" type="submit" id="login-btn">Continue</button>
-          <p id="login-status" class="status" role="status"></p>
-        </form>
+      <div class="login-stage">
+        <div class="login-hero">
+          <img class="hero-logo" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
+          <h1 class="hero-title">CKR WWDC</h1>
+          <p class="hero-lead">ฟาร์มคุกกี้รันง่าย ๆ · ใช้ 1 โทเค็นต่อการวิ่ง</p>
+          <p class="hero-note">ขอบัญชีจากแอดมินเท่านั้น — ไม่มีสมัครเอง</p>
+        </div>
+
+        <div class="panel login-panel">
+          <div class="panel-ribbon" aria-hidden="true">
+            <img src="assets/crc_cookie_stone_box.png" alt="" />
+          </div>
+          <h2 class="panel-title">เข้าสู่ระบบ</h2>
+          <p class="panel-hint">ใส่ชื่อผู้ใช้และรหัสผ่านที่ได้รับ</p>
+          <form id="login-form" autocomplete="on">
+            <label class="field">
+              <span>ชื่อผู้ใช้</span>
+              <input
+                id="login-user"
+                name="username"
+                type="text"
+                required
+                autocomplete="username"
+                placeholder="ชื่อผู้ใช้ของคุณ"
+                spellcheck="false"
+              />
+            </label>
+            <label class="field">
+              <span>รหัสผ่าน</span>
+              <input
+                id="login-pass"
+                name="password"
+                type="password"
+                required
+                autocomplete="current-password"
+                placeholder="••••••••"
+              />
+            </label>
+            <label class="remember-row">
+              <input id="remember-me" type="checkbox" checked />
+              <span>จำฉันไว้บนเครื่องนี้</span>
+            </label>
+            <button class="btn btn-candy" type="submit" id="login-btn">
+              <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+              เข้าสู่ระบบ
+            </button>
+            <p id="login-status" class="status" role="status"></p>
+          </form>
+        </div>
       </div>
     </section>
 
+    <!-- APP -->
     <section id="user-view" class="view hidden">
-      <div class="layout-desktop">
-        <aside class="side-panel">
-          <div class="card balance-card">
-            <p class="eyebrow">Token balance</p>
-            <p class="balance-num" id="token-balance">0</p>
-            <p class="muted">Each farm run consumes 1 token.</p>
+      <div class="app-grid">
+        <aside class="vault-col">
+          <div class="panel vault-panel">
+            <div class="vault-deco" aria-hidden="true">
+              <img src="assets/boost16_shop.png" alt="" />
+            </div>
+            <p class="eyebrow">
+              <img src="assets/coin.png" alt="" width="18" height="18" />
+              โทเค็นคงเหลือ
+            </p>
+            <p class="vault-num" id="token-balance">0</p>
+            <p class="muted">ใช้ 1 โทเค็นต่อการวิ่งฟาร์ม</p>
           </div>
-          <div class="card who-card">
-            <p class="eyebrow">Signed in</p>
-            <p id="who-user" class="who"></p>
+
+          <div class="panel who-panel">
+            <div class="who-row">
+              <img class="who-avatar" src="assets/logo_4k.png" alt="" width="40" height="40" />
+              <div>
+                <p class="eyebrow">ผู้ใช้</p>
+                <p id="who-user" class="who-name">—</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="panel tip-panel desktop-only">
+            <img class="tip-icon" src="assets/tr_ga170.png" alt="" />
+            <p class="tip-title">เคล็ดลับ</p>
+            <p class="muted">ใส่บัญชี DevPlay ของเกมเท่านั้น ไม่ใช่บัญชีเว็บนี้</p>
           </div>
         </aside>
 
-        <div class="main-panel">
-          <div class="card" id="run">
-            <div class="card-head">
-              <h2 class="card-title">Farm run</h2>
-              <span class="badge">DevPlay</span>
+        <div class="oven-col">
+          <div class="panel oven-panel" id="run">
+            <div class="oven-head">
+              <div class="oven-titles">
+                <img src="assets/score.png" alt="" width="36" height="36" />
+                <div>
+                  <h2 class="panel-title">เริ่มวิ่งฟาร์ม</h2>
+                  <p class="panel-hint">กรอกบัญชีเกม DevPlay แล้วกดเริ่ม</p>
+                </div>
+              </div>
+              <span class="pill">
+                <img src="assets/level.png" alt="" width="16" height="16" />
+                DevPlay
+              </span>
             </div>
-            <p class="hint">Submit game credentials. Server consumes 1 token, then runs the farm.</p>
-            <form id="farm-form">
+
+            <!-- Separate form namespace so browser login creds never bleed in -->
+            <form
+              id="farm-form"
+              class="farm-form"
+              autocomplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
+              data-bwignore="true"
+              data-form-type="other"
+            >
+              <!-- Honeypot / decoy fields to absorb browser autofill -->
+              <div class="autofill-trap" aria-hidden="true">
+                <input type="text" name="username" tabindex="-1" autocomplete="username" />
+                <input type="password" name="password" tabindex="-1" autocomplete="current-password" />
+              </div>
+
               <div class="grid-2">
                 <label class="field">
-                  <span>DevPlay email</span>
-                  <input id="farm-email" type="email" required autocomplete="off" />
+                  <span>อีเมล DevPlay (เกม)</span>
+                  <input
+                    id="dp-acct-mail"
+                    name="ckr_dp_acct_mail"
+                    type="text"
+                    inputmode="email"
+                    required
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
+                    placeholder="อีเมลบัญชีเกม"
+                    readonly
+                  />
                 </label>
                 <label class="field">
-                  <span>DevPlay password</span>
-                  <input id="farm-pass" type="password" required autocomplete="off" />
+                  <span>รหัสผ่าน DevPlay (เกม)</span>
+                  <input
+                    id="dp-acct-secret"
+                    name="ckr_dp_acct_secret"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
+                    placeholder="รหัสผ่านบัญชีเกม"
+                    readonly
+                  />
                 </label>
               </div>
-              <div class="grid-3">
-                <label class="field">
-                  <span>SCORE</span>
-                  <input id="farm-score" type="number" min="0" value="800000" />
+
+              <div class="stat-grid">
+                <label class="field field-stat">
+                  <span>
+                    <img src="assets/score.png" alt="" width="16" height="16" />
+                    คะแนน
+                  </span>
+                  <input id="farm-score" name="ckr_farm_score" type="number" min="0" value="800000" autocomplete="off" />
                 </label>
-                <label class="field">
-                  <span>COIN</span>
-                  <input id="farm-coin" type="number" min="0" value="1" />
+                <label class="field field-stat">
+                  <span>
+                    <img src="assets/coin.png" alt="" width="16" height="16" />
+                    เหรียญ
+                  </span>
+                  <input id="farm-coin" name="ckr_farm_coin" type="number" min="0" value="1" autocomplete="off" />
                 </label>
-                <label class="field">
-                  <span>EXP</span>
-                  <input id="farm-exp" type="number" min="0" value="1" />
+                <label class="field field-stat">
+                  <span>
+                    <img src="assets/level.png" alt="" width="16" height="16" />
+                    EXP
+                  </span>
+                  <input id="farm-exp" name="ckr_farm_exp" type="number" min="0" value="1" autocomplete="off" />
                 </label>
               </div>
-              <button class="btn btn-fin" type="submit" id="farm-btn">Run farm · 1 token</button>
+
+              <button class="btn btn-run" type="submit" id="farm-btn">
+                <img src="assets/tr_event_116.png" alt="" width="24" height="24" />
+                เริ่มฟาร์ม · ใช้ 1 โทเค็น
+              </button>
               <p id="farm-status" class="status" role="status"></p>
             </form>
-            <pre id="farm-log" class="log hidden" aria-live="polite"></pre>
+
+            <div id="farm-log-wrap" class="log-panel hidden" aria-live="polite">
+              <div class="log-head">
+                <img src="assets/notice_b19.png" alt="" width="22" height="22" />
+                <h3>สถานะการวิ่ง</h3>
+              </div>
+              <ul id="farm-log" class="log-list"></ul>
+              <div id="farm-empty" class="log-empty hidden">
+                <img src="assets/pet81_jelly.png" alt="" />
+                <p>ยังไม่มีการวิ่ง — กดเริ่มฟาร์มเมื่อพร้อม</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -114,7 +249,8 @@
   </main>
 
   <footer class="footer">
-    <p>CKR WWDC · fan tool · accounts via admin only</p>
+    <img src="assets/logo_4k.png" alt="" width="28" height="28" />
+    <p>CKR WWDC · เครื่องมือแฟน ๆ · บัญชีจากแอดมินเท่านั้น</p>
   </footer>
 
   <script src="js/config.js"></script>
