@@ -620,6 +620,13 @@ input {
   box-sizing: border-box;
 }
 
+.field-stat input.is-locked,
+.field-stat input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  color: var(--cream-dim);
+}
+
 .remember-row {
   display: flex;
   align-items: center;

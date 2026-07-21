@@ -79,7 +79,19 @@
     const hint = $(input.id + "-hint");
     let digits = digitsOnly(input.value);
     if (!digits) {
-      input.value = "";
+      // ค่าว่างหลังโฟกัสเคลียร์ — อย่าใส่ 0 กลับทันที
+      if (!opts.keepEmpty) {
+        input.value = "0";
+        if (hint) hint.textContent = "";
+      } else {
+        input.value = "";
+        if (hint) hint.textContent = "";
+      }
+      return 0;
+    }
+    // คง "0" ไว้เป็นค่าเริ่มต้น (อย่าตัดเป็นว่าง)
+    if (digits === "0") {
+      input.value = "0";
       if (hint) hint.textContent = "";
       return 0;
     }
@@ -87,7 +99,7 @@
     digits = digits.replace(/^0+(?=\d)/, "");
     const n = Number(digits);
     if (!Number.isFinite(n) || n > INT32_MAX) {
-      input.value = "";
+      input.value = "0";
       if (hint) hint.textContent = "";
       if (!opts.silent) {
         showErrorModal(
@@ -102,13 +114,45 @@
     return n;
   }
 
+  function clearZeroPlaceholder(input) {
+    if (input.disabled || input.readOnly) return;
+    if (digitsOnly(input.value) === "0") {
+      input.value = "";
+      const hint = $(input.id + "-hint");
+      if (hint) hint.textContent = "";
+    }
+  }
+
+  function restoreZeroIfEmpty(input) {
+    if (digitsOnly(input.value) === "") {
+      input.value = "0";
+      const hint = $(input.id + "-hint");
+      if (hint) hint.textContent = "";
+    } else {
+      syncFarmNumField(input, { silent: true });
+    }
+  }
+
+  function setFarmInputsLocked(locked) {
+    ["farm-score", "farm-coin", "farm-exp"].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.readOnly = !!locked;
+      el.disabled = !!locked;
+      el.classList.toggle("is-locked", !!locked);
+      el.setAttribute("aria-disabled", locked ? "true" : "false");
+    });
+  }
+
   function setupFarmNumberInputs() {
     ["farm-score", "farm-coin", "farm-exp"].forEach((id) => {
       const el = $(id);
       if (!el || el.dataset.numBound === "1") return;
       el.dataset.numBound = "1";
-      el.addEventListener("input", () => syncFarmNumField(el));
-      el.addEventListener("blur", () => syncFarmNumField(el, { silent: true }));
+      el.addEventListener("focus", () => clearZeroPlaceholder(el));
+      el.addEventListener("pointerdown", () => clearZeroPlaceholder(el));
+      el.addEventListener("input", () => syncFarmNumField(el, { keepEmpty: true }));
+      el.addEventListener("blur", () => restoreZeroIfEmpty(el));
       syncFarmNumField(el, { silent: true });
     });
   }
@@ -397,6 +441,7 @@
     if (!farmRunning) {
       btn.disabled = empty;
     }
+    setFarmInputsLocked(empty);
     if (empty && userView && !userView.classList.contains("hidden")) {
       if (modalMode !== "empty") showEmptyCoinsModal();
     } else if (!empty && modalMode === "empty") {
