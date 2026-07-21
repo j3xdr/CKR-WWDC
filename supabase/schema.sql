@@ -153,29 +153,28 @@ as $$
 declare
   bal integer;
   caller uuid := auth.uid();
+  jwt_role text := coalesce(auth.role(), '');
 begin
   if p_amount is null or p_amount = 0 then
     return jsonb_build_object('ok', false, 'reason', 'invalid_amount');
   end if;
 
-  -- Allow service_role (auth.uid() null with role claim) OR authenticated admin
-  if caller is not null and not public.is_admin() then
+  -- service_role (Render backend) OR authenticated admin only — never anon
+  if jwt_role = 'service_role' then
+    null;
+  elsif caller is not null and public.is_admin() then
+    null;
+  else
     return jsonb_build_object('ok', false, 'reason', 'admin_only');
   end if;
 
   update public.profiles
-  set token_balance = token_balance + p_amount
+  set token_balance = greatest(token_balance + p_amount, 0)
   where id = p_user_id
   returning token_balance into bal;
 
   if not found then
     return jsonb_build_object('ok', false, 'reason', 'user_not_found');
-  end if;
-
-  if bal < 0 then
-    -- rollback-ish: clamp (should not happen with check + careful amounts)
-    update public.profiles set token_balance = 0 where id = p_user_id
-    returning token_balance into bal;
   end if;
 
   insert into public.token_ledger (user_id, delta, reason, balance_after, created_by)
@@ -208,8 +207,13 @@ as $$
 declare
   q text := lower(trim(coalesce(p_query, '')));
   row_json jsonb;
+  jwt_role text := coalesce(auth.role(), '');
 begin
-  if auth.uid() is not null and not public.is_admin() then
+  if jwt_role = 'service_role' then
+    null;
+  elsif auth.uid() is not null and public.is_admin() then
+    null;
+  else
     return jsonb_build_object('ok', false, 'reason', 'admin_only');
   end if;
   if length(q) < 2 then
