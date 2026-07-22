@@ -45,10 +45,17 @@ _SIGNUP_WINDOW_SEC = 3600
 
 ALLOWED_ORIGINS = [
     "https://j3xdr.github.io",
+    # local previews (Live Preview / Simple Browser / python http.server)
     "http://localhost:5500",
     "http://127.0.0.1:5500",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:5179",
+    "http://127.0.0.1:5179",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
 ]
 
 
@@ -118,6 +125,12 @@ class AdminAddTokensBody(BaseModel):
     query: str = Field(min_length=2, description="username (or legacy email)")
     amount: int = Field(ge=1, le=1_000_000)
     reason: str = "admin_credit"
+
+
+class AdminSetTokensBody(BaseModel):
+    user_id: str = Field(min_length=8, description="profiles.id / auth user uuid")
+    token_balance: int = Field(ge=0, le=1_000_000)
+    reason: str = "admin_set"
 
 
 # ---------------------------------------------------------------------------
@@ -858,3 +871,107 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
             }
         )
     return {"ok": True, "users": safe}
+
+
+@app.post("/api/admin/set-tokens")
+async def admin_set_tokens(
+    body: AdminSetTokensBody,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    """Set absolute token_balance via delta credit (supports increase/decrease)."""
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        got = await client.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            headers={**headers, "Accept": "application/json"},
+            params={
+                "id": f"eq.{body.user_id}",
+                "select": "id,username,role,token_balance",
+            },
+        )
+        if got.status_code != 200:
+            raise HTTPException(status_code=500, detail=got.text)
+        rows = got.json() or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="user_not_found")
+        row = rows[0]
+        current = int(row.get("token_balance") or 0)
+        target = int(body.token_balance)
+        delta = target - current
+        if delta == 0:
+            return {
+                "ok": True,
+                "id": row.get("id"),
+                "username": row.get("username"),
+                "token_balance": current,
+                "unchanged": True,
+            }
+
+        credit = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/admin_credit_tokens",
+            headers=headers,
+            json={
+                "p_user_id": body.user_id,
+                "p_amount": delta,
+                "p_reason": body.reason or "admin_set",
+            },
+        )
+    if credit.status_code != 200:
+        raise HTTPException(status_code=500, detail=credit.text)
+    out = credit.json()
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("reason", "set_failed"))
+    return {
+        "ok": True,
+        "id": out.get("id"),
+        "username": row.get("username"),
+        "token_balance": out.get("token_balance"),
+        "delta": delta,
+    }
+
+
+@app.delete("/api/admin/users/{user_id}")
+async def admin_delete_user(
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    """Delete Auth user (profiles cascade). Requires service_role."""
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+    if user_id == admin.get("id"):
+        raise HTTPException(status_code=400, detail="cannot_delete_self")
+
+    headers = _service_headers()
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        got = await client.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            headers={**headers, "Accept": "application/json"},
+            params={"id": f"eq.{user_id}", "select": "id,username,role"},
+        )
+        if got.status_code != 200:
+            raise HTTPException(status_code=500, detail=got.text)
+        rows = got.json() or []
+        if not rows:
+            raise HTTPException(status_code=404, detail="user_not_found")
+        target = rows[0]
+        if target.get("role") == "admin":
+            raise HTTPException(status_code=400, detail="cannot_delete_admin")
+
+        deleted = await client.delete(
+            f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}",
+            headers=headers,
+        )
+    if deleted.status_code not in (200, 204):
+        raise HTTPException(
+            status_code=500,
+            detail=deleted.text or f"delete_failed_{deleted.status_code}",
+        )
+    return {
+        "ok": True,
+        "id": user_id,
+        "username": target.get("username"),
+    }
