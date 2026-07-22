@@ -38,6 +38,23 @@ Render (`render.yaml`):
 
 ---
 
+## Frontend cache busting (สำคัญ)
+
+เบราว์เซอร์มักแคช `js/*.js` / `css/*.css` นาน — หลัง push บางคนยังเห็น UI เก่า  
+**ไม่จำเป็นต้องล้างคุกกี้** (ล้างคุกกี้แค่ทำให้ต้องล็อกอินใหม่)
+
+แก้โดยใส่ `?v=<git-short-hash>` ที่ลิงก์ใน `index.html` เช่น:
+
+```html
+<link rel="stylesheet" href="css/styles.css?v=0e7e661" />
+<script src="js/app.js?v=0e7e661"></script>
+```
+
+**ทุกครั้งที่แก้ frontend แล้วจะ push:** อัปเดตค่า `v=` ใน `index.html` ให้ตรง `git rev-parse --short HEAD` (หรือเลขเวอร์ชันใหม่)  
+เมื่อ `index.html` เปลี่ยน → ผู้ใช้โหลด HTML ใหม่ → ดึง JS/CSS ตาม `?v=` ใหม่
+
+---
+
 ## When to push vs redeploy
 
 | Change type | Action |
