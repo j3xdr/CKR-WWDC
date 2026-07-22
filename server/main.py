@@ -8,6 +8,7 @@ import sys
 import threading
 import time
 import traceback
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,7 +31,7 @@ if str(SERVER_DIR) not in sys.path:
 
 import farm_queue as fq  # noqa: E402
 import topup_packages as topup_pkg  # noqa: E402
-from tmn_voucher import TmnVoucherClient  # noqa: E402
+from tmn_voucher import TmnVoucherClient, extract_voucher_code  # noqa: E402
 
 
 def _load_dotenv() -> None:
@@ -72,10 +73,35 @@ _SIGNUP_WINDOW_SEC = 3600
 _peek_last_ts: dict[str, float] = {}
 _PEEK_COOLDOWN_SEC = 180
 
-# Top-up redeem rate limit per user (in-memory)
+# Top-up redeem rate limits (in-memory)
 _topup_hits: dict[str, list[float]] = {}
+_topup_ip_hits: dict[str, list[float]] = {}
+_topup_voucher_fails: dict[str, list[float]] = {}
 _TOPUP_LIMIT = 10
+_TOPUP_IP_LIMIT = 20
 _TOPUP_WINDOW_SEC = 3600
+_TOPUP_VOUCHER_FAIL_LIMIT = 3
+_TOPUP_VOUCHER_FAIL_WINDOW_SEC = 900
+
+TMN_CODE_TH = {
+    "CONDITION_NOT_MET": "ยอดซองไม่ตรงกับแพ็กที่เลือก",
+    "VOUCHER_OUT_OF_STOCK": "ซองนี้ถูกใช้หมดแล้ว",
+    "VOUCHER_NOT_FOUND": "ไม่พบซองนี้",
+    "VOUCHER_EXPIRED": "ซองหมดอายุแล้ว",
+    "CANNOT_GET_OWN_VOUCHER": "รับซองของตัวเองไม่ได้ — ต้องให้ลูกค้าสร้างซอง",
+    "TARGET_USER_REDEEMED": "เบอร์นี้รับซองนี้ไปแล้ว",
+    "INVALID_VOUCHER_CODE": "ลิงก์หรือโค้ดซองไม่ถูกต้อง",
+    "INVALID_PHONE_NUMBER": "เบอร์รับเงินไม่ถูกต้อง",
+    "MAINTENANCE": "ระบบซองอั่งเปาปิดปรับปรุงชั่วคราว",
+    "TIMEOUT": "เชื่อมต่อ TrueMoney หมดเวลา",
+    "NETWORK_ERROR": "เชื่อมต่อ TrueMoney ไม่ได้",
+    "topup_rate_limited": "เติมถี่เกินไป รอสักครู่แล้วลองใหม่",
+    "topup_voucher_blocked": "ซองนี้ถูกลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่",
+    "topup_credit_failed": "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
+    "voucher_already_used": "ซองนี้ถูกใช้เติมไปแล้ว",
+    "invalid_package": "แพ็กที่เลือกไม่ถูกต้อง",
+    "topup_not_configured": "ระบบเติมเงินยังไม่พร้อม",
+}
 
 ALLOWED_ORIGINS = [
     "https://j3xdr.github.io",
@@ -254,13 +280,48 @@ def _check_signup_rate(ip: str) -> None:
     _signup_hits[ip] = hits
 
 
-def _check_topup_rate(user_id: str) -> None:
+def _check_topup_rate(user_id: str, ip: str, voucher_code: str) -> None:
     now = time.time()
+    code_key = (voucher_code or "").strip().lower()
+    if code_key:
+        fails = [
+            t
+            for t in _topup_voucher_fails.get(code_key, [])
+            if now - t < _TOPUP_VOUCHER_FAIL_WINDOW_SEC
+        ]
+        _topup_voucher_fails[code_key] = fails
+        if len(fails) >= _TOPUP_VOUCHER_FAIL_LIMIT:
+            print(f"[topup] voucher blocked code={code_key[:12]}… fails={len(fails)}")
+            raise HTTPException(status_code=429, detail="topup_voucher_blocked")
+
     hits = [t for t in _topup_hits.get(user_id, []) if now - t < _TOPUP_WINDOW_SEC]
     if len(hits) >= _TOPUP_LIMIT:
+        print(f"[topup] user rate limited uid={user_id}")
         raise HTTPException(status_code=429, detail="topup_rate_limited")
     hits.append(now)
     _topup_hits[user_id] = hits
+
+    ip_key = ip or "unknown"
+    ip_hits = [t for t in _topup_ip_hits.get(ip_key, []) if now - t < _TOPUP_WINDOW_SEC]
+    if len(ip_hits) >= _TOPUP_IP_LIMIT:
+        print(f"[topup] ip rate limited ip={ip_key}")
+        raise HTTPException(status_code=429, detail="topup_rate_limited")
+    ip_hits.append(now)
+    _topup_ip_hits[ip_key] = ip_hits
+
+
+def _record_topup_voucher_fail(voucher_code: str) -> None:
+    code_key = (voucher_code or "").strip().lower()
+    if not code_key:
+        return
+    now = time.time()
+    fails = [
+        t
+        for t in _topup_voucher_fails.get(code_key, [])
+        if now - t < _TOPUP_VOUCHER_FAIL_WINDOW_SEC
+    ]
+    fails.append(now)
+    _topup_voucher_fails[code_key] = fails
 
 
 def _tmn_http_status(code: str) -> int:
@@ -268,7 +329,16 @@ def _tmn_http_status(code: str) -> int:
         return 502
     if code == "MAINTENANCE":
         return 503
+    if code in ("topup_rate_limited", "topup_voucher_blocked"):
+        return 429
     return 400
+
+
+def _tmn_public_detail(code: str) -> dict[str, str]:
+    return {
+        "code": code,
+        "message": TMN_CODE_TH.get(code, "เติมโทเค็นไม่สำเร็จ"),
+    }
 
 
 def _wallet_phone() -> str:
@@ -276,6 +346,44 @@ def _wallet_phone() -> str:
     if not phone:
         raise HTTPException(status_code=503, detail="topup_not_configured")
     return phone
+
+
+async def _set_session_token(user_id: str) -> str:
+    token = str(uuid.uuid4())
+    if not _has_service_role():
+        return token
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        await client.patch(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            params={"id": f"eq.{user_id}"},
+            headers={**_service_headers(), "Prefer": "return=minimal"},
+            json={"session_token": token},
+        )
+    return token
+
+
+async def _write_audit(
+    actor_id: Optional[str],
+    action: str,
+    target_user_id: Optional[str] = None,
+    meta: Optional[dict[str, Any]] = None,
+) -> None:
+    if not _has_service_role():
+        return
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            await client.post(
+                f"{SUPABASE_URL}/rest/v1/admin_audit_log",
+                headers={**_service_headers(), "Prefer": "return=minimal"},
+                json={
+                    "actor_id": actor_id,
+                    "action": action,
+                    "target_user_id": target_user_id,
+                    "meta": meta or {},
+                },
+            )
+    except Exception as e:
+        print(f"[audit] write failed: {e}")
 
 
 def _validate_public_username(username: str) -> str:
@@ -375,7 +483,10 @@ async def _create_normal_user(
     }
 
 
-async def verify_user(authorization: Optional[str] = Header(None)) -> dict[str, Any]:
+async def verify_user(
+    authorization: Optional[str] = Header(None),
+    x_session_token: Optional[str] = Header(None, alias="X-Session-Token"),
+) -> dict[str, Any]:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing_bearer_token")
     token = authorization.split(" ", 1)[1].strip()
@@ -387,10 +498,28 @@ async def verify_user(authorization: Optional[str] = Header(None)) -> dict[str, 
             f"{SUPABASE_URL}/auth/v1/user",
             headers=_sb_headers(SUPABASE_ANON_KEY, token),
         )
-    if r.status_code != 200:
-        raise HTTPException(status_code=401, detail="invalid_token")
-    user = r.json()
-    user["_access_token"] = token
+        if r.status_code != 200:
+            raise HTTPException(status_code=401, detail="invalid_token")
+        user = r.json()
+        user["_access_token"] = token
+
+        uid = user.get("id")
+        if uid:
+            pr = await client.get(
+                f"{SUPABASE_URL}/rest/v1/profiles",
+                params={"id": f"eq.{uid}", "select": "id,session_token,role"},
+                headers={
+                    **_sb_headers(SUPABASE_ANON_KEY, token),
+                    "Accept": "application/json",
+                },
+            )
+            if pr.status_code == 200 and pr.json():
+                row = pr.json()[0]
+                expected = (row.get("session_token") or "").strip()
+                provided = (x_session_token or "").strip()
+                if expected and provided != expected:
+                    raise HTTPException(status_code=401, detail="session_replaced")
+                user["_session_token"] = expected or provided
     return user
 
 
@@ -547,12 +676,17 @@ async def auth_login(body: LoginBody):
         "token_balance": profile_row.get("token_balance", resolved.get("token_balance", 0)),
     }
 
+    session_token = None
+    if profile_out.get("id") and _has_service_role():
+        session_token = await _set_session_token(str(profile_out["id"]))
+
     return {
         "ok": True,
         "access_token": session.get("access_token"),
         "refresh_token": session.get("refresh_token"),
         "expires_in": session.get("expires_in"),
         "token_type": session.get("token_type", "bearer"),
+        "session_token": session_token,
         "user": {
             "id": profile_out["id"],
             "username": profile_out["username"],
@@ -610,12 +744,15 @@ async def auth_register(body: RegisterBody, request: Request):
         "token_balance": profile_row.get("token_balance", 0),
     }
 
+    session_token = await _set_session_token(str(profile_out["id"]))
+
     return {
         "ok": True,
         "access_token": session.get("access_token"),
         "refresh_token": session.get("refresh_token"),
         "expires_in": session.get("expires_in"),
         "token_type": session.get("token_type", "bearer"),
+        "session_token": session_token,
         "user": {
             "id": profile_out["id"],
             "username": profile_out["username"],
@@ -960,9 +1097,44 @@ async def topup_packages():
     return {"ok": True, "packages": topup_pkg.package_list()}
 
 
+@app.get("/api/topup/history")
+async def topup_history(user: dict[str, Any] = Depends(verify_user)):
+    profile = await load_profile(user)
+    uid = str(profile["id"])
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={
+                **_sb_headers(SUPABASE_ANON_KEY, user["_access_token"]),
+                "Accept": "application/json",
+            },
+            params={
+                "user_id": f"eq.{uid}",
+                "select": "id,amount_satang,tokens_credited,package_tokens,credit_status,created_at",
+                "order": "created_at.desc",
+                "limit": "20",
+            },
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="topup_history_failed")
+    rows = []
+    for row in r.json() or []:
+        rows.append(
+            {
+                "id": row.get("id"),
+                "amount_baht": (int(row.get("amount_satang") or 0) / 100.0),
+                "tokens": row.get("tokens_credited") or row.get("package_tokens"),
+                "credit_status": row.get("credit_status") or "credited",
+                "created_at": row.get("created_at"),
+            }
+        )
+    return {"ok": True, "items": rows}
+
+
 @app.post("/api/topup/redeem")
 async def topup_redeem(
     body: TopupRedeemBody,
+    request: Request,
     user: dict[str, Any] = Depends(verify_user),
 ):
     if not _has_service_role():
@@ -970,7 +1142,8 @@ async def topup_redeem(
 
     profile = await load_profile(user)
     uid = str(profile["id"])
-    _check_topup_rate(uid)
+    voucher_code = extract_voucher_code(body.voucher) or ""
+    _check_topup_rate(uid, _client_ip(request), voucher_code)
 
     pkg = topup_pkg.get_package(int(body.package_tokens))
     if not pkg:
@@ -985,14 +1158,19 @@ async def topup_redeem(
     )
     if not redeemed.get("success"):
         code = str(redeemed.get("code") or "redeem_failed")
+        print(
+            f"[topup] redeem fail uid={uid} code={code} "
+            f"msg={(redeemed.get('message') or '')[:120]}"
+        )
+        _record_topup_voucher_fail(voucher_code)
         raise HTTPException(
             status_code=_tmn_http_status(code),
-            detail={"code": code, "message": redeemed.get("message") or code},
+            detail=_tmn_public_detail(code),
         )
 
     data = redeemed["data"]
     voucher_id = str(data.get("voucher_id") or data.get("voucher_code"))
-    voucher_code = str(data.get("voucher_code") or "")
+    voucher_code = str(data.get("voucher_code") or voucher_code)
     amount_satang = int(data.get("amount_satang") or 0)
     tokens = int(pkg["tokens"])
     row: dict[str, Any] | None = None
@@ -1012,6 +1190,7 @@ async def topup_redeem(
                 "tokens_credited": tokens,
                 "package_tokens": tokens,
                 "raw_json": data.get("raw"),
+                "credit_status": "credited",
             },
         )
         if ins.status_code in (200, 201):
@@ -1038,25 +1217,29 @@ async def topup_redeem(
                 "p_reason": "topup_angpao",
             },
         )
-    if credit.status_code != 200:
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "topup_credit_failed",
-                "message": "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
-                "redemption_id": (row or {}).get("id"),
-            },
-        )
-    out = credit.json() or {}
-    if not out.get("ok"):
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "code": "topup_credit_failed",
-                "message": "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
-                "redemption_id": (row or {}).get("id"),
-            },
-        )
+        credit_ok = credit.status_code == 200 and (credit.json() or {}).get("ok")
+        if not credit_ok:
+            rid = (row or {}).get("id")
+            note = (credit.text or "credit_failed")[:300]
+            if rid:
+                await http.patch(
+                    f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+                    params={"id": f"eq.{rid}"},
+                    headers={**_service_headers(), "Prefer": "return=minimal"},
+                    json={
+                        "credit_status": "needs_manual",
+                        "error_note": note,
+                    },
+                )
+            print(f"[topup] credit failed rid={rid} note={note[:120]}")
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    **_tmn_public_detail("topup_credit_failed"),
+                    "redemption_id": rid,
+                },
+            )
+        out = credit.json() or {}
 
     return {
         "ok": True,
@@ -1094,6 +1277,160 @@ async def admin_lookup(q: str, admin: dict[str, Any] = Depends(require_admin)):
     return data
 
 
+@app.get("/api/admin/audit")
+async def admin_audit(
+    limit: int = 50,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    lim = max(1, min(int(limit or 50), 100))
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/admin_audit_log",
+            headers={**headers, "Accept": "application/json"},
+            params={
+                "select": "id,actor_id,action,target_user_id,meta,created_at",
+                "order": "created_at.desc",
+                "limit": str(lim),
+            },
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail=r.text)
+    return {"ok": True, "items": r.json() or []}
+
+
+@app.get("/api/admin/topups")
+async def admin_topups(
+    status: Optional[str] = None,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    params: dict[str, str] = {
+        "select": "id,user_id,voucher_code,amount_satang,tokens_credited,package_tokens,credit_status,error_note,created_at",
+        "order": "created_at.desc",
+        "limit": "50",
+    }
+    if status in ("needs_manual", "credited"):
+        params["credit_status"] = f"eq.{status}"
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={**headers, "Accept": "application/json"},
+            params=params,
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail=r.text)
+    items = []
+    for row in r.json() or []:
+        items.append(
+            {
+                **row,
+                "amount_baht": (int(row.get("amount_satang") or 0) / 100.0),
+            }
+        )
+    return {"ok": True, "items": items}
+
+
+@app.get("/api/admin/users/{user_id}/topups")
+async def admin_user_topups(
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={**headers, "Accept": "application/json"},
+            params={
+                "user_id": f"eq.{user_id}",
+                "select": "id,amount_satang,tokens_credited,package_tokens,credit_status,created_at",
+                "order": "created_at.desc",
+                "limit": "5",
+            },
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail=r.text)
+    items = [
+        {
+            **row,
+            "amount_baht": (int(row.get("amount_satang") or 0) / 100.0),
+        }
+        for row in (r.json() or [])
+    ]
+    return {"ok": True, "items": items}
+
+
+@app.post("/api/admin/topups/{redemption_id}/credit")
+async def admin_topup_credit(
+    redemption_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        got = await client.get(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={**_service_headers(), "Accept": "application/json"},
+            params={
+                "id": f"eq.{redemption_id}",
+                "select": "*",
+                "limit": "1",
+            },
+        )
+        rows = got.json() if got.status_code == 200 else []
+        if not rows:
+            raise HTTPException(status_code=404, detail="topup_not_found")
+        row = rows[0]
+        if row.get("credit_status") == "credited":
+            return {"ok": True, "unchanged": True, "id": redemption_id}
+
+        tokens = int(row.get("tokens_credited") or row.get("package_tokens") or 0)
+        uid = row.get("user_id")
+        credit = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/admin_credit_tokens",
+            headers=_service_headers(),
+            json={
+                "p_user_id": uid,
+                "p_amount": tokens,
+                "p_reason": "topup_angpao_manual",
+            },
+        )
+        out = credit.json() if credit.status_code == 200 else {}
+        if not out.get("ok"):
+            raise HTTPException(status_code=400, detail=out.get("reason", "credit_failed"))
+
+        await client.patch(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            params={"id": f"eq.{redemption_id}"},
+            headers={**_service_headers(), "Prefer": "return=minimal"},
+            json={"credit_status": "credited", "error_note": None},
+        )
+    await _write_audit(
+        admin.get("id"),
+        "topup_credit_retry",
+        target_user_id=uid,
+        meta={"redemption_id": redemption_id, "tokens": tokens},
+    )
+    return {
+        "ok": True,
+        "id": redemption_id,
+        "token_balance": out.get("token_balance"),
+        "tokens_credited": tokens,
+    }
+
+
 @app.post("/api/admin/add-tokens")
 async def admin_add_tokens(
     body: AdminAddTokensBody,
@@ -1128,6 +1465,12 @@ async def admin_add_tokens(
     out = credit.json()
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("reason", "credit_failed"))
+    await _write_audit(
+        admin.get("id"),
+        "add_tokens",
+        target_user_id=data.get("id"),
+        meta={"amount": body.amount, "reason": body.reason},
+    )
     return {
         "ok": True,
         "id": out.get("id"),
@@ -1150,6 +1493,12 @@ async def admin_create_user(
         body.password,
         initial_tokens=body.initial_tokens,
         created_by=admin["id"],
+    )
+    await _write_audit(
+        admin.get("id"),
+        "create_user",
+        target_user_id=created["id"],
+        meta={"username": created["username"], "initial_tokens": body.initial_tokens},
     )
     return {
         "ok": True,
@@ -1237,6 +1586,12 @@ async def admin_set_tokens(
     out = credit.json()
     if not out.get("ok"):
         raise HTTPException(status_code=400, detail=out.get("reason", "set_failed"))
+    await _write_audit(
+        admin.get("id"),
+        "set_tokens",
+        target_user_id=body.user_id,
+        meta={"delta": delta, "token_balance": out.get("token_balance")},
+    )
     return {
         "ok": True,
         "id": out.get("id"),
@@ -1282,6 +1637,12 @@ async def admin_delete_user(
             status_code=500,
             detail=deleted.text or f"delete_failed_{deleted.status_code}",
         )
+    await _write_audit(
+        admin.get("id"),
+        "delete_user",
+        target_user_id=user_id,
+        meta={"username": target.get("username")},
+    )
     return {
         "ok": True,
         "id": user_id,

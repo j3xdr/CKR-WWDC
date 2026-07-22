@@ -10,6 +10,7 @@
   }
 
   const REMEMBER_KEY = "ckr_wwdc_remember";
+  const SESSION_KEY = "ckr_session_token";
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
   const INT32_MAX = 2147483647;
@@ -208,6 +209,7 @@
   const modalActions = $("modal-actions");
 
   let accessToken = null;
+  let sessionToken = null;
   let profile = null;
   let stageTimer = null;
   let balancePollTimer = null;
@@ -225,6 +227,7 @@
   let lastGate = null;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
+  let apiReady = false;
   const PEEK_COOLDOWN_SEC = 180;
   const PEEK_CD_KEY = "ckr_peek_cd_until";
 
@@ -235,6 +238,7 @@
     peek_rate_limited: "ดูสถานะถี่เกินไป รอให้ครบเวลาก่อน",
     peek_failed: "ดูสถานะบัญชีเกมไม่สำเร็จ ลองใหม่",
     topup_rate_limited: "เติมถี่เกินไป รอสักครู่แล้วลองใหม่",
+    topup_voucher_blocked: "ซองนี้ถูกลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่",
     topup_not_configured: "ระบบเติมเงินยังไม่พร้อม ลองใหม่ภายหลัง",
     invalid_package: "แพ็กที่เลือกไม่ถูกต้อง",
     voucher_already_used: "ซองนี้ถูกใช้เติมไปแล้ว",
@@ -246,8 +250,12 @@
       "รับซองของตัวเองไม่ได้ — ต้องให้ลูกค้า (เบอร์อื่น) สร้างซองแล้วส่งลิงก์มา",
     TARGET_USER_REDEEMED: "เบอร์นี้รับซองนี้ไปแล้ว",
     INVALID_VOUCHER_CODE: "ลิงก์หรือโค้ดซองไม่ถูกต้อง",
+    INVALID_PHONE_NUMBER: "เบอร์รับเงินไม่ถูกต้อง",
     MAINTENANCE: "ระบบซองอั่งเปาปิดปรับปรุงชั่วคราว",
+    TIMEOUT: "เชื่อมต่อ TrueMoney หมดเวลา",
+    NETWORK_ERROR: "เชื่อมต่อ TrueMoney ไม่ได้",
     topup_credit_failed: "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
+    session_replaced: "มีการเข้าสู่ระบบจากที่อื่น — กรุณาเข้าสู่ระบบใหม่",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -312,6 +320,97 @@
     if (!el) return;
     el.textContent = text || "";
     el.className = "status " + (kind || "muted");
+  }
+
+  function loadStoredSessionToken() {
+    try {
+      return (
+        sessionStorage.getItem(SESSION_KEY) ||
+        localStorage.getItem(SESSION_KEY) ||
+        null
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function persistSessionToken(token) {
+    sessionToken = token || null;
+    try {
+      if (!sessionToken) {
+        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      if (wantsRemember()) {
+        localStorage.setItem(SESSION_KEY, sessionToken);
+        sessionStorage.removeItem(SESSION_KEY);
+      } else {
+        sessionStorage.setItem(SESSION_KEY, sessionToken);
+        localStorage.removeItem(SESSION_KEY);
+      }
+    } catch (_) {}
+  }
+
+  function clearSessionToken() {
+    persistSessionToken(null);
+  }
+
+  function paintApiStatus(state, text) {
+    const el = $("api-status");
+    if (!el) return;
+    el.className = "api-chip is-" + (state || "waking");
+    el.textContent = text || "";
+  }
+
+  async function pingApiHealth(retries) {
+    const tries = Math.max(1, Number(retries) || 1);
+    paintApiStatus("waking", "กำลังปลุกเซิร์ฟเวอร์…");
+    for (let i = 0; i < tries; i++) {
+      const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      const timer = setTimeout(() => {
+        try {
+          ctrl?.abort();
+        } catch (_) {}
+      }, 4500);
+      try {
+        const res = await fetch(API + "/api/health", {
+          method: "GET",
+          signal: ctrl?.signal,
+        });
+        clearTimeout(timer);
+        if (res.ok) {
+          apiReady = true;
+          paintApiStatus("ready", "API พร้อม");
+          return true;
+        }
+      } catch (_) {
+        clearTimeout(timer);
+      }
+      if (i < tries - 1) {
+        paintApiStatus("waking", "กำลังปลุกเซิร์ฟเวอร์…");
+        await new Promise((r) => setTimeout(r, 1200));
+      }
+    }
+    apiReady = false;
+    paintApiStatus("down", "API ยังไม่พร้อม");
+    return false;
+  }
+
+  async function ensureApiReady() {
+    if (apiReady) return true;
+    return pingApiHealth(2);
+  }
+
+  async function handleSessionReplaced() {
+    try {
+      await sb.auth.signOut();
+    } catch (_) {}
+    accessToken = null;
+    profile = null;
+    clearSessionToken();
+    showLogin();
+    showErrorModal(ERR_TH.session_replaced, "มีการเข้าสู่ระบบจากที่อื่น");
   }
 
   function tokenBalance() {
@@ -909,10 +1008,12 @@
 
   function paintTopupSelected() {
     const el = $("topup-selected-text");
+    const stepAmt = $("topup-step-amount");
     if (!el) return;
     const pkg = getTopupPackage(selectedTopupTokens);
     if (!pkg) {
       el.textContent = "—";
+      if (stepAmt) stepAmt.textContent = "—";
       return;
     }
     let text =
@@ -921,6 +1022,97 @@
       text += " · คุ้ม " + formatNumTh(pkg.save_baht) + "฿";
     }
     el.textContent = text;
+    if (stepAmt) stepAmt.textContent = formatNumTh(pkg.price_baht) + "฿";
+  }
+
+  function flashTopupDoor() {
+    const panel = $("topup");
+    if (!panel) return;
+    panel.classList.remove("is-flash");
+    void panel.offsetWidth;
+    panel.classList.add("is-flash");
+    setTimeout(() => panel.classList.remove("is-flash"), 1000);
+  }
+
+  function formatTopupDay(iso) {
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return "—";
+      return d.toLocaleString("th-TH", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function renderTopupHistory(items) {
+    const root = $("topup-history");
+    if (!root) return;
+    root.innerHTML = "";
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      root.innerHTML = '<li class="muted">ยังไม่มีประวัติ</li>';
+      return;
+    }
+    list.slice(0, 8).forEach((row) => {
+      const li = document.createElement("li");
+      const status = row.credit_status === "needs_manual" ? "ต้องตามมือ" : "สำเร็จ";
+      const statusClass =
+        row.credit_status === "needs_manual" ? "hist-warn" : "hist-ok";
+      li.innerHTML =
+        "<span>" +
+        escapeHtml(row.tokens || "—") +
+        " Token · " +
+        escapeHtml(formatNumTh(row.amount_baht)) +
+        "฿</span>" +
+        '<span class="' +
+        statusClass +
+        '">' +
+        status +
+        "</span>" +
+        '<span class="hist-meta">' +
+        escapeHtml(formatTopupDay(row.created_at)) +
+        "</span>";
+      root.appendChild(li);
+    });
+  }
+
+  async function loadTopupHistory() {
+    if (!accessToken) {
+      renderTopupHistory([]);
+      return;
+    }
+    try {
+      const data = await api("/api/topup/history");
+      renderTopupHistory(data.items || []);
+    } catch (_) {
+      /* keep previous */
+    }
+  }
+
+  async function copyTopupPrice() {
+    const pkg = getTopupPackage(selectedTopupTokens);
+    if (!pkg) return;
+    const text = String(pkg.price_baht);
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      setStatus($("topup-status"), "คัดลอกราคา " + text + "฿ แล้ว", "ok");
+    } catch (_) {
+      setStatus($("topup-status"), "คัดลอกไม่สำเร็จ — จำราคา " + text + "฿", "err");
+    }
   }
 
   function renderTopupPackages() {
@@ -1011,7 +1203,8 @@
       }
       // Prefer machine code so thError can map TMN / API codes
       if (detail.code && typeof detail.code === "string") return detail.code;
-      return detail.msg || detail.message || detail.reason || "request_failed";
+      if (detail.message && typeof detail.message === "string") return detail.message;
+      return detail.msg || detail.reason || "request_failed";
     }
     if (Array.isArray(detail)) {
       const parts = detail.map((item) => {
@@ -1040,6 +1233,7 @@
       options.headers || {}
     );
     if (accessToken) headers.Authorization = "Bearer " + accessToken;
+    if (sessionToken) headers["X-Session-Token"] = sessionToken;
     let res;
     try {
       res = await fetch(API + path, {
@@ -1061,6 +1255,9 @@
     if (!res.ok) {
       const raw = data?.detail ?? data?.reason ?? data?.error ?? null;
       const detail = formatApiDetail(raw) || res.statusText || "request_failed";
+      if (res.status === 401 && /session_replaced/i.test(String(detail))) {
+        await handleSessionReplaced();
+      }
       const err = new Error(detail);
       err.status = res.status;
       err.data = data;
@@ -1078,6 +1275,7 @@
     restorePeekCooldown();
     updateFarmAvailability();
     refreshGateAndQueueUi().catch(() => {});
+    loadTopupHistory().catch(() => {});
   }
 
   function showLogin() {
@@ -1450,6 +1648,7 @@
     startLiveStages();
 
     try {
+      await ensureApiReady();
       const data = await api("/api/farm/run", {
         method: "POST",
         body: {
@@ -1535,10 +1734,12 @@
       rememberEl.checked = pref !== "0";
     }
 
+    sessionToken = loadStoredSessionToken();
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
     setupXpCalculator();
     loadTopupPackages();
+    pingApiHealth(2).catch(() => {});
 
     // Re-check balance when user returns from Telegram
     document.addEventListener("visibilitychange", async () => {
@@ -1561,9 +1762,12 @@
     accessToken = data.session.access_token;
     try {
       await refreshMe();
+      loadTopupHistory().catch(() => {});
     } catch (e) {
+      if (/session_replaced/i.test(String(e.message || ""))) return;
       await sb.auth.signOut();
       accessToken = null;
+      clearSessionToken();
       showLogin();
       setStatus($("login-status"), "", "muted");
       showErrorModal(
@@ -1596,6 +1800,7 @@
       });
       if (error) throw error;
       accessToken = data.access_token;
+      persistSessionToken(data.session_token || null);
       profile = data.profile;
       paintProfile();
       showApp();
@@ -1671,6 +1876,7 @@
       });
       if (error) throw error;
       accessToken = data.access_token;
+      persistSessionToken(data.session_token || null);
       profile = data.profile;
       paintProfile();
       showApp();
@@ -1700,6 +1906,7 @@
     await sb.auth.signOut();
     accessToken = null;
     profile = null;
+    clearSessionToken();
     try {
       const keys = [];
       for (let i = 0; i < localStorage.length; i++) {
@@ -1723,6 +1930,10 @@
     syncTopupPanel();
   });
 
+  $("topup-copy-price")?.addEventListener("click", () => {
+    copyTopupPrice();
+  });
+
   $("topup-btn")?.addEventListener("click", async () => {
     if (topupBusy || farmRunning || peekRunning) return;
     const voucher = ($("topup-voucher")?.value || "").trim();
@@ -1740,6 +1951,7 @@
     if (btn) btn.disabled = true;
     setStatus($("topup-status"), "กำลังตรวจสอบและรับซอง…", "muted");
     try {
+      await ensureApiReady();
       const data = await api("/api/topup/redeem", {
         method: "POST",
         body: {
@@ -1751,19 +1963,30 @@
         profile = profile || {};
         profile.token_balance = data.token_balance;
         paintProfile();
-      } else {
-        try {
-          await refreshMe();
-        } catch (_) {}
       }
+      try {
+        await refreshMe();
+      } catch (_) {}
       if ($("topup-voucher")) $("topup-voucher").value = "";
+      if (modalMode === "empty") forceCloseModal();
+      flashTopupDoor();
       setStatus(
         $("topup-status"),
         "เติมสำเร็จ +" + data.tokens_credited + " token",
         "ok"
       );
       showTopupSuccessModal(data);
+      loadTopupHistory().catch(() => {});
+      // briefly keep vault open then collapse per balance rules
+      syncTopupPanel({ forceOpen: true });
+      setTimeout(() => {
+        if (hasTokens()) {
+          topupExpandedPref = false;
+          syncTopupPanel();
+        }
+      }, 1800);
     } catch (e) {
+      if (/session_replaced/i.test(String(e.message || ""))) return;
       const msg = thError(e.message) || "เติมโทเค็นไม่สำเร็จ";
       setStatus($("topup-status"), msg, "err");
       showErrorModal(msg, "เติมไม่สำเร็จ");
@@ -1797,6 +2020,7 @@
     updateFarmAvailability();
     setStatus($("farm-status"), "กำลังดูสถานะบัญชีเกม…", "muted");
     try {
+      await ensureApiReady();
       const data = await api("/api/farm/peek", {
         method: "POST",
         body: { email: dpEmail, password: dpPass },

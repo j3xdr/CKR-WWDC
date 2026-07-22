@@ -93,6 +93,19 @@ User ขอ: ดู coins/XP/nickname **ก่อน** กดฟาร์ม
 
 ---
 
+## Security + UX upgrades (2026-07-22)
+
+| Decision | Why |
+|----------|-----|
+| Topup rate limit: user 10/h + IP 20/h + voucher fail 3/15m | กัน brute / spam redeem |
+| Sanitize TMN errors → `{code, message}` ไทย; log raw server-side | ไม่โชว์ข้อความอังกฤษดิบให้ลูกค้า |
+| `profiles.session_token` + `X-Session-Token` | session เดียวต่อบัญชี; login ใหม่ตัดของเก่า |
+| `topup_redemptions.credit_status` + admin credit-retry | รับซองแล้วแต่ credit พลาด → ตามมือได้ |
+| `admin_audit_log` + `/api/admin/audit` | ติดตาม add/set/create/delete/credit-retry |
+| User topup history + copy price + API ready chip | ความสะดวกฝั่งลูกค้า / cold start |
+
+---
+
 ## Explicit non-goals / deferred
 
 - Desktop exe PartyRun packaging (`exe_รอทำ`) — คนละสายงาน

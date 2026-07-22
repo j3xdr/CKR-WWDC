@@ -192,6 +192,39 @@ input {
   gap: 10px;
 }
 
+.api-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border: 1px solid rgba(246, 231, 200, 0.18);
+  background: rgba(20, 12, 8, 0.55);
+  color: var(--cream-dim);
+  white-space: nowrap;
+}
+
+.api-chip.is-ready {
+  color: var(--mint);
+  border-color: rgba(110, 200, 150, 0.35);
+  background: rgba(40, 90, 60, 0.25);
+}
+
+.api-chip.is-waking {
+  color: #e8c070;
+  border-color: rgba(232, 192, 112, 0.35);
+  background: rgba(90, 60, 20, 0.28);
+}
+
+.api-chip.is-down {
+  color: #e8a090;
+  border-color: rgba(232, 120, 100, 0.35);
+  background: rgba(90, 30, 20, 0.28);
+}
+
 .token-chip {
   display: inline-flex;
   align-items: center;
@@ -1697,6 +1730,97 @@ input {
   border: 1px solid rgba(240, 180, 41, 0.28);
   background:
     linear-gradient(90deg, rgba(240, 180, 41, 0.14), rgba(240, 180, 41, 0.04));
+}
+
+.vault-selected > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-copy-price {
+  flex-shrink: 0;
+  padding: 6px 10px;
+  font-size: 0.78rem;
+}
+
+.vault-steps {
+  margin: 0 0 14px;
+  padding: 10px 12px 10px 28px;
+  border-radius: 12px;
+  border: 1px solid rgba(246, 231, 200, 0.1);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--cream-dim);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.vault-steps li + li {
+  margin-top: 4px;
+}
+
+.vault-steps strong {
+  color: var(--gold);
+}
+
+.vault-history {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(246, 231, 200, 0.1);
+}
+
+.vault-history-title {
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--cream-dim);
+  letter-spacing: 0.02em;
+}
+
+.vault-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.vault-history-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: 0.8rem;
+  color: var(--cream);
+}
+
+.vault-history-list .hist-meta {
+  grid-column: 1 / -1;
+  color: var(--cream-dim);
+  font-size: 0.72rem;
+}
+
+.vault-history-list .hist-ok {
+  color: var(--mint);
+}
+
+.vault-history-list .hist-warn {
+  color: #e8c070;
+}
+
+.topup-panel.is-flash .vault-door {
+  animation: vaultFlash 0.9s ease;
+}
+
+@keyframes vaultFlash {
+  0%,
+  100% {
+    box-shadow: none;
+  }
+  35% {
+    box-shadow: 0 0 0 2px rgba(240, 180, 41, 0.55), 0 0 28px rgba(240, 180, 41, 0.35);
+  }
 }
 
 .vault-selected img {

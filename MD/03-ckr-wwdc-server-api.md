@@ -28,9 +28,11 @@
    - Prefer RPC `resolve_username_email` (service_role)
    - Fallback: username-as-email (admin) + synthetic `{sanitized}@users.ckr.local`
 3. Supabase `grant_type=password` → access/refresh tokens
-4. Subsequent API calls: `Authorization: Bearer <access_token>`
-5. `verify_user` → `GET {SUPABASE}/auth/v1/user`
-6. Profile from `profiles` (role, username, token_balance)
+4. Login/register ตั้ง `profiles.session_token` (uuid) ใหม่ → คืนคู่ JWT เป็น `session_token`
+5. Subsequent API calls: `Authorization: Bearer <access_token>` + `X-Session-Token: <session_token>`
+6. `verify_user` → `GET {SUPABASE}/auth/v1/user` แล้วเทียบ `X-Session-Token` กับ `profiles.session_token`
+   - mismatch → **401** `session_replaced` (login เครื่องอื่นตัดของเก่า)
+7. Profile from `profiles` (role, username, token_balance)
 
 **Self-register:** public; role บังคับ `normal`; `token_balance` เริ่ม **0**; rate limit in-memory ~5/ชม./IP  
 Admin endpoints require `profiles.role == "admin"`.
@@ -44,25 +46,32 @@ Admin endpoints require `profiles.role == "admin"`.
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | GET | `/` | no | JSON pointers to UI/admin |
-| GET | `/api/health` | no | `farm_busy`, supabase flags |
-| POST | `/api/auth/login` | no | username login |
-| POST | `/api/auth/register` | no | self-signup → JWT (0 tokens) |
-| GET | `/api/me` | JWT | profile + tokens |
+| GET | `/api/health` | no | `farm_busy`, supabase flags, `topup_configured` |
+| POST | `/api/auth/login` | no | username login → JWT + `session_token` |
+| POST | `/api/auth/register` | no | self-signup → JWT (0 tokens) + `session_token` |
+| GET | `/api/me` | JWT+session | profile + tokens |
 | GET | `/api/topup/packages` | no | package price table (1–10 tokens) |
-| POST | `/api/topup/redeem` | JWT | redeem TrueMoney angpao → credit tokens |
-| GET | `/api/farm/gate` | JWT | queue snapshot + `can_run` |
-| POST | `/api/farm/queue/join` | JWT | enqueue / activate turn |
-| POST | `/api/farm/run` | JWT | **consumes 1 token**, runs farm |
-| POST | `/api/farm/peek` | JWT | nickname/coin/XP — needs tokens≥1, **no consume**, 180s cooldown |
+| GET | `/api/topup/history` | JWT+session | last 20 own redemptions |
+| POST | `/api/topup/redeem` | JWT+session | redeem angpao; rate-limit user/IP/voucher; sanitize TMN errors |
+| GET | `/api/farm/gate` | JWT+session | queue snapshot + `can_run` |
+| POST | `/api/farm/queue/join` | JWT+session | enqueue / activate turn |
+| POST | `/api/farm/run` | JWT+session | **consumes 1 token**, runs farm |
+| POST | `/api/farm/peek` | JWT+session | nickname/coin/XP — needs tokens≥1, **no consume**, 180s cooldown |
 
 ### Admin (Login_j3xdr)
 
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/admin/lookup?q=` | find user by username |
-| POST | `/api/admin/add-tokens` | credit tokens |
-| POST | `/api/admin/create-user` | create Auth user + profile |
+| GET | `/api/admin/audit?limit=` | admin_audit_log (default 50) |
+| GET | `/api/admin/topups?status=` | list redemptions; `needs_manual` / `credited` |
+| GET | `/api/admin/users/{id}/topups` | last 5 topups for user |
+| POST | `/api/admin/topups/{id}/credit` | manual credit retry → mark credited |
+| POST | `/api/admin/add-tokens` | credit tokens (+ audit) |
+| POST | `/api/admin/set-tokens` | set balance (+ audit) |
+| POST | `/api/admin/create-user` | create Auth user + profile (+ audit) |
 | GET | `/api/admin/users` | list profiles |
+| DELETE | `/api/admin/users/{id}` | delete user (+ audit) |
 
 ### Previously planned (done)
 

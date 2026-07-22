@@ -450,3 +450,41 @@ create policy "topup_redemptions_select_own"
 revoke insert, update, delete on public.topup_redemptions from authenticated, anon;
 grant select on public.topup_redemptions to authenticated;
 grant all on public.topup_redemptions to service_role;
+
+alter table public.topup_redemptions
+  add column if not exists credit_status text not null default 'credited'
+    check (credit_status in ('credited', 'needs_manual')),
+  add column if not exists error_note text null;
+
+create index if not exists topup_redemptions_credit_status_idx
+  on public.topup_redemptions (credit_status, created_at desc)
+  where credit_status = 'needs_manual';
+
+-- ---------------------------------------------------------------------------
+-- Admin audit log
+-- ---------------------------------------------------------------------------
+create table if not exists public.admin_audit_log (
+  id uuid primary key default gen_random_uuid(),
+  actor_id uuid null references public.profiles (id) on delete set null,
+  action text not null,
+  target_user_id uuid null references public.profiles (id) on delete set null,
+  meta jsonb null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists admin_audit_log_created_at_idx
+  on public.admin_audit_log (created_at desc);
+
+create index if not exists admin_audit_log_actor_idx
+  on public.admin_audit_log (actor_id, created_at desc);
+
+alter table public.admin_audit_log enable row level security;
+
+drop policy if exists "admin_audit_log_admin_select" on public.admin_audit_log;
+create policy "admin_audit_log_admin_select"
+  on public.admin_audit_log for select to authenticated
+  using (public.is_admin());
+
+revoke insert, update, delete on public.admin_audit_log from authenticated, anon;
+grant select on public.admin_audit_log to authenticated;
+grant all on public.admin_audit_log to service_role;

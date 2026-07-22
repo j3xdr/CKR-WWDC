@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260722-vault2" />
+  <link rel="stylesheet" href="css/styles.css?v=20260722-secux" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -30,6 +30,9 @@
       </span>
     </a>
     <div class="topbar-actions">
+      <div id="api-status" class="api-chip is-waking" title="สถานะเซิร์ฟเวอร์" aria-live="polite">
+        กำลังปลุกเซิร์ฟเวอร์…
+      </div>
       <div id="nav-balance" class="token-chip hidden" title="โทเค็นคงเหลือ">
         <img src="assets/coin.png" alt="" width="22" height="22" />
         <span id="nav-balance-num">0</span>
@@ -230,7 +233,15 @@
                     <p class="vault-selected-label">ต้องสร้างซองยอด</p>
                     <p class="vault-selected-value" id="topup-selected-text">100฿ · 1 Token</p>
                   </div>
+                  <button type="button" class="btn btn-ghost vault-copy-price" id="topup-copy-price">
+                    คัดลอกราคา
+                  </button>
                 </div>
+                <ol class="vault-steps" id="topup-steps" aria-label="ขั้นตอนเติมเงิน">
+                  <li>สร้างซองยอด <strong id="topup-step-amount">100฿</strong></li>
+                  <li>สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน)</li>
+                  <li>วางลิงก์ด้านล่าง แล้วกดเติม</li>
+                </ol>
                 <label class="field vault-voucher-field">
                   <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
                   <input
@@ -246,6 +257,12 @@
                   เปิดตู้ · เติมโทเค็น
                 </button>
                 <p id="topup-status" class="status" role="status"></p>
+                <div class="vault-history">
+                  <p class="vault-history-title">ประวัติเติมล่าสุด</p>
+                  <ul id="topup-history" class="vault-history-list">
+                    <li class="muted">ยังไม่มีประวัติ</li>
+                  </ul>
+                </div>
                 <p class="muted topup-note">
                   ยอดซองต้องตรงราคาแพ็กเป๊ะ · ซองต้องสร้างจากเบอร์อื่น (ลูกค้า)
                   ไม่ใช่เบอร์วอลเล็ตร้าน · สำรอง:
@@ -471,8 +488,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260722-vault2"></script>
-  <script src="js/level_xp.js?v=20260722-vault2"></script>
-  <script src="js/app.js?v=20260722-vault2"></script>
+  <script src="js/config.js?v=20260722-secux"></script>
+  <script src="js/level_xp.js?v=20260722-secux"></script>
+  <script src="js/app.js?v=20260722-secux"></script>
 </body>
 </html>

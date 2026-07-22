@@ -57,7 +57,9 @@ Local: copy `.env.example` → `.env` (gitignored)
 
 - `consume_token` หักก่อนรันฟาร์ม — ถ้าพังหลังหัก โทเค็นเสีย (refund เฉพาะบางกรณี busy-before-lock)
 - Peek **ต้องไม่เรียก** `consume_token`
-- Admin credit ผ่าน `/api/admin/add-tokens` หรือ Telegram กับแอดมิน
+- Admin credit ผ่าน `/api/admin/add-tokens` หรือ credit-retry จาก topup `needs_manual`
+- Topup redeem: rate-limit ต่อ user/IP/voucher; อย่าโชว์ข้อความดิบจาก TrueMoney ฝั่ง client
+- Single-session: client ต้องส่ง `X-Session-Token`; login เครื่องใหม่ทำให้ token เก่าใช้ไม่ได้
 
 ---
 
