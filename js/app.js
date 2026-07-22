@@ -213,6 +213,7 @@
   let balancePollTimer = null;
   let queuePollTimer = null;
   let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | "peek" | null
+  let emptyModalDismissed = false; // user closed empty modal; don't auto-reopen
   let farmRunning = false;
   let peekRunning = false;
   let peekCooldownUntil = 0;
@@ -346,7 +347,8 @@
   }
 
   function closeModal() {
-    if (modalMode === "empty" || modalMode === "queue") return;
+    if (modalMode === "queue") return;
+    if (modalMode === "empty") emptyModalDismissed = true;
     modalMode = null;
     clearModalActions();
     modalRoot.classList.add("hidden");
@@ -365,13 +367,14 @@
   }
 
   function showEmptyCoinsModal() {
+    emptyModalDismissed = false;
     clearModalActions();
     openModal({
       mode: "empty",
       title: "coins หมด กรุณาเติม",
       body: "โทเค็นหมดแล้ว ไม่สามารถวิ่งฟาร์มได้ จนกว่าจะเติมโทเค็นผ่านแอดมิน",
       icon: "assets/coin.png",
-      locked: true,
+      locked: false,
     });
     modalActions.appendChild(
       makeBtn("ติดต่อแอดมินทาง Telegram", "btn-telegram", null, {
@@ -393,6 +396,9 @@
           setStatus($("farm-status"), "ตรวจยอดไม่สำเร็จ ลองใหม่", "err");
         }
       })
+    );
+    modalActions.appendChild(
+      makeBtn("ปิด", "btn-candy", () => closeModal())
     );
     startBalancePoll();
   }
@@ -685,17 +691,19 @@
     const peekCdLeft = peekCooldownRemaining();
 
     if (btn && !farmRunning) {
-      btn.disabled = empty || peekRunning;
+      // Keep clickable when empty so user can reopen the fill-tokens modal
+      btn.disabled = peekRunning;
     }
     if (peekBtn) {
-      peekBtn.disabled = empty || farmRunning || peekRunning || peekCdLeft > 0;
+      peekBtn.disabled = farmRunning || peekRunning || peekCdLeft > 0;
     }
     setFarmInputsLocked(empty);
     paintPeekCooldown();
     if (empty && userView && !userView.classList.contains("hidden")) {
-      if (modalMode !== "empty") showEmptyCoinsModal();
-    } else if (!empty && modalMode === "empty") {
-      forceCloseModal();
+      if (modalMode !== "empty" && !emptyModalDismissed) showEmptyCoinsModal();
+    } else if (!empty) {
+      emptyModalDismissed = false;
+      if (modalMode === "empty") forceCloseModal();
     }
   }
 
@@ -1511,13 +1519,14 @@
         sessionStorage.removeItem(k);
       });
     } catch (_) {}
+    emptyModalDismissed = false;
     showLogin();
   });
 
   $("peek-btn")?.addEventListener("click", async () => {
     if (peekRunning || farmRunning) return;
     if (!hasTokens()) {
-      showErrorModal(ERR_TH.insufficient_tokens_for_peek, "ต้องมีโทเค็น");
+      showEmptyCoinsModal();
       return;
     }
     if (peekCooldownRemaining() > 0) {
@@ -1622,12 +1631,23 @@
       if (runStatusClosable) closeRunStatusPopup();
     });
 
+  modalRoot
+    ?.querySelector(".modal-backdrop")
+    ?.addEventListener("click", () => {
+      if (!modalRoot.classList.contains("locked")) closeModal();
+    });
+
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
-    const root = $("run-status-root");
-    if (!root || root.classList.contains("hidden")) return;
-    if (runStatusClosable) closeRunStatusPopup();
-    else ev.preventDefault();
+    const runRoot = $("run-status-root");
+    if (runRoot && !runRoot.classList.contains("hidden")) {
+      if (runStatusClosable) closeRunStatusPopup();
+      else ev.preventDefault();
+      return;
+    }
+    if (modalRoot && !modalRoot.classList.contains("hidden") && !modalRoot.classList.contains("locked")) {
+      closeModal();
+    }
   });
 
   bootstrap();
