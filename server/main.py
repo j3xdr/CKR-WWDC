@@ -174,9 +174,7 @@ class FarmRunBody(BaseModel):
         return s
 
 
-# Conservative soft caps (not official game limits) — reduce corrupt_pending risk
-FARM_SOFT_CAP_COIN = 50_000
-FARM_SOFT_CAP_EXP = 5_000
+INT32_MAX = 2_147_483_647
 BKK = ZoneInfo("Asia/Bangkok")
 
 
@@ -478,19 +476,6 @@ def _reject_if_banned(profile: dict[str, Any]) -> None:
         )
 
 
-def _enforce_farm_soft_caps(coin: int, exp: int) -> None:
-    if int(coin) > FARM_SOFT_CAP_COIN or int(exp) > FARM_SOFT_CAP_EXP:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "code": "value_capped",
-                "message": "value_capped",
-                "max_coin": FARM_SOFT_CAP_COIN,
-                "max_exp": FARM_SOFT_CAP_EXP,
-            },
-        )
-
-
 def _bkk_day_bounds(date_str: Optional[str] = None) -> tuple[str, str, str]:
     """Return (date_label, start_utc_iso, end_utc_iso) for Asia/Bangkok calendar day."""
     if date_str:
@@ -709,7 +694,7 @@ async def health():
         ),
         "farm_maintenance": bool(flags.get("farm_maintenance")),
         "topup_maintenance": bool(flags.get("topup_maintenance")),
-        "soft_caps": {"coin": FARM_SOFT_CAP_COIN, "exp": FARM_SOFT_CAP_EXP},
+        "farm_value_max": INT32_MAX,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -944,8 +929,6 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
 
     if tokens_before < 1:
         raise HTTPException(status_code=402, detail="insufficient_tokens")
-
-    _enforce_farm_soft_caps(body.coin, body.exp)
 
     # Queue / busy gate BEFORE spending a token
     gate = await _gate_for(uid)

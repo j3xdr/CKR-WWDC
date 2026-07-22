@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260722-next1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260722-vaultcopy1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -19,6 +19,7 @@
     <div class="bakery-glow bakery-glow-a"></div>
     <div class="bakery-glow bakery-glow-b"></div>
     <div class="crumb-pattern"></div>
+    <div id="bg-floaters" class="bg-floaters"></div>
   </div>
 
   <header class="topbar">
@@ -31,13 +32,20 @@
     </a>
     <div class="topbar-actions">
       <div id="api-status" class="api-chip is-waking" title="สถานะเซิร์ฟเวอร์" aria-live="polite">
-        กำลังปลุกเซิร์ฟเวอร์…
+        API…
       </div>
       <div id="nav-balance" class="token-chip hidden" title="โทเค็นคงเหลือ">
-        <img src="assets/coin.png" alt="" width="22" height="22" />
+        <img src="assets/coin.png" alt="" width="18" height="18" />
         <span id="nav-balance-num">0</span>
       </div>
-      <button type="button" id="logout-btn" class="btn btn-candy btn-logout hidden">ออกจากระบบ</button>
+      <button type="button" id="logout-btn" class="btn btn-candy btn-logout hidden" aria-label="ออกจากระบบ" title="ออกจากระบบ">
+        <svg class="logout-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M10 17l5-5-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M15 12H4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="logout-text">ออกจากระบบ</span>
+      </button>
     </div>
   </header>
 
@@ -168,136 +176,69 @@
     <!-- APP — simple single-column flow -->
     <section id="user-view" class="view hidden">
       <div class="app-flow">
-        <div class="status-strip panel">
-          <div class="status-strip-user">
-            <img class="who-avatar" src="assets/logo_4k.png" alt="" width="44" height="44" />
-            <div>
+        <div class="home-row">
+          <div class="status-strip panel">
+            <div class="home-card-copy">
               <p class="eyebrow">ผู้ใช้</p>
               <p id="who-user" class="who-name">—</p>
+              <p class="home-card-meta">
+                <span class="muted status-strip-note">1 โทเค็น / รอบ</span>
+              </p>
+            </div>
+            <div class="home-card-asset status-strip-asset" aria-hidden="true">
+              <img class="who-avatar" src="assets/notice_b20.png" alt="" width="78" height="55" />
+              <div class="status-strip-tokens">
+                <p class="eyebrow status-token-label">
+                  <img src="assets/coin.png" alt="" width="14" height="14" />
+                  โทเค็น
+                </p>
+                <p class="vault-num" id="token-balance">0</p>
+              </div>
             </div>
           </div>
-          <div class="status-strip-tokens">
-            <p class="eyebrow">
-              <img src="assets/coin.png" alt="" width="18" height="18" />
-              โทเค็นคงเหลือ
-            </p>
-            <p class="vault-num" id="token-balance">0</p>
-            <p class="muted">ใช้ 1 โทเค็นต่อการวิ่งฟาร์ม</p>
-          </div>
-        </div>
 
-        <div class="tip-banner">
-          <img src="assets/tr_ga170.png" alt="" width="36" height="36" />
-          <p>ใส่บัญชี <strong>DevPlay ของเกม</strong> เท่านั้น — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
-        </div>
-
-        <div class="panel topup-panel coin-vault" id="topup" data-collapsed="0">
           <button
             type="button"
-            class="topup-head vault-door"
+            class="panel vault-door-card"
             id="topup-toggle"
-            aria-expanded="true"
-            aria-controls="topup-body"
+            aria-haspopup="dialog"
+            aria-controls="vault-modal"
+            aria-expanded="false"
           >
-            <div class="vault-door-main">
-              <div class="vault-coin-seal" aria-hidden="true">
-                <img src="assets/coin.png" alt="" width="48" height="48" />
-              </div>
-              <div class="vault-door-copy">
-                <p class="vault-eyebrow">Coin Vault</p>
-                <h2 class="panel-title" id="topup-title">ตู้เติมโทเค็น</h2>
-                <p class="panel-hint" id="topup-head-hint">
-                  เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม
-                </p>
+            <div class="home-card-copy vault-door-copy">
+              <p class="vault-eyebrow">Coin Vault</p>
+              <h2 class="panel-title" id="topup-title">เติมโทเค็น</h2>
+              <p class="panel-hint" id="topup-head-hint">แตะเพื่อเปิดตู้</p>
+              <span class="pill vault-pill">กดเพื่อเติม</span>
+            </div>
+            <div class="home-card-asset vault-door-asset" aria-hidden="true">
+              <div class="vault-coin-seal">
+                <img src="assets/coin.png" alt="" width="56" height="56" />
               </div>
             </div>
-            <span class="topup-head-meta">
-              <span class="pill vault-pill">Secure</span>
-              <span class="topup-chevron" aria-hidden="true"></span>
-            </span>
           </button>
-          <div class="topup-body" id="topup-body">
-            <div class="vault-chamber">
-              <div class="vault-chamber-frame">
-                <p class="vault-chamber-label">เลือกจำนวนโทเค็น</p>
-                <div
-                  id="topup-packages"
-                  class="vault-ingot-grid"
-                  role="listbox"
-                  aria-label="แพ็กโทเค็น"
-                ></div>
-              </div>
+        </div>
 
-              <div class="vault-deposit">
-                <div class="vault-selected" id="topup-selected" aria-live="polite">
-                  <img src="assets/coin.png" alt="" width="26" height="26" />
-                  <div>
-                    <p class="vault-selected-label">ต้องสร้างซองยอด</p>
-                    <p class="vault-selected-value" id="topup-selected-text">100฿ · 1 Token</p>
-                  </div>
-                  <button type="button" class="btn btn-ghost vault-copy-price" id="topup-copy-price">
-                    คัดลอกราคา
-                  </button>
-                </div>
-                <ol class="vault-steps" id="topup-steps" aria-label="ขั้นตอนเติมเงิน">
-                  <li>สร้างซองยอด <strong id="topup-step-amount">100฿</strong></li>
-                  <li>สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน)</li>
-                  <li>วางลิงก์ด้านล่าง แล้วกดเติม</li>
-                </ol>
-                <label class="field vault-voucher-field">
-                  <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
-                  <input
-                    id="topup-voucher"
-                    type="text"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="https://gift.truemoney.com/campaign/?v=..."
-                  />
-                </label>
-                <div class="vault-actions">
-                  <button type="button" class="btn btn-ghost" id="topup-verify-btn">
-                    ตรวจซอง
-                  </button>
-                  <button type="button" class="btn btn-run vault-confirm" id="topup-btn">
-                    <img src="assets/coin.png" alt="" width="22" height="22" />
-                    เปิดตู้ · เติมโทเค็น
-                  </button>
-                </div>
-                <p id="topup-status" class="status" role="status"></p>
-                <div class="vault-history">
-                  <p class="vault-history-title">ประวัติเติมล่าสุด</p>
-                  <ul id="topup-history" class="vault-history-list">
-                    <li class="muted">ยังไม่มีประวัติ</li>
-                  </ul>
-                </div>
-                <p class="muted topup-note">
-                  ยอดซองต้องตรงราคาแพ็กเป๊ะ · ซองต้องสร้างจากเบอร์อื่น (ลูกค้า)
-                  ไม่ใช่เบอร์วอลเล็ตร้าน · สำรอง:
-                  <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
-                </p>
-              </div>
-            </div>
-          </div>
+        <div class="tip-banner tip-banner-compact">
+          <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
+          <p>ใช้บัญชี <strong>DevPlay ของเกม</strong> เท่านั้น — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
         </div>
 
         <div class="panel oven-panel" id="run">
           <div class="oven-head">
             <div class="oven-titles">
-              <img src="assets/score.png" alt="" width="36" height="36" />
-              <div>
+              <img class="oven-title-icon" src="assets/pirate_cookie_run.gif" alt="" width="56" height="56" />
+              <div class="oven-title-copy">
                 <h2 class="panel-title">เริ่มวิ่งฟาร์ม</h2>
-                <p class="panel-hint">กรอกบัญชีเกม แล้วกดเริ่ม (จะมีการยืนยันก่อนหักโทเค็น)</p>
+                <p class="panel-hint">ยืนยันก่อนหัก 1 โทเค็น</p>
               </div>
             </div>
-            <span class="pill">
-              <img src="assets/level.png" alt="" width="16" height="16" />
-              DevPlay
-            </span>
+            <span class="pill pill-devplay">DevPlay</span>
           </div>
 
           <form
             id="farm-form"
-            class="farm-form"
+            class="farm-form farm-form-compact"
             autocomplete="off"
             data-lpignore="true"
             data-1p-ignore="true"
@@ -309,9 +250,9 @@
               <input type="password" name="password" tabindex="-1" autocomplete="current-password" />
             </div>
 
-            <div class="grid-2">
+            <div class="grid-2 farm-creds">
               <label class="field">
-                <span>อีเมล DevPlay (เกม)</span>
+                <span>อีเมล DevPlay</span>
                 <input
                   id="dp-acct-mail"
                   name="ckr_dp_acct_mail"
@@ -325,12 +266,12 @@
                   data-lpignore="true"
                   data-1p-ignore="true"
                   data-form-type="other"
-                  placeholder="อีเมลบัญชีเกม"
+                  placeholder="อีเมลเกม"
                   readonly
                 />
               </label>
               <label class="field">
-                <span>รหัสผ่าน DevPlay (เกม)</span>
+                <span>รหัสผ่าน DevPlay</span>
                 <input
                   id="dp-acct-secret"
                   name="ckr_dp_acct_secret"
@@ -340,14 +281,14 @@
                   data-lpignore="true"
                   data-1p-ignore="true"
                   data-form-type="other"
-                  placeholder="รหัสผ่านบัญชีเกม"
+                  placeholder="รหัสเกม"
                   readonly
                 />
               </label>
             </div>
 
             <div class="peek-row">
-              <button type="button" class="btn btn-ghost" id="peek-btn" disabled>
+              <button type="button" class="btn btn-peek" id="peek-btn" disabled>
                 ดูสถานะบัญชีเกม
               </button>
               <p id="peek-cooldown" class="peek-cooldown" aria-live="polite"></p>
@@ -357,8 +298,9 @@
               <label class="field field-stat">
                 <span class="field-stat-label">
                   <span class="field-stat-name">
-                    <img src="assets/score.png" alt="" width="16" height="16" />
+                    <img src="assets/score.png" alt="" width="22" height="22" />
                     คะแนน
+                    <span class="field-stat-note">ใส่ 0 ได้ไม่สำคัญ</span>
                   </span>
                   <span class="field-stat-hint" id="farm-score-hint" aria-live="polite"></span>
                 </span>
@@ -375,7 +317,7 @@
               <label class="field field-stat">
                 <span class="field-stat-label">
                   <span class="field-stat-name">
-                    <img src="assets/coin.png" alt="" width="16" height="16" />
+                    <img src="assets/coin.png" alt="" width="22" height="22" />
                     เหรียญ
                   </span>
                   <span class="field-stat-hint" id="farm-coin-hint" aria-live="polite"></span>
@@ -393,7 +335,7 @@
               <label class="field field-stat">
                 <span class="field-stat-label">
                   <span class="field-stat-name">
-                    <img src="assets/level.png" alt="" width="16" height="16" />
+                    <img src="assets/level.png" alt="" width="22" height="22" />
                     XP
                   </span>
                   <span class="field-stat-hint" id="farm-exp-hint" aria-live="polite"></span>
@@ -411,7 +353,7 @@
             </div>
 
             <div class="xp-tools">
-              <button type="button" class="btn btn-ghost" id="xp-calc-open">
+              <button type="button" class="btn btn-ghost btn-sm-inline" id="xp-calc-open">
                 คำนวณ XP จากเลเวล
               </button>
             </div>
@@ -421,7 +363,7 @@
                 <h3>คำนวณ XP ตามเลเวล</h3>
                 <button type="button" class="xp-calc-close" id="xp-calc-close" aria-label="ปิด">×</button>
               </div>
-              <p class="xp-calc-lead">ใส่เลเวลปัจจุบันกับเลเวลเป้าหมาย ระบบจะคำนวณ XP ที่ต้องใช้</p>
+              <p class="xp-calc-lead">ใส่เลเวลปัจจุบันกับเลเวลเป้าหมาย</p>
               <div class="xp-calc-grid">
                 <label class="field">
                   <span>Lv ปัจจุบัน</span>
@@ -437,7 +379,7 @@
             </div>
 
             <button class="btn btn-run" type="submit" id="farm-btn">
-              <img src="assets/tr_event_116.png" alt="" width="24" height="24" />
+              <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
               เริ่มฟาร์ม · ใช้ 1 โทเค็น
             </button>
             <p id="farm-status" class="status" role="status"></p>
@@ -458,7 +400,142 @@
     <p>CKR WWDC by j3da1</p>
   </footer>
 
-  <!-- Run status popup (pipeline cards) -->
+  <!-- Coin Vault popup -->
+  <div id="vault-modal" class="vault-modal-root hidden" aria-hidden="true">
+    <div class="vault-modal-backdrop" data-vault-close></div>
+    <div
+      class="panel topup-panel coin-vault vault-modal-sheet"
+      id="topup"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="vault-modal-title"
+    >
+      <div class="vault-modal-head">
+        <div class="vault-modal-titles">
+          <p class="vault-eyebrow">Coin Vault</p>
+          <h2 class="panel-title" id="vault-modal-title">ตู้เติมโทเค็น</h2>
+        </div>
+        <button type="button" class="vault-modal-close" id="vault-close" aria-label="ปิด" data-vault-close>×</button>
+      </div>
+
+      <div class="vault-chamber vault-chamber-compact">
+        <div class="vault-chamber-frame">
+          <p class="vault-chamber-label">เลือกจำนวนโทเค็น</p>
+          <div
+            id="topup-packages"
+            class="vault-ingot-grid"
+            role="listbox"
+            aria-label="แพ็กโทเค็น"
+          ></div>
+        </div>
+
+        <div class="vault-deposit">
+          <div class="vault-selected" id="topup-selected" aria-live="polite">
+            <img src="assets/coin.png" alt="" width="24" height="24" />
+            <div>
+              <p class="vault-selected-label">ต้องสร้างซองยอด</p>
+              <p class="vault-selected-value" id="topup-selected-text">100฿ · 1 Token</p>
+            </div>
+            <button type="button" class="btn btn-ghost vault-copy-price" id="topup-copy-price">
+              คัดลอก
+            </button>
+          </div>
+
+          <button type="button" class="vault-tutorial-btn" id="wallet-tutorial-open">
+            <span class="vault-tutorial-btn-main">
+              <span class="vault-tutorial-btn-title">วิธีสร้างซอง TrueMoney</span>
+              <span class="vault-tutorial-btn-sub">
+                สร้างซองยอด <strong id="topup-step-amount">100฿</strong> · กดดูทีละขั้นพร้อมรูป
+              </span>
+            </span>
+            <span class="vault-tutorial-btn-chevron" aria-hidden="true">›</span>
+          </button>
+
+          <label class="field vault-voucher-field">
+            <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
+            <input
+              id="topup-voucher"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="https://gift.truemoney.com/campaign/?v=..."
+            />
+          </label>
+          <div class="vault-actions">
+            <button type="button" class="btn btn-ghost" id="topup-verify-btn">
+              ตรวจซอง
+            </button>
+            <button type="button" class="btn btn-run vault-confirm" id="topup-btn">
+              <img src="assets/coin.png" alt="" width="20" height="20" />
+              เติมโทเค็น
+            </button>
+          </div>
+          <p id="topup-status" class="status" role="status"></p>
+          <div class="vault-history">
+            <p class="vault-history-title">ประวัติเติมล่าสุด</p>
+            <ul id="topup-history" class="vault-history-list">
+              <li class="muted">ยังไม่มีประวัติ</li>
+            </ul>
+          </div>
+          <p class="muted topup-note">
+            ยอดซองต้องตรงราคาแพ็กเป๊ะ · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน) · สำรอง:
+            <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TrueMoney wallet tutorial -->
+  <div id="wallet-tutorial" class="wallet-tutorial-root hidden" aria-hidden="true">
+    <div class="wallet-tutorial-backdrop" data-tutorial-close></div>
+    <div
+      class="wallet-tutorial-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wallet-tutorial-title"
+    >
+      <div class="wallet-tutorial-head">
+        <div class="wallet-tutorial-titles">
+          <p class="wallet-tutorial-kicker">TrueMoney</p>
+          <h2 id="wallet-tutorial-title">สร้างซองทีละขั้น</h2>
+        </div>
+        <div class="wallet-tutorial-meta">
+          <span id="wallet-tutorial-progress" class="wallet-tutorial-progress">1 / 5</span>
+          <button type="button" class="wallet-tutorial-close" id="wallet-tutorial-close" aria-label="ปิด" data-tutorial-close>×</button>
+        </div>
+      </div>
+
+      <div class="wallet-tutorial-media" id="wallet-tutorial-media">
+        <img
+          id="wallet-tutorial-img"
+          src="assets/wallet/wallet_1.jpg"
+          alt="ขั้นตอนสร้างซอง TrueMoney"
+          decoding="async"
+        />
+      </div>
+
+      <div class="wallet-tutorial-foot">
+        <p id="wallet-tutorial-caption" class="wallet-tutorial-caption"></p>
+        <div
+          class="wallet-tutorial-dots"
+          id="wallet-tutorial-dots"
+          role="tablist"
+          aria-label="ขั้นตอน"
+        ></div>
+        <div class="wallet-tutorial-nav">
+          <button type="button" class="btn btn-ghost" id="wallet-tutorial-prev" aria-label="ก่อนหน้า">
+            ‹ ก่อนหน้า
+          </button>
+          <button type="button" class="btn btn-candy" id="wallet-tutorial-next">
+            ถัดไป ›
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Run status popup (single-stage hero) -->
   <div id="run-status-root" class="run-status-root hidden" aria-hidden="true">
     <div class="run-status-backdrop"></div>
     <div
@@ -483,13 +560,29 @@
         </button>
       </div>
       <p id="run-status-subtitle" class="run-status-subtitle">กำลังฟาร์ม… ห้ามปิดจนกว่าจะเสร็จ</p>
-      <ul id="farm-log" class="run-status-list" aria-live="polite"></ul>
+      <div class="run-status-hero" id="run-status-hero" data-state="pending">
+        <div class="run-status-hero-orb" aria-hidden="true">
+          <img
+            class="run-status-hero-cookie"
+            src="assets/cookie_run.gif"
+            alt=""
+            width="64"
+            height="74"
+            decoding="async"
+          />
+        </div>
+        <p id="run-status-hero-label" class="run-status-hero-label">กำลังเข้าสู่ระบบเกม…</p>
+        <p id="run-status-hero-hint" class="run-status-hero-hint">กรุณารอสักครู่ อย่าปิดหน้านี้</p>
+      </div>
+      <div id="run-status-dots" class="run-status-dots" aria-hidden="true"></div>
+      <ul id="farm-log" class="run-status-extras hidden" aria-live="polite"></ul>
     </div>
   </div>
 
   <!-- Modals -->
   <div id="modal-root" class="modal-root hidden" aria-hidden="true">
     <div class="modal-backdrop"></div>
+    <div id="modal-confetti" class="modal-confetti" aria-hidden="true"></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
       <button type="button" id="modal-close" class="modal-close" aria-label="ปิด">
         ×
@@ -501,8 +594,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260722-next1"></script>
-  <script src="js/level_xp.js?v=20260722-next1"></script>
-  <script src="js/app.js?v=20260722-next1"></script>
+  <script src="js/config.js?v=20260722-vaultcopy1"></script>
+  <script src="js/level_xp.js?v=20260722-vaultcopy1"></script>
+  <script src="js/app.js?v=20260722-vaultcopy1"></script>
 </body>
 </html>

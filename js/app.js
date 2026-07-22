@@ -14,8 +14,6 @@
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
   const INT32_MAX = 2147483647;
-  const FARM_SOFT_CAP_COIN = 50000;
-  const FARM_SOFT_CAP_EXP = 5000;
 
   const DIGIT_TH = [
     "ศูนย์",
@@ -209,11 +207,145 @@
   const modalBody = $("modal-body");
   const modalIcon = $("modal-icon");
   const modalActions = $("modal-actions");
+  const modalCard = modalRoot?.querySelector(".modal-card") || null;
+  const MOTION_CLOSE_MS = 320;
+
+  function prefersReducedMotion() {
+    try {
+      return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /* ---------- Adaptive floating bg (assets_web/bg) ---------- */
+  const BG_FLOAT_BASE = "assets_web/bg/";
+  const BG_FLOAT_COUNT = 70;
+  const BG_EDGE_ZONES = [
+    { top: [4, 22], left: [2, 18] },
+    { top: [4, 22], left: [78, 94] },
+    { top: [28, 48], left: [1, 12] },
+    { top: [28, 48], left: [86, 96] },
+    { top: [52, 72], left: [2, 16] },
+    { top: [52, 72], left: [82, 95] },
+    { top: [74, 90], left: [8, 28] },
+    { top: [74, 90], left: [70, 90] },
+    { top: [8, 18], left: [36, 62] },
+  ];
+
+  function bgFloatCountForWidth(w) {
+    if (w < 480) return 3;
+    if (w < 768) return 5;
+    if (w < 1100) return 7;
+    return 9;
+  }
+
+  function bgFloatSizeRange(w) {
+    if (w < 480) return [36, 52];
+    if (w < 768) return [40, 60];
+    return [44, 72];
+  }
+
+  function shuffleInPlace(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = arr[i];
+      arr[i] = arr[j];
+      arr[j] = t;
+    }
+    return arr;
+  }
+
+  function randBetween(min, max) {
+    return min + Math.random() * (max - min);
+  }
+
+  function initBgFloaters() {
+    const root = $("bg-floaters");
+    if (!root) return;
+
+    let lastCount = -1;
+    let resizeTimer = 0;
+
+    function rebuild() {
+      const w = window.innerWidth || document.documentElement.clientWidth || 1024;
+      const count = bgFloatCountForWidth(w);
+      if (count === lastCount && root.childElementCount === count) return;
+      lastCount = count;
+
+      const indices = Array.from({ length: BG_FLOAT_COUNT }, (_, i) => i + 1);
+      shuffleInPlace(indices);
+      const picked = indices.slice(0, count);
+      const zones = BG_EDGE_ZONES.slice();
+      shuffleInPlace(zones);
+      const [minW, maxW] = bgFloatSizeRange(w);
+
+      root.replaceChildren();
+      for (let i = 0; i < picked.length; i++) {
+        const n = String(picked[i]).padStart(2, "0");
+        const zone = zones[i % zones.length];
+        const img = document.createElement("img");
+        img.className = "float-deco";
+        img.alt = "";
+        img.decoding = "async";
+        img.draggable = false;
+        img.src = `${BG_FLOAT_BASE}upgrade02_${n}_shop.png`;
+        const width = Math.round(randBetween(minW, maxW));
+        const top = randBetween(zone.top[0], zone.top[1]);
+        const left = randBetween(zone.left[0], zone.left[1]);
+        const duration = randBetween(9, 16);
+        const delay = -randBetween(0, 12);
+        img.style.width = `${width}px`;
+        img.style.top = `${top}%`;
+        img.style.left = `${left}%`;
+        img.style.animationDuration = `${duration.toFixed(1)}s`;
+        img.style.animationDelay = `${delay.toFixed(1)}s`;
+        root.appendChild(img);
+      }
+    }
+
+    rebuild();
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(rebuild, 180);
+    });
+  }
+
+  function animateOpen(root) {
+    if (!root) return;
+    root.classList.remove("hidden", "is-closing");
+    root.setAttribute("aria-hidden", "false");
+    void root.offsetWidth;
+    requestAnimationFrame(() => {
+      root.classList.add("is-open");
+    });
+  }
+
+  function animateClose(root, onDone, opts = {}) {
+    const instant = !!opts.instant || prefersReducedMotion();
+    if (!root) {
+      if (typeof onDone === "function") onDone();
+      return;
+    }
+    const finish = () => {
+      root.classList.add("hidden");
+      root.classList.remove("is-open", "is-closing");
+      root.setAttribute("aria-hidden", "true");
+      if (typeof onDone === "function") onDone();
+    };
+    if (instant || root.classList.contains("hidden")) {
+      finish();
+      return;
+    }
+    root.classList.add("is-closing");
+    setTimeout(finish, MOTION_CLOSE_MS);
+  }
 
   let accessToken = null;
   let sessionToken = null;
   let profile = null;
   let stageTimer = null;
+  let runStatusAutoCloseTimer = null;
   let balancePollTimer = null;
   let queuePollTimer = null;
   let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | "peek" | null
@@ -225,7 +357,39 @@
   let selectedTopupTokens = 1;
   let topupPackages = [];
   let topupBusy = false;
-  let topupExpandedPref = null; // null = use default; true/false when user has tokens
+  let topupExpandedPref = null; // kept for compat; vault is modal now
+  let vaultOpen = false;
+  let walletTutorialStep = 0;
+  const WALLET_TUTORIAL_STEPS = [
+    {
+      img: "assets/wallet/wallet_1.jpg",
+      shape: "wide",
+      caption:
+        "เปิดแอป TrueMoney Wallet แล้วแตะเมนู 「โอนเงิน」 บนหน้าหลัก",
+    },
+    {
+      img: "assets/wallet/wallet_2.jpg",
+      shape: "wide",
+      caption: "เลือก 「ส่งซองทรูมันนี่」 จากรายการ",
+    },
+    {
+      img: "assets/wallet/wallet_3.jpg",
+      shape: "tall",
+      caption:
+        "เลือก 「ส่งให้คนเดียว」 → ใส่จำนวนเงินให้ตรงแพ็กที่เลือก → อายุซองอย่างน้อย 1 วัน",
+    },
+    {
+      img: "assets/wallet/wallet_4.jpg",
+      shape: "tall",
+      caption: "ตรวจรายละเอียดและเลือกธีม แล้วกด 「ยืนยัน」",
+    },
+    {
+      img: "assets/wallet/wallet_5.jpg",
+      shape: "tall",
+      caption:
+        "เมื่อสร้างสำเร็จ กด 「แชร์ลิงก์」 หรือคัดลอกลิงก์ แล้วนำไปวางในตู้เติมโทเค็น",
+    },
+  ];
   let lastGate = null;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
@@ -261,11 +425,7 @@
     account_banned: "บัญชีถูกระงับ กรุณาติดต่อแอดมิน",
     maintenance: "ระบบปิดปรับปรุงชั่วคราว ลองใหม่ภายหลัง",
     value_capped:
-      "ค่าเหรียญ/XP สูงเกินไป (เหรียญสูงสุด " +
-      FARM_SOFT_CAP_COIN.toLocaleString("th-TH") +
-      " · XP สูงสุด " +
-      FARM_SOFT_CAP_EXP.toLocaleString("th-TH") +
-      ")",
+      "ใส่ได้สูงสุด " + INT32_MAX.toLocaleString("th-TH") + " (Int32) ต่อช่อง",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -328,8 +488,10 @@
 
   function setStatus(el, text, kind) {
     if (!el) return;
+    el.classList.remove("is-fresh");
+    void el.offsetWidth;
     el.textContent = text || "";
-    el.className = "status " + (kind || "muted");
+    el.className = "status " + (kind || "muted") + (text ? " is-fresh" : "");
   }
 
   function loadStoredSessionToken() {
@@ -500,8 +662,12 @@
       closeBtn.classList.toggle("is-hidden", !!locked);
       closeBtn.disabled = !!locked;
     }
-    modalRoot.classList.remove("hidden");
-    modalRoot.setAttribute("aria-hidden", "false");
+    if (modalCard) {
+      modalCard.classList.remove("is-shake");
+      void modalCard.offsetWidth;
+      if (mode === "error") modalCard.classList.add("is-shake");
+    }
+    animateOpen(modalRoot);
   }
 
   function closeModal() {
@@ -509,19 +675,27 @@
     if (modalMode === "empty") emptyModalDismissed = true;
     modalMode = null;
     clearModalActions();
-    modalRoot.classList.add("hidden");
-    modalRoot.classList.remove("locked");
-    modalRoot.setAttribute("aria-hidden", "true");
-    stopBalancePoll();
+    clearPixelConfetti();
+    animateClose(modalRoot, () => {
+      modalRoot.classList.remove("locked");
+      if (modalCard) modalCard.classList.remove("is-shake");
+      stopBalancePoll();
+    });
   }
 
   function forceCloseModal() {
     modalMode = null;
     clearModalActions();
-    modalRoot.classList.add("hidden");
-    modalRoot.classList.remove("locked");
-    modalRoot.setAttribute("aria-hidden", "true");
-    stopBalancePoll();
+    clearPixelConfetti();
+    animateClose(
+      modalRoot,
+      () => {
+        modalRoot.classList.remove("locked");
+        if (modalCard) modalCard.classList.remove("is-shake");
+        stopBalancePoll();
+      },
+      { instant: true }
+    );
   }
 
   function showEmptyCoinsModal() {
@@ -530,20 +704,14 @@
     openModal({
       mode: "empty",
       title: "โทเค็นหมดแล้ว",
-      body: "เติมเองได้ทันทีบนหน้านี้ — เลือกแพ็กด้านบน แล้ววางลิงก์ซอง TrueMoney ไม่ต้องรอแอดมิน",
+      body: "เติมเองได้ทันที — เปิดตู้เติมโทเค็น เลือกแพ็ก แล้ววางลิงก์ซอง TrueMoney ไม่ต้องรอแอดมิน",
       icon: "assets/coin.png",
       locked: false,
     });
     modalActions.appendChild(
       makeBtn("ไปเติมโทเค็น", "btn-candy", () => {
         closeModal();
-        syncTopupPanel({ forceOpen: true });
-        const panel = $("topup");
-        if (panel) {
-          panel.scrollIntoView({ behavior: "smooth", block: "start" });
-          const voucher = $("topup-voucher");
-          if (voucher) setTimeout(() => voucher.focus(), 350);
-        }
+        openVaultModal({ focusVoucher: true });
       })
     );
     modalActions.appendChild(
@@ -556,7 +724,7 @@
           } else {
             setStatus(
               $("farm-status"),
-              "ยังมียอดเป็น 0 — เติมผ่านแผงเติมโทเค็นด้านบนได้เลย",
+              "ยังมียอดเป็น 0 — กด Coin Vault เพื่อเติมโทเค็นได้เลย",
               "err"
             );
           }
@@ -614,9 +782,42 @@
       icon: "assets/coin.png",
       locked: false,
     });
+    spawnPixelConfetti();
     modalActions.appendChild(
       makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
     );
+  }
+
+  function clearPixelConfetti() {
+    const layer = $("modal-confetti");
+    if (!layer) return;
+    layer.classList.remove("is-active");
+    layer.replaceChildren();
+  }
+
+  function spawnPixelConfetti() {
+    const layer = $("modal-confetti");
+    if (!layer) return;
+    clearPixelConfetti();
+    if (prefersReducedMotion()) return;
+    const colors = ["#f0b429", "#f6e7c8", "#e23d2e", "#3ecf8e", "#ffd36a", "#ff8a5b"];
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 20; i++) {
+      const bit = document.createElement("span");
+      bit.className = "pixel-bit";
+      const size = 4 + Math.floor(Math.random() * 5);
+      bit.style.width = size + "px";
+      bit.style.height = size + "px";
+      bit.style.left = Math.random() * 100 + "%";
+      bit.style.background = colors[i % colors.length];
+      bit.style.setProperty("--dx", Math.round(Math.random() * 80 - 40) + "px");
+      bit.style.setProperty("--delay", (Math.random() * 0.45).toFixed(2) + "s");
+      bit.style.setProperty("--dur", (1.5 + Math.random() * 1.1).toFixed(2) + "s");
+      frag.appendChild(bit);
+    }
+    layer.appendChild(frag);
+    layer.classList.add("is-active");
+    setTimeout(() => clearPixelConfetti(), 2800);
   }
 
   function escapeHtml(s) {
@@ -779,11 +980,13 @@
     openBtn.addEventListener("click", () => {
       card.classList.remove("hidden");
       card.hidden = false;
+      animateOpen(card);
       refresh();
     });
     closeBtn?.addEventListener("click", () => {
-      card.classList.add("hidden");
-      card.hidden = true;
+      animateClose(card, () => {
+        card.hidden = true;
+      });
     });
     cur?.addEventListener("input", refresh);
     tgt?.addEventListener("input", refresh);
@@ -794,8 +997,9 @@
       if (!expInput || !Number.isFinite(xp) || xp < 0) return;
       expInput.value = formatCommas(String(Math.trunc(xp)));
       syncFarmNumField(expInput, { silent: true });
-      card.classList.add("hidden");
-      card.hidden = true;
+      animateClose(card, () => {
+        card.hidden = true;
+      });
       setStatus($("farm-status"), "ใส่ XP จากเครื่องคิดเลขแล้ว", "ok");
     });
   }
@@ -849,18 +1053,26 @@
     }
   }
 
+  function hasDevPlayCreds() {
+    const mail = ($("dp-acct-mail")?.value || "").trim();
+    const secret = $("dp-acct-secret")?.value || "";
+    return !!(mail && secret);
+  }
+
   function updateFarmAvailability() {
     const btn = $("farm-btn");
     const peekBtn = $("peek-btn");
     const empty = !hasTokens();
     const peekCdLeft = peekCooldownRemaining();
+    const credsReady = hasDevPlayCreds();
+    const peekWaiting = farmRunning || peekRunning || peekCdLeft > 0;
 
     if (btn && !farmRunning) {
       // Keep clickable when empty so user can reopen the fill-tokens modal
       btn.disabled = peekRunning;
     }
     if (peekBtn) {
-      peekBtn.disabled = farmRunning || peekRunning || peekCdLeft > 0;
+      peekBtn.disabled = peekWaiting || !credsReady;
     }
     setFarmInputsLocked(empty);
     paintPeekCooldown();
@@ -873,50 +1085,160 @@
     }
   }
 
-  function syncTopupPanel(opts = {}) {
-    const panel = $("topup");
+  function lockBodyScroll(lockClass) {
+    const sb =
+      window.innerWidth - document.documentElement.clientWidth;
+    document.documentElement.style.setProperty(
+      "--scrollbar-compensation",
+      Math.max(0, sb) + "px"
+    );
+    document.body.classList.add(lockClass);
+  }
+
+  function unlockBodyScroll(lockClass) {
+    document.body.classList.remove(lockClass);
+    if (
+      !document.body.classList.contains("vault-open") &&
+      !document.body.classList.contains("tutorial-open")
+    ) {
+      document.documentElement.style.removeProperty("--scrollbar-compensation");
+    }
+  }
+
+  function openVaultModal(opts = {}) {
+    const root = $("vault-modal");
     const toggle = $("topup-toggle");
+    if (!root) return;
+    vaultOpen = true;
+    animateOpen(root);
+    lockBodyScroll("vault-open");
+    if (toggle) toggle.setAttribute("aria-expanded", "true");
+    syncVaultDoorCopy();
+    if (opts.focusVoucher) {
+      const voucher = $("topup-voucher");
+      if (voucher) setTimeout(() => voucher.focus(), 220);
+    }
+  }
+
+  function closeVaultModal() {
+    const root = $("vault-modal");
+    const toggle = $("topup-toggle");
+    if (!root) return;
+    vaultOpen = false;
+    unlockBodyScroll("vault-open");
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+    syncVaultDoorCopy();
+    animateClose(root);
+  }
+
+  function syncVaultDoorCopy() {
     const title = $("topup-title");
     const hint = $("topup-head-hint");
-    if (!panel || !toggle) return;
-
     const empty = !hasTokens();
-    const forceOpen = !!opts.forceOpen;
+    // Keep door-card copy stable while modal is open — changing text caused layout jump.
+    // Modal has its own #vault-modal-title; door only reflects empty vs ready CTA.
+    if (title) {
+      title.textContent = empty ? "ตู้เติมโทเค็น" : "เติมโทเค็น";
+    }
+    if (hint) {
+      hint.textContent = empty
+        ? "เลือกแท็บ → สร้างซอง → วางลิงก์"
+        : "แตะเพื่อเปิดตู้";
+    }
+  }
 
-    if (empty) {
-      topupExpandedPref = null;
-      panel.classList.remove("is-collapsed");
-      panel.classList.add("is-locked-open");
-      panel.dataset.collapsed = "0";
-      toggle.setAttribute("aria-expanded", "true");
-      toggle.setAttribute("aria-disabled", "true");
-      if (title) title.textContent = "ตู้เติมโทเค็น";
-      if (hint) {
-        hint.textContent =
-          "เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม";
-      }
+  function syncTopupPanel(opts = {}) {
+    const toggle = $("topup-toggle");
+    if (!toggle) return;
+
+    const forceOpen = !!opts.forceOpen;
+    if (forceOpen) {
+      openVaultModal({ focusVoucher: !!opts.focusVoucher });
       return;
     }
 
-    panel.classList.remove("is-locked-open");
-    toggle.setAttribute("aria-disabled", "false");
+    syncVaultDoorCopy();
+  }
 
-    if (forceOpen) topupExpandedPref = true;
-    const expanded =
-      topupExpandedPref === null ? false : !!topupExpandedPref;
+  function paintWalletTutorial() {
+    const step = WALLET_TUTORIAL_STEPS[walletTutorialStep];
+    if (!step) return;
+    const img = $("wallet-tutorial-img");
+    const media = $("wallet-tutorial-media");
+    const caption = $("wallet-tutorial-caption");
+    const progress = $("wallet-tutorial-progress");
+    const prev = $("wallet-tutorial-prev");
+    const next = $("wallet-tutorial-next");
+    const dots = $("wallet-tutorial-dots");
 
-    panel.classList.toggle("is-collapsed", !expanded);
-    panel.dataset.collapsed = expanded ? "0" : "1";
-    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
-
-    if (title) {
-      title.textContent = expanded ? "ตู้เติมโทเค็น" : "เติมโทเค็น";
+    if (img) {
+      img.classList.add("is-switching");
+      if (caption) caption.classList.add("is-switching");
+      img.src = step.img;
+      img.alt =
+        "ขั้นตอนที่ " +
+        (walletTutorialStep + 1) +
+        " จาก " +
+        WALLET_TUTORIAL_STEPS.length;
+      requestAnimationFrame(() => {
+        img.classList.remove("is-switching");
+        if (caption) caption.classList.remove("is-switching");
+      });
     }
-    if (hint) {
-      hint.textContent = expanded
-        ? "เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม"
-        : "แตะเพื่อเปิดตู้";
+    if (media) {
+      media.classList.toggle("is-wide", step.shape === "wide");
+      media.classList.toggle("is-tall", step.shape === "tall");
+      media.scrollTop = 0;
     }
+    if (caption) caption.textContent = step.caption;
+    if (progress) {
+      progress.textContent =
+        walletTutorialStep + 1 + " / " + WALLET_TUTORIAL_STEPS.length;
+    }
+    if (prev) prev.disabled = walletTutorialStep <= 0;
+    if (next) {
+      const last = walletTutorialStep >= WALLET_TUTORIAL_STEPS.length - 1;
+      next.textContent = last ? "ปิด" : "ถัดไป ›";
+    }
+    if (dots) {
+      if (dots.childElementCount !== WALLET_TUTORIAL_STEPS.length) {
+        dots.innerHTML = "";
+        WALLET_TUTORIAL_STEPS.forEach((_, i) => {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.className = "wallet-tutorial-dot";
+          b.setAttribute("aria-label", "ไปขั้นตอนที่ " + (i + 1));
+          b.addEventListener("click", () => {
+            walletTutorialStep = i;
+            paintWalletTutorial();
+          });
+          dots.appendChild(b);
+        });
+      }
+      Array.from(dots.children).forEach((el, i) => {
+        el.classList.toggle("is-active", i === walletTutorialStep);
+        el.setAttribute(
+          "aria-current",
+          i === walletTutorialStep ? "step" : "false"
+        );
+      });
+    }
+  }
+
+  function openWalletTutorial() {
+    const root = $("wallet-tutorial");
+    if (!root) return;
+    walletTutorialStep = 0;
+    paintWalletTutorial();
+    animateOpen(root);
+    lockBodyScroll("tutorial-open");
+  }
+
+  function closeWalletTutorial() {
+    const root = $("wallet-tutorial");
+    if (!root) return;
+    unlockBodyScroll("tutorial-open");
+    animateClose(root);
   }
 
   function peekCooldownRemaining() {
@@ -1117,12 +1439,14 @@
   }
 
   function flashTopupDoor() {
+    const door = $("topup-toggle");
     const panel = $("topup");
-    if (!panel) return;
-    panel.classList.remove("is-flash");
-    void panel.offsetWidth;
-    panel.classList.add("is-flash");
-    setTimeout(() => panel.classList.remove("is-flash"), 1000);
+    const target = door || panel;
+    if (!target) return;
+    target.classList.remove("is-flash");
+    void target.offsetWidth;
+    target.classList.add("is-flash");
+    setTimeout(() => target.classList.remove("is-flash"), 1000);
   }
 
   function formatTopupDay(iso) {
@@ -1211,19 +1535,42 @@
     if (!root) return;
     root.innerHTML = "";
     const list = topupPackages.length ? topupPackages : fallbackTopupPackages();
+    const ROV_RANKS = [
+      "bronze",
+      "silver",
+      "gold",
+      "platinum",
+      "diamond",
+      "commander",
+      "conqueror",
+      "glorious",
+    ];
+    let promoIdx = 0;
     list.forEach((pkg) => {
       const selected = pkg.tokens === selectedTopupTokens;
       const promo = pkg.save_baht > 0 || pkg.promo;
+      const rank = promo
+        ? ROV_RANKS[Math.min(promoIdx, ROV_RANKS.length - 1)]
+        : null;
+      if (promo) promoIdx += 1;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className =
         "vault-ingot" +
         (selected ? " is-selected" : "") +
-        (promo ? " is-promo" : "");
+        (promo ? " is-promo" : "") +
+        (rank ? " rank-" + rank : " rank-base");
       btn.setAttribute("role", "option");
       btn.setAttribute("aria-selected", selected ? "true" : "false");
+      let badgeHtml = "";
+      if (promo && rank) {
+        badgeHtml =
+          '<span class="vault-ingot-badge rank-' +
+          rank +
+          '" title="คุ้ม">คุ้ม</span>';
+      }
       btn.innerHTML =
-        (promo ? '<span class="vault-ingot-badge">คุ้ม</span>' : "") +
+        badgeHtml +
         '<span class="vault-ingot-amt">' +
         escapeHtml(pkg.tokens) +
         "</span>" +
@@ -1424,11 +1771,18 @@
       return;
     }
     if (ok) {
-      sub.textContent = "เสร็จแล้ว — กด × เพื่อปิด";
+      sub.textContent = "สำเร็จแล้ว — กำลังเปิดสรุปผล";
       sub.classList.add("is-done");
     } else {
       sub.textContent = "ไม่สำเร็จ — กด × เพื่อปิด";
       sub.classList.add("is-fail");
+    }
+  }
+
+  function clearRunStatusAutoClose() {
+    if (runStatusAutoCloseTimer) {
+      clearTimeout(runStatusAutoCloseTimer);
+      runStatusAutoCloseTimer = null;
     }
   }
 
@@ -1441,8 +1795,8 @@
   function openRunStatusPopup(running) {
     const root = $("run-status-root");
     if (!root) return;
-    root.classList.remove("hidden");
-    root.setAttribute("aria-hidden", "false");
+    clearRunStatusAutoClose();
+    animateOpen(root);
     setRunStatusClosable(!running);
     if (running) {
       pendingAfterRunStatus = null;
@@ -1452,27 +1806,31 @@
 
   function closeRunStatusPopup() {
     if (!runStatusClosable) return;
+    clearRunStatusAutoClose();
     const root = $("run-status-root");
     if (!root) return;
-    root.classList.add("hidden");
-    root.setAttribute("aria-hidden", "true");
     const cb = pendingAfterRunStatus;
     pendingAfterRunStatus = null;
-    if (typeof cb === "function") cb();
+    animateClose(root, () => {
+      if (typeof cb === "function") cb();
+    });
   }
 
   function forceCloseRunStatusPopup() {
+    clearRunStatusAutoClose();
     runStatusClosable = true;
     pendingAfterRunStatus = null;
     const root = $("run-status-root");
-    if (root) {
-      root.classList.add("hidden");
-      root.setAttribute("aria-hidden", "true");
-    }
-    const btn = $("run-status-close");
-    if (btn) btn.disabled = true;
-    runStatusClosable = false;
-    setRunStatusSubtitle(false);
+    animateClose(
+      root,
+      () => {
+        const btn = $("run-status-close");
+        if (btn) btn.disabled = true;
+        runStatusClosable = false;
+        setRunStatusSubtitle(false);
+      },
+      { instant: true }
+    );
   }
 
   function freshPipeline() {
@@ -1485,7 +1843,6 @@
     if (!pipelineState) pipelineState = freshPipeline();
     const max = PIPELINE_STEPS.length - 1;
     const next = Math.max(0, Math.min(idx, max));
-    // Mark all before active as ok; active as pending; after as idle
     for (let i = 0; i < PIPELINE_STEPS.length; i++) {
       const id = PIPELINE_STEPS[i].id;
       if (i < next) pipelineState.kinds[id] = "ok";
@@ -1515,42 +1872,13 @@
     renderPipeline();
   }
 
-  function finalizePipelineSuccess(result) {
+  function finalizePipelineSuccess() {
     if (!pipelineState) pipelineState = freshPipeline();
     for (const s of PIPELINE_STEPS) {
       pipelineState.kinds[s.id] = "ok";
     }
     pipelineState.activeIdx = PIPELINE_STEPS.length - 1;
-    const extras = [];
-    const summary = result?.reward_summary;
-    const reward = result?.reward;
-    const coinDelta = summary?.coin_delta ?? reward?.coin?.delta;
-    const coinTotal = summary?.coin_total ?? reward?.coin?.total;
-    const expDelta = summary?.exp_delta ?? reward?.exp?.delta;
-    const expTotal = summary?.exp_total ?? reward?.exp?.total;
-    const bits = [];
-    if (coinDelta != null && coinDelta !== "") bits.push("เหรียญ +" + formatNumTh(coinDelta));
-    if (expDelta != null && expDelta !== "") bits.push("XP +" + formatNumTh(expDelta));
-    if (bits.length) extras.push({ text: "ได้รับ: " + bits.join(" · "), kind: "ok" });
-    if (coinTotal != null && coinTotal !== "") {
-      extras.push({
-        text: "เหรียญในเกมหลังเคลม: " + formatNumTh(coinTotal),
-        kind: "ok",
-      });
-    }
-    if (expTotal != null && expTotal !== "") {
-      extras.push({
-        text: "XP รวมหลังเคลม: " + formatNumTh(expTotal),
-        kind: "ok",
-      });
-    }
-    const nick = summary?.nickname || result?.account?.nickname;
-    if (nick) extras.push({ text: "บัญชีเกม: " + nick, kind: "ok" });
-    extras.push({
-      text: "ถ้าในเกมยังไม่เห็น ให้ปิดเกมแล้วเข้าใหม่",
-      kind: "ok",
-    });
-    pipelineState.extras = extras;
+    pipelineState.extras = [];
     renderPipeline();
   }
 
@@ -1592,46 +1920,98 @@
     if (hardErr) markPipelineError(hardErr.id, hardErr.msg);
   }
 
+  function stepLabel(step, kind) {
+    if (step.id === "done" && kind === "ok") return "สำเร็จแล้ว";
+    if (step.id === "done" && kind === "pending") return "กำลังสรุปผล…";
+    if (kind === "pending") return "กำลัง" + step.label + "…";
+    if (kind === "ok") {
+      if (step.id === "login") return "เข้าสู่ระบบเกมแล้ว";
+      if (step.id === "clear") return "เคลียร์รางวัลค้างแล้ว";
+      if (step.id === "match") return "จับคู่สำเร็จ";
+      if (step.id === "run") return "จบการวิ่งแล้ว";
+      if (step.id === "claim") return "รับรางวัลเรียบร้อย";
+      return step.label + "แล้ว";
+    }
+    if (kind === "err") return step.label + "ไม่สำเร็จ";
+    return step.label;
+  }
+
   function renderPipeline() {
     const root = $("run-status-root");
+    const hero = $("run-status-hero");
+    const labelEl = $("run-status-hero-label");
+    const hintEl = $("run-status-hero-hint");
+    const dotsEl = $("run-status-dots");
     const list = $("farm-log");
-    if (!list) return;
     if (root) {
       root.classList.remove("hidden");
       root.setAttribute("aria-hidden", "false");
     }
-    list.innerHTML = "";
     if (!pipelineState) return;
 
-    for (const s of PIPELINE_STEPS) {
-      const kind = pipelineState.kinds[s.id] || "idle";
-      if (kind === "idle") continue;
-      const li = document.createElement("li");
-      const label =
-        kind === "pending"
-          ? "กำลัง" + s.label + "…"
-          : kind === "ok"
-            ? s.label + "แล้ว"
-            : s.label + "ไม่สำเร็จ";
-      // Special polish for done step
-      if (s.id === "done" && kind === "ok") li.textContent = "สำเร็จแล้ว";
-      else if (s.id === "done" && kind === "pending") li.textContent = "กำลังสรุปผล…";
-      else if (s.id === "login" && kind === "ok") li.textContent = "เข้าสู่ระบบเกมแล้ว";
-      else if (s.id === "clear" && kind === "ok") li.textContent = "เคลียร์รางวัลค้างแล้ว";
-      else if (s.id === "match" && kind === "ok") li.textContent = "จับคู่สำเร็จ";
-      else if (s.id === "run" && kind === "ok") li.textContent = "จบการวิ่งแล้ว";
-      else if (s.id === "claim" && kind === "ok") li.textContent = "รับรางวัลเรียบร้อย";
-      else li.textContent = label;
-      li.classList.add(kind === "pending" ? "pending" : kind);
-      list.appendChild(li);
+    let focusIdx = pipelineState.activeIdx || 0;
+    let focusKind = pipelineState.kinds[PIPELINE_STEPS[focusIdx]?.id] || "pending";
+    const errIdx = PIPELINE_STEPS.findIndex((s) => pipelineState.kinds[s.id] === "err");
+    if (errIdx >= 0) {
+      focusIdx = errIdx;
+      focusKind = "err";
+    } else if (PIPELINE_STEPS.every((s) => pipelineState.kinds[s.id] === "ok")) {
+      focusIdx = PIPELINE_STEPS.length - 1;
+      focusKind = "ok";
+    } else {
+      const pendingIdx = PIPELINE_STEPS.findIndex(
+        (s) => pipelineState.kinds[s.id] === "pending"
+      );
+      if (pendingIdx >= 0) {
+        focusIdx = pendingIdx;
+        focusKind = "pending";
+      }
     }
-    for (const extra of pipelineState.extras || []) {
-      const li = document.createElement("li");
-      li.textContent = extra.text;
-      li.classList.add(extra.kind || "ok");
-      list.appendChild(li);
+
+    const step = PIPELINE_STEPS[focusIdx] || PIPELINE_STEPS[0];
+    if (hero) hero.dataset.state = focusKind;
+    if (labelEl) labelEl.textContent = stepLabel(step, focusKind);
+    if (hintEl) {
+      if (focusKind === "pending") {
+        hintEl.textContent = "กรุณารอสักครู่ อย่าปิดหน้านี้";
+      } else if (focusKind === "ok") {
+        hintEl.textContent = "กำลังเปิดสรุปผลการฟาร์ม…";
+      } else {
+        hintEl.textContent = "อ่านรายละเอียดด้านล่างแล้วกด × เพื่อปิด";
+      }
     }
-    list.scrollTop = list.scrollHeight;
+
+    if (dotsEl) {
+      dotsEl.replaceChildren();
+      PIPELINE_STEPS.forEach((s, i) => {
+        const kind = pipelineState.kinds[s.id] || "idle";
+        const dot = document.createElement("span");
+        dot.className = "run-status-dot";
+        if (kind === "ok") dot.classList.add("is-ok");
+        else if (kind === "pending") dot.classList.add("is-pending");
+        else if (kind === "err") dot.classList.add("is-err");
+        if (i === focusIdx && kind !== "idle") {
+          /* already classed */
+        }
+        dotsEl.appendChild(dot);
+      });
+    }
+
+    if (list) {
+      list.replaceChildren();
+      const extras = pipelineState.extras || [];
+      if (!extras.length) {
+        list.classList.add("hidden");
+      } else {
+        list.classList.remove("hidden");
+        for (const extra of extras) {
+          const li = document.createElement("li");
+          li.textContent = extra.text;
+          li.classList.add(extra.kind || "ok");
+          list.appendChild(li);
+        }
+      }
+    }
   }
 
   function clearStageTimer() {
@@ -1643,6 +2023,7 @@
 
   function startLiveStages() {
     clearStageTimer();
+    clearRunStatusAutoClose();
     pipelineState = freshPipeline();
     openRunStatusPopup(true);
     setPipelineActive(0);
@@ -1661,12 +2042,32 @@
     }, 5000);
   }
 
+  function scheduleSuccessHandoff() {
+    clearRunStatusAutoClose();
+    setRunStatusClosable(true);
+    setRunStatusSubtitle(true, true);
+    const delay = prefersReducedMotion() ? 40 : 520;
+    runStatusAutoCloseTimer = setTimeout(() => {
+      runStatusAutoCloseTimer = null;
+      if (!runStatusClosable) return;
+      const root = $("run-status-root");
+      if (!root || root.classList.contains("hidden")) {
+        const cb = pendingAfterRunStatus;
+        pendingAfterRunStatus = null;
+        if (typeof cb === "function") cb();
+        return;
+      }
+      closeRunStatusPopup();
+    }, delay);
+  }
+
   function buildFinalPipeline(rawLogs, result, ok) {
     clearStageTimer();
     pipelineState = freshPipeline();
     if (ok) {
       applyLogsToPipeline(rawLogs);
-      finalizePipelineSuccess(result);
+      finalizePipelineSuccess();
+      scheduleSuccessHandoff();
     } else {
       applyLogsToPipeline(rawLogs);
       const errCode = String(result?.error || "");
@@ -1687,9 +2088,9 @@
       } else {
         renderPipeline();
       }
+      setRunStatusClosable(true);
+      setRunStatusSubtitle(true, false);
     }
-    setRunStatusClosable(true);
-    setRunStatusSubtitle(true, !!ok);
   }
 
   function farmErrorMessage(result, fallback) {
@@ -1718,11 +2119,21 @@
     const secret = $("dp-acct-secret");
     armReadonlyUnlock(mail);
     armReadonlyUnlock(secret);
+    if (!mail?.dataset.peekSyncBound) {
+      const syncPeek = () => updateFarmAvailability();
+      mail?.addEventListener("input", syncPeek);
+      mail?.addEventListener("change", syncPeek);
+      secret?.addEventListener("input", syncPeek);
+      secret?.addEventListener("change", syncPeek);
+      if (mail) mail.dataset.peekSyncBound = "1";
+      if (secret) secret.dataset.peekSyncBound = "1";
+    }
     setTimeout(() => {
       if (mail && document.activeElement !== mail) mail.value = "";
       if (secret && document.activeElement !== secret) secret.value = "";
       if (mail) mail.setAttribute("readonly", "readonly");
       if (secret) secret.setAttribute("readonly", "readonly");
+      updateFarmAvailability();
     }, 300);
   }
 
@@ -1732,10 +2143,11 @@
       return;
     }
 
+    const score = parseFarmNum($("farm-score").value);
     const coin = parseFarmNum($("farm-coin").value);
     const exp = parseFarmNum($("farm-exp").value);
-    if (coin > FARM_SOFT_CAP_COIN || exp > FARM_SOFT_CAP_EXP) {
-      showErrorModal(ERR_TH.value_capped, "ค่าสูงเกินไป");
+    if (score > INT32_MAX || coin > INT32_MAX || exp > INT32_MAX) {
+      showErrorModal(ERR_TH.value_capped, "ตัวเลขเกินกำหนด");
       return;
     }
 
@@ -1753,7 +2165,7 @@
         body: {
           email: $("dp-acct-mail").value.trim(),
           password: $("dp-acct-secret").value,
-          score: parseFarmNum($("farm-score").value),
+          score,
           coin,
           exp,
         },
@@ -1767,7 +2179,6 @@
       }
 
       const result = data.result || data;
-      buildFinalPipeline(data.logs || data.steps || [], result, !!data.ok);
 
       if (data.ok) {
         setStatus($("farm-status"), "ฟาร์มสำเร็จ · หัก 1 โทเค็น", "ok");
@@ -1788,10 +2199,12 @@
               data.tokens_after ?? data.token_balance ?? tokenBalance()
             ),
           });
+        buildFinalPipeline(data.logs || data.steps || [], result, true);
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
         loadFarmHistory().catch(() => {});
       } else {
+        buildFinalPipeline(data.logs || data.steps || [], result, false);
         let msg = farmErrorMessage(result, "ฟาร์มไม่สำเร็จ");
         if (/corrupt_pending/i.test(String(result?.error || data.error || ""))) {
           msg = ERR_TH.corrupt_pending;
@@ -1812,7 +2225,7 @@
         setStatus($("farm-status"), ERR_TH.maintenance, "err");
       } else if (e.status === 400 && /value_capped/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
-        showErrorModal(ERR_TH.value_capped, "ค่าสูงเกินไป");
+        showErrorModal(ERR_TH.value_capped, "ตัวเลขเกินกำหนด");
         setStatus($("farm-status"), ERR_TH.value_capped, "err");
       } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
@@ -1844,6 +2257,8 @@
 
   /* ---------- Auth bootstrap ---------- */
   async function bootstrap() {
+    initBgFloaters();
+
     const rememberEl = $("remember-me");
     if (rememberEl) {
       const pref = localStorage.getItem(REMEMBER_KEY);
@@ -2040,11 +2455,44 @@
   });
 
   $("topup-toggle")?.addEventListener("click", () => {
-    if (!hasTokens()) return;
-    const panel = $("topup");
-    const willExpand = panel?.classList.contains("is-collapsed");
-    topupExpandedPref = !!willExpand;
-    syncTopupPanel();
+    if (vaultOpen) closeVaultModal();
+    else openVaultModal();
+  });
+
+  document.querySelectorAll("[data-vault-close]").forEach((el) => {
+    el.addEventListener("click", () => closeVaultModal());
+  });
+
+  $("wallet-tutorial-open")?.addEventListener("click", () => {
+    openWalletTutorial();
+  });
+
+  document.querySelectorAll("[data-tutorial-close]").forEach((el) => {
+    el.addEventListener("click", () => closeWalletTutorial());
+  });
+
+  $("wallet-tutorial-prev")?.addEventListener("click", () => {
+    if (walletTutorialStep <= 0) return;
+    walletTutorialStep -= 1;
+    paintWalletTutorial();
+  });
+
+  $("wallet-tutorial-next")?.addEventListener("click", () => {
+    if (walletTutorialStep >= WALLET_TUTORIAL_STEPS.length - 1) {
+      closeWalletTutorial();
+      return;
+    }
+    walletTutorialStep += 1;
+    paintWalletTutorial();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    if (!$("wallet-tutorial")?.classList.contains("hidden")) {
+      closeWalletTutorial();
+      return;
+    }
+    if (vaultOpen) closeVaultModal();
   });
 
   $("topup-copy-price")?.addEventListener("click", () => {
@@ -2133,13 +2581,10 @@
       );
       showTopupSuccessModal(data);
       loadTopupHistory().catch(() => {});
-      // briefly keep vault open then collapse per balance rules
-      syncTopupPanel({ forceOpen: true });
+      // keep vault open briefly so user sees success, then close if they have tokens
+      openVaultModal();
       setTimeout(() => {
-        if (hasTokens()) {
-          topupExpandedPref = false;
-          syncTopupPanel();
-        }
+        if (hasTokens()) closeVaultModal();
       }, 1800);
     } catch (e) {
       if (/session_replaced/i.test(String(e.message || ""))) return;
