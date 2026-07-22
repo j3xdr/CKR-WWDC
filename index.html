@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260722-empty-close" />
+  <link rel="stylesheet" href="css/styles.css?v=20260722-vault2" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -46,7 +46,7 @@
           <img class="hero-logo" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
           <h1 class="hero-title">CKR WWDC</h1>
           <p class="hero-lead">ฟาร์มคุกกี้รันง่าย ๆ · ใช้ 1 โทเค็นต่อการวิ่ง</p>
-          <p class="hero-note">สมัครฟรีได้เลย · โทเค็นเริ่มต้น 0 (เติมกับแอดมิน)</p>
+          <p class="hero-note">สมัครฟรีได้เลย · เติมโทเค็นอัตโนมัติด้วยซอง TrueMoney</p>
         </div>
 
         <div class="panel login-panel">
@@ -184,6 +184,76 @@
         <div class="tip-banner">
           <img src="assets/tr_ga170.png" alt="" width="36" height="36" />
           <p>ใส่บัญชี <strong>DevPlay ของเกม</strong> เท่านั้น — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
+        </div>
+
+        <div class="panel topup-panel coin-vault" id="topup" data-collapsed="0">
+          <button
+            type="button"
+            class="topup-head vault-door"
+            id="topup-toggle"
+            aria-expanded="true"
+            aria-controls="topup-body"
+          >
+            <div class="vault-door-main">
+              <div class="vault-coin-seal" aria-hidden="true">
+                <img src="assets/coin.png" alt="" width="48" height="48" />
+              </div>
+              <div class="vault-door-copy">
+                <p class="vault-eyebrow">Coin Vault</p>
+                <h2 class="panel-title" id="topup-title">ตู้เติมโทเค็น</h2>
+                <p class="panel-hint" id="topup-head-hint">
+                  เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม
+                </p>
+              </div>
+            </div>
+            <span class="topup-head-meta">
+              <span class="pill vault-pill">Secure</span>
+              <span class="topup-chevron" aria-hidden="true"></span>
+            </span>
+          </button>
+          <div class="topup-body" id="topup-body">
+            <div class="vault-chamber">
+              <div class="vault-chamber-frame">
+                <p class="vault-chamber-label">เลือกจำนวนโทเค็น</p>
+                <div
+                  id="topup-packages"
+                  class="vault-ingot-grid"
+                  role="listbox"
+                  aria-label="แพ็กโทเค็น"
+                ></div>
+              </div>
+
+              <div class="vault-deposit">
+                <div class="vault-selected" id="topup-selected" aria-live="polite">
+                  <img src="assets/coin.png" alt="" width="26" height="26" />
+                  <div>
+                    <p class="vault-selected-label">ต้องสร้างซองยอด</p>
+                    <p class="vault-selected-value" id="topup-selected-text">100฿ · 1 Token</p>
+                  </div>
+                </div>
+                <label class="field vault-voucher-field">
+                  <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
+                  <input
+                    id="topup-voucher"
+                    type="text"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="https://gift.truemoney.com/campaign/?v=..."
+                  />
+                </label>
+                <button type="button" class="btn btn-run vault-confirm" id="topup-btn">
+                  <img src="assets/coin.png" alt="" width="22" height="22" />
+                  เปิดตู้ · เติมโทเค็น
+                </button>
+                <p id="topup-status" class="status" role="status"></p>
+                <p class="muted topup-note">
+                  ยอดซองต้องตรงราคาแพ็กเป๊ะ · ซองต้องสร้างจากเบอร์อื่น (ลูกค้า)
+                  ไม่ใช่เบอร์วอลเล็ตร้าน · สำรอง:
+                  <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="panel oven-panel" id="run">
@@ -391,6 +461,9 @@
   <div id="modal-root" class="modal-root hidden" aria-hidden="true">
     <div class="modal-backdrop"></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <button type="button" id="modal-close" class="modal-close" aria-label="ปิด">
+        ×
+      </button>
       <img id="modal-icon" class="modal-icon" src="assets/coin.png" alt="" width="56" height="56" />
       <h2 id="modal-title" class="modal-title">—</h2>
       <div id="modal-body" class="modal-body">—</div>
@@ -398,8 +471,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260722-empty-close"></script>
-  <script src="js/level_xp.js?v=20260722-empty-close"></script>
-  <script src="js/app.js?v=20260722-empty-close"></script>
+  <script src="js/config.js?v=20260722-vault2"></script>
+  <script src="js/level_xp.js?v=20260722-vault2"></script>
+  <script src="js/app.js?v=20260722-vault2"></script>
 </body>
 </html>

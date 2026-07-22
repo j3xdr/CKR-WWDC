@@ -79,8 +79,23 @@ User ขอ: ดู coins/XP/nickname **ก่อน** กดฟาร์ม
 
 ---
 
+## TrueMoney auto top-up (angpao)
+
+| Decision | Why |
+|----------|-----|
+| Redeem via gift.truemoney.com (tmn-voucher style Python client) | เติมอัตโนมัติโดยไม่รอแอดมิน |
+| Exact package amount only (1=100 … 10=600฿) | กันยอดซองไม่ตรง / ซองสุ่ม |
+| `topup_redemptions.voucher_id` unique + `admin_credit_tokens` | กันเติมซ้ำ + ledger เดิม |
+| Coin Vault UI + collapse when balance > 0 | UX พรีเมียม / ไม่รกตอนมียอด |
+| `TRUEWALLET_PHONE` on Render only | เบอร์รับเงินไม่ commit ใน repo |
+
+ดู `11-topup-angpao.md`
+
+---
+
 ## Explicit non-goals / deferred
 
 - Desktop exe PartyRun packaging (`exe_รอทำ`) — คนละสายงาน
 - Guest reroll / API-only gRPC unlock จาก transcript เก่า — ไม่ใช่ WWDC next task
 - Multi-instance farm workers — นอก Free plan
+- Official Pee Tong / bank balance API — นอกขอบเขตซองอั่งเปา

@@ -218,6 +218,10 @@
   let peekRunning = false;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
+  let selectedTopupTokens = 1;
+  let topupPackages = [];
+  let topupBusy = false;
+  let topupExpandedPref = null; // null = use default; true/false when user has tokens
   let lastGate = null;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
@@ -230,6 +234,20 @@
       "ต้องมีโทเค็นถึงจะดูสถานะบัญชีเกมได้ (ไม่หักโทเค็น)",
     peek_rate_limited: "ดูสถานะถี่เกินไป รอให้ครบเวลาก่อน",
     peek_failed: "ดูสถานะบัญชีเกมไม่สำเร็จ ลองใหม่",
+    topup_rate_limited: "เติมถี่เกินไป รอสักครู่แล้วลองใหม่",
+    topup_not_configured: "ระบบเติมเงินยังไม่พร้อม ลองใหม่ภายหลัง",
+    invalid_package: "แพ็กที่เลือกไม่ถูกต้อง",
+    voucher_already_used: "ซองนี้ถูกใช้เติมไปแล้ว",
+    CONDITION_NOT_MET: "ยอดซองไม่ตรงกับแพ็กที่เลือก",
+    VOUCHER_OUT_OF_STOCK: "ซองนี้ถูกใช้หมดแล้ว",
+    VOUCHER_NOT_FOUND: "ไม่พบซองนี้",
+    VOUCHER_EXPIRED: "ซองหมดอายุแล้ว",
+    CANNOT_GET_OWN_VOUCHER:
+      "รับซองของตัวเองไม่ได้ — ต้องให้ลูกค้า (เบอร์อื่น) สร้างซองแล้วส่งลิงก์มา",
+    TARGET_USER_REDEEMED: "เบอร์นี้รับซองนี้ไปแล้ว",
+    INVALID_VOUCHER_CODE: "ลิงก์หรือโค้ดซองไม่ถูกต้อง",
+    MAINTENANCE: "ระบบซองอั่งเปาปิดปรับปรุงชั่วคราว",
+    topup_credit_failed: "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -259,6 +277,9 @@
     const s = String(raw);
     for (const [k, v] of Object.entries(ERR_TH)) {
       if (s.includes(k)) return v;
+    }
+    if (/Cannot redeem your voucher by yourself|own voucher/i.test(s)) {
+      return ERR_TH.CANNOT_GET_OWN_VOUCHER;
     }
     if (/LOGIN FAILED|wrong email|password|DevPlay/i.test(s)) {
       return ERR_TH.login_failed;
@@ -342,6 +363,11 @@
     }
     modalIcon.src = icon || "assets/coin.png";
     modalRoot.classList.toggle("locked", !!locked);
+    const closeBtn = $("modal-close");
+    if (closeBtn) {
+      closeBtn.classList.toggle("is-hidden", !!locked);
+      closeBtn.disabled = !!locked;
+    }
     modalRoot.classList.remove("hidden");
     modalRoot.setAttribute("aria-hidden", "false");
   }
@@ -371,34 +397,41 @@
     clearModalActions();
     openModal({
       mode: "empty",
-      title: "coins หมด กรุณาเติม",
-      body: "โทเค็นหมดแล้ว ไม่สามารถวิ่งฟาร์มได้ จนกว่าจะเติมโทเค็นผ่านแอดมิน",
+      title: "โทเค็นหมดแล้ว",
+      body: "เติมเองได้ทันทีบนหน้านี้ — เลือกแพ็กด้านบน แล้ววางลิงก์ซอง TrueMoney ไม่ต้องรอแอดมิน",
       icon: "assets/coin.png",
       locked: false,
     });
     modalActions.appendChild(
-      makeBtn("ติดต่อแอดมินทาง Telegram", "btn-telegram", null, {
-        href: TELEGRAM_URL,
-        icon: "assets/telegram.png",
+      makeBtn("ไปเติมโทเค็น", "btn-candy", () => {
+        closeModal();
+        syncTopupPanel({ forceOpen: true });
+        const panel = $("topup");
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth", block: "start" });
+          const voucher = $("topup-voucher");
+          if (voucher) setTimeout(() => voucher.focus(), 350);
+        }
       })
     );
     modalActions.appendChild(
-      makeBtn("ตรวจสอบยอดโทเค็นอีกครั้ง", "btn-ghost btn-wide", async () => {
+      makeBtn("ตรวจสอบยอดอีกครั้ง", "btn-run btn-wide", async () => {
         try {
           await refreshMe();
           if (hasTokens()) {
             forceCloseModal();
             setStatus($("farm-status"), "เติมโทเค็นแล้ว พร้อมวิ่งฟาร์ม", "ok");
           } else {
-            setStatus($("farm-status"), "ยังมียอดเป็น 0 — รอแอดมินเติม", "err");
+            setStatus(
+              $("farm-status"),
+              "ยังมียอดเป็น 0 — เติมผ่านแผงเติมโทเค็นด้านบนได้เลย",
+              "err"
+            );
           }
         } catch (_) {
           setStatus($("farm-status"), "ตรวจยอดไม่สำเร็จ ลองใหม่", "err");
         }
       })
-    );
-    modalActions.appendChild(
-      makeBtn("ปิด", "btn-candy", () => closeModal())
     );
     startBalancePoll();
   }
@@ -699,11 +732,58 @@
     }
     setFarmInputsLocked(empty);
     paintPeekCooldown();
+    syncTopupPanel();
     if (empty && userView && !userView.classList.contains("hidden")) {
       if (modalMode !== "empty" && !emptyModalDismissed) showEmptyCoinsModal();
     } else if (!empty) {
       emptyModalDismissed = false;
       if (modalMode === "empty") forceCloseModal();
+    }
+  }
+
+  function syncTopupPanel(opts = {}) {
+    const panel = $("topup");
+    const toggle = $("topup-toggle");
+    const title = $("topup-title");
+    const hint = $("topup-head-hint");
+    if (!panel || !toggle) return;
+
+    const empty = !hasTokens();
+    const forceOpen = !!opts.forceOpen;
+
+    if (empty) {
+      topupExpandedPref = null;
+      panel.classList.remove("is-collapsed");
+      panel.classList.add("is-locked-open");
+      panel.dataset.collapsed = "0";
+      toggle.setAttribute("aria-expanded", "true");
+      toggle.setAttribute("aria-disabled", "true");
+      if (title) title.textContent = "ตู้เติมโทเค็น";
+      if (hint) {
+        hint.textContent =
+          "เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม";
+      }
+      return;
+    }
+
+    panel.classList.remove("is-locked-open");
+    toggle.setAttribute("aria-disabled", "false");
+
+    if (forceOpen) topupExpandedPref = true;
+    const expanded =
+      topupExpandedPref === null ? false : !!topupExpandedPref;
+
+    panel.classList.toggle("is-collapsed", !expanded);
+    panel.dataset.collapsed = expanded ? "0" : "1";
+    toggle.setAttribute("aria-expanded", expanded ? "true" : "false");
+
+    if (title) {
+      title.textContent = expanded ? "ตู้เติมโทเค็น" : "เติมโทเค็น";
+    }
+    if (hint) {
+      hint.textContent = expanded
+        ? "เลือกแท็บเหรียญ → สร้างซอง TrueMoney ตามราคา → วางลิงก์แล้วเติม"
+        : "แตะเพื่อเปิดตู้";
     }
   }
 
@@ -807,6 +887,115 @@
     );
   }
 
+  function fallbackTopupPackages() {
+    return [
+      { tokens: 1, price_baht: 100, save_baht: 0, promo: false },
+      { tokens: 2, price_baht: 200, save_baht: 0, promo: false },
+      { tokens: 3, price_baht: 270, save_baht: 30, promo: true },
+      { tokens: 4, price_baht: 340, save_baht: 60, promo: true },
+      { tokens: 5, price_baht: 400, save_baht: 100, promo: true },
+      { tokens: 6, price_baht: 450, save_baht: 150, promo: true },
+      { tokens: 7, price_baht: 490, save_baht: 210, promo: true },
+      { tokens: 8, price_baht: 520, save_baht: 280, promo: true },
+      { tokens: 9, price_baht: 560, save_baht: 340, promo: true },
+      { tokens: 10, price_baht: 600, save_baht: 400, promo: true },
+    ];
+  }
+
+  function getTopupPackage(tokens) {
+    const list = topupPackages.length ? topupPackages : fallbackTopupPackages();
+    return list.find((p) => p.tokens === tokens) || list[0] || null;
+  }
+
+  function paintTopupSelected() {
+    const el = $("topup-selected-text");
+    if (!el) return;
+    const pkg = getTopupPackage(selectedTopupTokens);
+    if (!pkg) {
+      el.textContent = "—";
+      return;
+    }
+    let text =
+      formatNumTh(pkg.price_baht) + "฿ · " + pkg.tokens + " Token";
+    if (pkg.save_baht > 0) {
+      text += " · คุ้ม " + formatNumTh(pkg.save_baht) + "฿";
+    }
+    el.textContent = text;
+  }
+
+  function renderTopupPackages() {
+    const root = $("topup-packages");
+    if (!root) return;
+    root.innerHTML = "";
+    const list = topupPackages.length ? topupPackages : fallbackTopupPackages();
+    list.forEach((pkg) => {
+      const selected = pkg.tokens === selectedTopupTokens;
+      const promo = pkg.save_baht > 0 || pkg.promo;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "vault-ingot" +
+        (selected ? " is-selected" : "") +
+        (promo ? " is-promo" : "");
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", selected ? "true" : "false");
+      btn.innerHTML =
+        (promo ? '<span class="vault-ingot-badge">คุ้ม</span>' : "") +
+        '<span class="vault-ingot-amt">' +
+        escapeHtml(pkg.tokens) +
+        "</span>" +
+        '<span class="vault-ingot-unit">Token</span>' +
+        '<span class="vault-ingot-price">' +
+        escapeHtml(formatNumTh(pkg.price_baht)) +
+        "฿</span>";
+      btn.addEventListener("click", () => {
+        selectedTopupTokens = pkg.tokens;
+        renderTopupPackages();
+      });
+      root.appendChild(btn);
+    });
+    paintTopupSelected();
+  }
+
+  async function loadTopupPackages() {
+    try {
+      const data = await api("/api/topup/packages");
+      topupPackages = Array.isArray(data.packages) ? data.packages : [];
+    } catch (_) {
+      topupPackages = fallbackTopupPackages();
+    }
+    if (!topupPackages.some((p) => p.tokens === selectedTopupTokens)) {
+      selectedTopupTokens = topupPackages[0]?.tokens || 1;
+    }
+    renderTopupPackages();
+  }
+
+  function showTopupSuccessModal(data) {
+    const rows = [
+      ["แพ็ก", escapeHtml(data.package_tokens) + " token"],
+      ["ยอดที่รับ", escapeHtml(formatNumTh(data.amount_baht)) + "฿"],
+      ["โทเค็นที่เติม", "+" + escapeHtml(data.tokens_credited)],
+      ["ยอดคงเหลือ", escapeHtml(data.token_balance)],
+    ];
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows
+        .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+        .join("") +
+      "</tbody></table>";
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: "เติมโทเค็นสำเร็จ",
+      bodyHtml: html,
+      icon: "assets/coin.png",
+      locked: false,
+    });
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
   function formatApiDetail(detail) {
     if (detail == null) return "";
     if (typeof detail === "string") return detail;
@@ -820,7 +1009,9 @@
       if (detail.code === "insufficient_tokens_for_peek") {
         return "insufficient_tokens_for_peek";
       }
-      return detail.msg || detail.message || detail.reason || detail.code || "request_failed";
+      // Prefer machine code so thError can map TMN / API codes
+      if (detail.code && typeof detail.code === "string") return detail.code;
+      return detail.msg || detail.message || detail.reason || "request_failed";
     }
     if (Array.isArray(detail)) {
       const parts = detail.map((item) => {
@@ -1347,6 +1538,7 @@
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
     setupXpCalculator();
+    loadTopupPackages();
 
     // Re-check balance when user returns from Telegram
     document.addEventListener("visibilitychange", async () => {
@@ -1523,6 +1715,64 @@
     showLogin();
   });
 
+  $("topup-toggle")?.addEventListener("click", () => {
+    if (!hasTokens()) return;
+    const panel = $("topup");
+    const willExpand = panel?.classList.contains("is-collapsed");
+    topupExpandedPref = !!willExpand;
+    syncTopupPanel();
+  });
+
+  $("topup-btn")?.addEventListener("click", async () => {
+    if (topupBusy || farmRunning || peekRunning) return;
+    const voucher = ($("topup-voucher")?.value || "").trim();
+    if (!voucher) {
+      showErrorModal("วางลิงก์หรือโค้ดซอง TrueMoney ก่อน", "ข้อมูลไม่ครบ");
+      return;
+    }
+    if (!accessToken) {
+      showErrorModal("กรุณาเข้าสู่ระบบก่อนเติมโทเค็น", "ต้องเข้าสู่ระบบ");
+      return;
+    }
+
+    topupBusy = true;
+    const btn = $("topup-btn");
+    if (btn) btn.disabled = true;
+    setStatus($("topup-status"), "กำลังตรวจสอบและรับซอง…", "muted");
+    try {
+      const data = await api("/api/topup/redeem", {
+        method: "POST",
+        body: {
+          voucher,
+          package_tokens: selectedTopupTokens,
+        },
+      });
+      if (typeof data.token_balance === "number") {
+        profile = profile || {};
+        profile.token_balance = data.token_balance;
+        paintProfile();
+      } else {
+        try {
+          await refreshMe();
+        } catch (_) {}
+      }
+      if ($("topup-voucher")) $("topup-voucher").value = "";
+      setStatus(
+        $("topup-status"),
+        "เติมสำเร็จ +" + data.tokens_credited + " token",
+        "ok"
+      );
+      showTopupSuccessModal(data);
+    } catch (e) {
+      const msg = thError(e.message) || "เติมโทเค็นไม่สำเร็จ";
+      setStatus($("topup-status"), msg, "err");
+      showErrorModal(msg, "เติมไม่สำเร็จ");
+    } finally {
+      topupBusy = false;
+      if (btn) btn.disabled = false;
+    }
+  });
+
   $("peek-btn")?.addEventListener("click", async () => {
     if (peekRunning || farmRunning) return;
     if (!hasTokens()) {
@@ -1630,6 +1880,10 @@
     ?.addEventListener("click", () => {
       if (runStatusClosable) closeRunStatusPopup();
     });
+
+  $("modal-close")?.addEventListener("click", () => {
+    if (!modalRoot.classList.contains("locked")) closeModal();
+  });
 
   modalRoot
     ?.querySelector(".modal-backdrop")

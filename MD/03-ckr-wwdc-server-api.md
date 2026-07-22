@@ -48,6 +48,8 @@ Admin endpoints require `profiles.role == "admin"`.
 | POST | `/api/auth/login` | no | username login |
 | POST | `/api/auth/register` | no | self-signup → JWT (0 tokens) |
 | GET | `/api/me` | JWT | profile + tokens |
+| GET | `/api/topup/packages` | no | package price table (1–10 tokens) |
+| POST | `/api/topup/redeem` | JWT | redeem TrueMoney angpao → credit tokens |
 | GET | `/api/farm/gate` | JWT | queue snapshot + `can_run` |
 | POST | `/api/farm/queue/join` | JWT | enqueue / activate turn |
 | POST | `/api/farm/run` | JWT | **consumes 1 token**, runs farm |

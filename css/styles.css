@@ -327,8 +327,8 @@ input {
 
 .panel-ribbon {
   position: absolute;
-  top: 10px;
-  right: 14px;
+  top: 88px;
+  right: 18px;
   width: 52px;
   z-index: 2;
   pointer-events: none;
@@ -801,6 +801,28 @@ input {
   width: 100%;
 }
 
+.btn-run.btn-wide {
+  width: 100%;
+}
+
+.btn-dark {
+  width: 100%;
+  background: linear-gradient(180deg, #3a2a22 0%, #1a120e 55%, #0e0a08 100%);
+  color: var(--cream);
+  border-color: rgba(246, 231, 200, 0.18);
+  box-shadow:
+    0 6px 0 #050302,
+    0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+.btn-dark:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn-dark.btn-wide {
+  width: 100%;
+}
+
 .status {
   min-height: 1.4em;
   margin: 12px 0 0;
@@ -1115,6 +1137,37 @@ input {
   animation: rise 0.28s ease;
 }
 
+.modal-close {
+  appearance: none;
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 140, 120, 0.45);
+  background: linear-gradient(180deg, #ff6a3d 0%, #c62828 55%, #8b1515 100%);
+  color: #fff8f0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 3px 0 #5c0f0f, 0 8px 16px rgba(198, 40, 40, 0.35);
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.modal-close:hover {
+  filter: brightness(1.08);
+  transform: scale(1.04);
+}
+
+.modal-root.locked .modal-close,
+.modal-close.is-hidden {
+  display: none;
+}
+
 .modal-icon {
   width: 56px;
   height: 56px;
@@ -1340,6 +1393,385 @@ input {
 
 .modal-root.locked .modal-backdrop {
   pointer-events: none;
+}
+
+/* ---- Top-up Coin Vault ---- */
+.topup-panel.coin-vault {
+  margin-bottom: 16px;
+  padding: 0;
+  border-color: rgba(240, 180, 41, 0.42);
+  background:
+    linear-gradient(165deg, rgba(58, 38, 26, 0.96) 0%, rgba(22, 13, 9, 0.98) 55%, rgba(14, 9, 6, 0.99) 100%);
+  box-shadow:
+    var(--shadow),
+    inset 0 1px 0 rgba(246, 231, 200, 0.12),
+    inset 0 0 0 1px rgba(240, 180, 41, 0.08);
+}
+
+.topup-panel.coin-vault::before {
+  opacity: 0.22;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(240, 180, 41, 0.18), transparent 42%),
+    radial-gradient(circle at 100% 100%, rgba(226, 61, 46, 0.08), transparent 40%);
+}
+
+.topup-head,
+.vault-door {
+  appearance: none;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 18px 16px;
+  border: 0;
+  background:
+    linear-gradient(180deg, rgba(74, 48, 30, 0.55) 0%, rgba(28, 17, 12, 0.35) 100%);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(240, 180, 41, 0.18);
+}
+
+.topup-panel.is-locked-open .topup-head {
+  cursor: default;
+}
+
+.topup-panel.is-collapsed .vault-door {
+  border-bottom: 0;
+}
+
+.vault-door-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.vault-coin-seal {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, #ffe08a 0%, var(--gold) 38%, #8a5a12 100%);
+  box-shadow:
+    0 0 0 2px rgba(246, 231, 200, 0.35),
+    0 0 0 5px rgba(240, 180, 41, 0.18),
+    0 8px 18px rgba(0, 0, 0, 0.4);
+}
+
+.vault-coin-seal img {
+  width: 34px;
+  height: 34px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.35));
+}
+
+.vault-eyebrow {
+  margin: 0 0 2px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.vault-door-copy .panel-title {
+  margin-bottom: 2px;
+}
+
+.vault-door-copy .panel-hint {
+  margin: 0;
+  max-width: 42ch;
+}
+
+.topup-head-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.vault-pill {
+  background: rgba(240, 180, 41, 0.14);
+}
+
+.topup-chevron {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  position: relative;
+}
+
+.topup-chevron::before {
+  content: "";
+  position: absolute;
+  top: 9px;
+  left: 8px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid var(--cream);
+  border-bottom: 2px solid var(--cream);
+  transform: rotate(45deg);
+  transition: transform 0.18s ease;
+}
+
+.topup-panel.is-collapsed .topup-chevron::before {
+  top: 11px;
+  transform: rotate(-135deg);
+}
+
+.topup-panel.is-locked-open .topup-chevron {
+  display: none;
+}
+
+.topup-panel.is-collapsed #topup-head-hint {
+  /* keep short collapsed copy visible via JS text swap */
+}
+
+.topup-panel.is-collapsed .topup-body {
+  display: none;
+}
+
+.vault-chamber {
+  padding: 16px 14px 18px;
+}
+
+.vault-chamber-frame {
+  position: relative;
+  padding: 14px 12px 12px;
+  margin-bottom: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 180, 41, 0.28);
+  background:
+    linear-gradient(180deg, rgba(18, 11, 8, 0.92) 0%, rgba(36, 22, 14, 0.75) 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(246, 231, 200, 0.04),
+    inset 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+
+.vault-chamber-frame::before,
+.vault-chamber-frame::after {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border: 2px solid rgba(240, 180, 41, 0.45);
+  pointer-events: none;
+}
+
+.vault-chamber-frame::before {
+  top: 8px;
+  left: 8px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.vault-chamber-frame::after {
+  right: 8px;
+  bottom: 8px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.vault-chamber-label {
+  margin: 0 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+
+.vault-ingot-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.vault-ingot {
+  appearance: none;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 78px;
+  padding: 10px 4px 8px;
+  border-radius: 14px;
+  border: 1px solid rgba(203, 184, 146, 0.22);
+  background:
+    linear-gradient(160deg, #5a4330 0%, #2c1c12 48%, #1a100c 100%);
+  color: var(--cream);
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px 0 rgba(246, 231, 200, 0.16),
+    0 6px 0 rgba(10, 6, 4, 0.55);
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.vault-ingot:hover {
+  transform: translateY(-2px);
+  border-color: rgba(240, 180, 41, 0.5);
+}
+
+.vault-ingot.is-promo {
+  border-color: rgba(240, 180, 41, 0.42);
+  background:
+    linear-gradient(160deg, #6a4a28 0%, #3a2614 50%, #1c120c 100%);
+}
+
+.vault-ingot.is-selected {
+  transform: translateY(-3px);
+  border-color: rgba(240, 180, 41, 0.95);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 236, 180, 0.28),
+    0 0 0 1px rgba(240, 180, 41, 0.35),
+    0 8px 0 rgba(90, 55, 12, 0.55),
+    0 12px 22px rgba(240, 180, 41, 0.2);
+  background:
+    linear-gradient(160deg, #8a6230 0%, #4a3018 45%, #24160e 100%);
+}
+
+.vault-ingot-badge {
+  position: absolute;
+  top: -7px;
+  right: -4px;
+  z-index: 2;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #ffd36a 0%, var(--gold) 100%);
+  color: #2a160c;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 0 #8a5a12;
+}
+
+.vault-ingot-amt {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #ffe7a8;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.vault-ingot-unit {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(246, 231, 200, 0.7);
+}
+
+.vault-ingot-price {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--cream);
+}
+
+.vault-deposit {
+  padding: 14px 12px 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 180, 41, 0.24);
+  background:
+    linear-gradient(180deg, rgba(48, 30, 18, 0.85) 0%, rgba(18, 11, 8, 0.95) 100%);
+}
+
+.vault-selected {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(240, 180, 41, 0.28);
+  background:
+    linear-gradient(90deg, rgba(240, 180, 41, 0.14), rgba(240, 180, 41, 0.04));
+}
+
+.vault-selected img {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 8px rgba(240, 180, 41, 0.4));
+}
+
+.vault-selected-label {
+  margin: 0;
+  font-size: 0.7rem;
+  color: var(--cream-dim);
+}
+
+.vault-selected-value {
+  margin: 2px 0 0;
+  font-family: var(--display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+
+.vault-voucher-field {
+  margin-bottom: 12px;
+}
+
+.vault-voucher-field input {
+  border-color: rgba(240, 180, 41, 0.28);
+  background: rgba(10, 6, 4, 0.55);
+}
+
+.vault-confirm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.vault-confirm img {
+  width: 22px;
+  height: 22px;
+}
+
+.topup-note {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+}
+
+.topup-note a {
+  color: rgba(240, 180, 41, 0.95);
+}
+
+@media (max-width: 720px) {
+  .vault-ingot-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .vault-ingot {
+    min-height: 72px;
+  }
+
+  .vault-door-main {
+    gap: 10px;
+  }
+
+  .vault-coin-seal {
+    width: 48px;
+    height: 48px;
+  }
+
+  .vault-coin-seal img {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 /* ---- Responsive ---- */

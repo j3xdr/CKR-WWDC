@@ -29,10 +29,35 @@ if str(SERVER_DIR) not in sys.path:
     sys.path.insert(0, str(SERVER_DIR))
 
 import farm_queue as fq  # noqa: E402
+import topup_packages as topup_pkg  # noqa: E402
+from tmn_voucher import TmnVoucherClient  # noqa: E402
+
+
+def _load_dotenv() -> None:
+    """Load CKR WWDC/.env into os.environ if present (local preview)."""
+    env_path = ROOT / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            key, _, val = s.partition("=")
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except OSError:
+        pass
+
+
+_load_dotenv()
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").rstrip("/")
 SUPABASE_ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", "")
 SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+TRUEWALLET_PHONE = os.environ.get("TRUEWALLET_PHONE", "").strip()
 
 # Sequential farm queue (Render Free = single instance)
 _farm_lock = threading.Lock()
@@ -47,6 +72,11 @@ _SIGNUP_WINDOW_SEC = 3600
 _peek_last_ts: dict[str, float] = {}
 _PEEK_COOLDOWN_SEC = 180
 
+# Top-up redeem rate limit per user (in-memory)
+_topup_hits: dict[str, list[float]] = {}
+_TOPUP_LIMIT = 10
+_TOPUP_WINDOW_SEC = 3600
+
 ALLOWED_ORIGINS = [
     "https://j3xdr.github.io",
     # local previews (Live Preview / Simple Browser / python http.server)
@@ -60,6 +90,10 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:5179",
     "http://localhost:4173",
     "http://127.0.0.1:4173",
+    "http://localhost:8765",
+    "http://127.0.0.1:8765",
+    "http://localhost:8080",
+    "http://127.0.0.1:8080",
 ]
 
 
@@ -123,6 +157,19 @@ class PeekBody(BaseModel):
         s = (v or "").strip()
         if not s:
             raise ValueError("email_required")
+        return s
+
+
+class TopupRedeemBody(BaseModel):
+    voucher: str = Field(min_length=4, max_length=2048)
+    package_tokens: int = Field(ge=1, le=10)
+
+    @field_validator("voucher")
+    @classmethod
+    def _trim_voucher(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("voucher_required")
         return s
 
 
@@ -205,6 +252,30 @@ def _check_signup_rate(ip: str) -> None:
         raise HTTPException(status_code=429, detail="signup_rate_limited")
     hits.append(now)
     _signup_hits[ip] = hits
+
+
+def _check_topup_rate(user_id: str) -> None:
+    now = time.time()
+    hits = [t for t in _topup_hits.get(user_id, []) if now - t < _TOPUP_WINDOW_SEC]
+    if len(hits) >= _TOPUP_LIMIT:
+        raise HTTPException(status_code=429, detail="topup_rate_limited")
+    hits.append(now)
+    _topup_hits[user_id] = hits
+
+
+def _tmn_http_status(code: str) -> int:
+    if code in ("TIMEOUT", "NETWORK_ERROR", "HTTP_ERROR_UNKNOWN", "INVALID_JSON_RESPONSE"):
+        return 502
+    if code == "MAINTENANCE":
+        return 503
+    return 400
+
+
+def _wallet_phone() -> str:
+    phone = (TRUEWALLET_PHONE or os.environ.get("TRUEWALLET_PHONE", "")).strip()
+    if not phone:
+        raise HTTPException(status_code=503, detail="topup_not_configured")
+    return phone
 
 
 def _validate_public_username(username: str) -> str:
@@ -380,6 +451,9 @@ async def health():
         "farm_busy": _farm_busy,
         "supabase_configured": bool(SUPABASE_URL and SUPABASE_ANON_KEY),
         "service_role_configured": _has_service_role(),
+        "topup_configured": bool(
+            (TRUEWALLET_PHONE or os.environ.get("TRUEWALLET_PHONE", "")).strip()
+        ),
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -876,6 +950,123 @@ async def _refund_token(user_id: str, reason: str) -> None:
             headers=_service_headers(),
             json={"p_user_id": user_id, "p_amount": 1, "p_reason": reason},
         )
+
+
+# ---------------------------------------------------------------------------
+# Top-up (TrueMoney angpao)
+# ---------------------------------------------------------------------------
+@app.get("/api/topup/packages")
+async def topup_packages():
+    return {"ok": True, "packages": topup_pkg.package_list()}
+
+
+@app.post("/api/topup/redeem")
+async def topup_redeem(
+    body: TopupRedeemBody,
+    user: dict[str, Any] = Depends(verify_user),
+):
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+
+    profile = await load_profile(user)
+    uid = str(profile["id"])
+    _check_topup_rate(uid)
+
+    pkg = topup_pkg.get_package(int(body.package_tokens))
+    if not pkg:
+        raise HTTPException(status_code=400, detail="invalid_package")
+
+    phone = _wallet_phone()
+    client = TmnVoucherClient()
+    redeemed = await client.redeem_voucher(
+        phone,
+        body.voucher,
+        expected_satang=int(pkg["price_satang"]),
+    )
+    if not redeemed.get("success"):
+        code = str(redeemed.get("code") or "redeem_failed")
+        raise HTTPException(
+            status_code=_tmn_http_status(code),
+            detail={"code": code, "message": redeemed.get("message") or code},
+        )
+
+    data = redeemed["data"]
+    voucher_id = str(data.get("voucher_id") or data.get("voucher_code"))
+    voucher_code = str(data.get("voucher_code") or "")
+    amount_satang = int(data.get("amount_satang") or 0)
+    tokens = int(pkg["tokens"])
+    row: dict[str, Any] | None = None
+
+    async with httpx.AsyncClient(timeout=30.0) as http:
+        ins = await http.post(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={
+                **_service_headers(),
+                "Prefer": "return=representation",
+            },
+            json={
+                "user_id": uid,
+                "voucher_id": voucher_id,
+                "voucher_code": voucher_code,
+                "amount_satang": amount_satang,
+                "tokens_credited": tokens,
+                "package_tokens": tokens,
+                "raw_json": data.get("raw"),
+            },
+        )
+        if ins.status_code in (200, 201):
+            payload = ins.json()
+            if isinstance(payload, list):
+                row = payload[0] if payload else None
+            elif isinstance(payload, dict):
+                row = payload
+        elif ins.status_code == 409 or "duplicate" in (ins.text or "").lower():
+            raise HTTPException(status_code=409, detail="voucher_already_used")
+        else:
+            if "topup_redemptions_voucher_id" in (ins.text or "") or "23505" in (
+                ins.text or ""
+            ):
+                raise HTTPException(status_code=409, detail="voucher_already_used")
+            raise HTTPException(status_code=500, detail="topup_record_failed")
+
+        credit = await http.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/admin_credit_tokens",
+            headers=_service_headers(),
+            json={
+                "p_user_id": uid,
+                "p_amount": tokens,
+                "p_reason": "topup_angpao",
+            },
+        )
+    if credit.status_code != 200:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "topup_credit_failed",
+                "message": "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
+                "redemption_id": (row or {}).get("id"),
+            },
+        )
+    out = credit.json() or {}
+    if not out.get("ok"):
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "code": "topup_credit_failed",
+                "message": "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
+                "redemption_id": (row or {}).get("id"),
+            },
+        )
+
+    return {
+        "ok": True,
+        "tokens_credited": tokens,
+        "token_balance": out.get("token_balance"),
+        "amount_baht": amount_satang / 100.0,
+        "package_tokens": tokens,
+        "voucher_id": voucher_id,
+        "redemption_id": (row or {}).get("id"),
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -41,6 +41,7 @@
 | [`08-secrets-safety.md`](./08-secrets-safety.md) | env vars, สิ่งที่ห้าม commit |
 | [`09-NEXT-TASK-account-peek.md`](./09-NEXT-TASK-account-peek.md) | **แผน implement peek (สถานะ: NOT DONE)** |
 | [`10-git-status-uncommitted.md`](./10-git-status-uncommitted.md) | สถานะ git + งาน local ที่ยังไม่ push |
+| [`11-topup-angpao.md`](./11-topup-angpao.md) | เติมโทเค็นอัตโนมัติ (TrueMoney อั่งเปา) |
 
 ---
 

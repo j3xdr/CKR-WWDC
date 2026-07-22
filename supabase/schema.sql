@@ -420,3 +420,33 @@ create table if not exists public.farm_lock (
 );
 
 insert into public.farm_lock (id) values (1) on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------------------
+-- TrueMoney angpao top-up (idempotent by voucher_id)
+-- ---------------------------------------------------------------------------
+create table if not exists public.topup_redemptions (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles (id) on delete cascade,
+  voucher_id text not null,
+  voucher_code text not null,
+  amount_satang integer not null check (amount_satang > 0),
+  tokens_credited integer not null check (tokens_credited > 0),
+  package_tokens integer not null check (package_tokens > 0),
+  raw_json jsonb null,
+  created_at timestamptz not null default now(),
+  constraint topup_redemptions_voucher_id_uidx unique (voucher_id)
+);
+
+create index if not exists topup_redemptions_user_id_idx
+  on public.topup_redemptions (user_id, created_at desc);
+
+alter table public.topup_redemptions enable row level security;
+
+drop policy if exists "topup_redemptions_select_own" on public.topup_redemptions;
+create policy "topup_redemptions_select_own"
+  on public.topup_redemptions for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+
+revoke insert, update, delete on public.topup_redemptions from authenticated, anon;
+grant select on public.topup_redemptions to authenticated;
+grant all on public.topup_redemptions to service_role;
