@@ -61,7 +61,7 @@ User ชี้ DOM `#farm-log-wrap` แล้วขอให้เป็น **po
 
 ---
 
-## Next: Account peek (NOT IMPLEMENTED)
+## Account peek (IMPLEMENTED)
 
 User ขอ: ดู coins/XP/nickname **ก่อน** กดฟาร์ม
 

@@ -51,6 +51,7 @@ Admin endpoints require `profiles.role == "admin"`.
 | GET | `/api/farm/gate` | JWT | queue snapshot + `can_run` |
 | POST | `/api/farm/queue/join` | JWT | enqueue / activate turn |
 | POST | `/api/farm/run` | JWT | **consumes 1 token**, runs farm |
+| POST | `/api/farm/peek` | JWT | nickname/coin/XP — needs tokens≥1, **no consume**, 180s cooldown |
 
 ### Admin (Login_j3xdr)
 
@@ -61,11 +62,11 @@ Admin endpoints require `profiles.role == "admin"`.
 | POST | `/api/admin/create-user` | create Auth user + profile |
 | GET | `/api/admin/users` | list profiles |
 
-### NOT IMPLEMENTED (next task)
+### Previously planned (done)
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| POST | `/api/farm/peek` (suggested) | login + GetMemberSummary only — **no token charge** |
+| POST | `/api/farm/peek` | login + member snapshot — **no token charge** |
 
 ---
 

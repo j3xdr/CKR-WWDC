@@ -10,22 +10,20 @@
 
 ## CURRENT NEXT TASK (เริ่มที่นี่)
 
-> **ยังไม่ได้ implement** — ออกแบบและตกลงแล้วเท่านั้น  
-> ฟีเจอร์: **ดู coins / XP / nickname ปัจจุบันก่อน แล้วค่อยกดฟาร์ม** (account peek)
+> **Account peek — IMPLEMENTED**  
+> ดู coins / XP / nickname ก่อนฟาร์ม (ต้องมีโทเค็น ≥ 1 แต่ไม่หัก, cooldown 180s)
 
-อ่านแผนละเอียดทั้งหมดใน:
+รายละเอียด: [`09-NEXT-TASK-account-peek.md`](./09-NEXT-TASK-account-peek.md)
 
-### → [`09-NEXT-TASK-account-peek.md`](./09-NEXT-TASK-account-peek.md)
+งานค้างที่เหลือนอก peek ดู `07-feature-history.md` / local uncommitted ถ้ามี
 
-สรุปสั้นๆ ของข้อกำหนดที่ตกลงแล้ว:
+สรุปกฎ peek ที่ ship แล้ว:
 
-- ใช้ **farm lock ร่วมกับฟาร์ม** (กันชนกันบน Render Free 1 instance)
-- Peek **ไม่เข้า FIFO queue** / ไม่มีเทิร์น 2 นาที
-- ล็อกว่างเท่านั้น — ถ้า busy → ตอบ busy / ปิดปุ่ม
-- ระหว่าง peek → **บล็อกเริ่มฟาร์ม**
-- **ไม่หักโทเค็น** ฟาร์ม
-- ต้องมี rate limit
-- ถูกกว่าฟาร์ม แต่ยัง occupy instance สั้นๆ
+- ใช้ **farm lock ร่วมกับฟาร์ม**
+- Peek **ไม่เข้า FIFO queue**
+- **ไม่หักโทเค็น** แต่ต้องมีโทเค็น ≥ 1
+- Rate limit **180 วินาที** + UI นับถอยหลัง
+- ระหว่าง peek → บล็อกเริ่มฟาร์ม
 
 ---
 

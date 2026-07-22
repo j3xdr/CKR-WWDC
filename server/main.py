@@ -43,6 +43,10 @@ _signup_hits: dict[str, list[float]] = {}
 _SIGNUP_LIMIT = 5
 _SIGNUP_WINDOW_SEC = 3600
 
+# Account peek rate limit per user (in-memory)
+_peek_last_ts: dict[str, float] = {}
+_PEEK_COOLDOWN_SEC = 180
+
 ALLOWED_ORIGINS = [
     "https://j3xdr.github.io",
     # local previews (Live Preview / Simple Browser / python http.server)
@@ -99,6 +103,19 @@ class FarmRunBody(BaseModel):
     score: int = Field(default=0, ge=0, le=2_147_483_647)
     coin: int = Field(default=0, ge=0, le=2_147_483_647)
     exp: int = Field(default=0, ge=0, le=2_147_483_647)
+
+    @field_validator("email")
+    @classmethod
+    def _trim_email(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("email_required")
+        return s
+
+
+class PeekBody(BaseModel):
+    email: str = Field(min_length=3, max_length=256)
+    password: str = Field(min_length=1)
 
     @field_validator("email")
     @classmethod
@@ -734,6 +751,110 @@ def _run_farm_sync(email, password, score, coin, exp, log_cb):
         exp=exp,
         log_cb=log_cb,
     )
+
+
+def _peek_retry_after(user_id: str) -> int:
+    last = _peek_last_ts.get(user_id)
+    if last is None:
+        return 0
+    remaining = int(_PEEK_COOLDOWN_SEC - (time.time() - last))
+    return max(0, remaining)
+
+
+def _check_peek_rate(user_id: str) -> None:
+    remaining = _peek_retry_after(user_id)
+    if remaining > 0:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "peek_rate_limited",
+                "message": "peek_rate_limited",
+                "retry_after": remaining,
+            },
+        )
+
+
+def _run_peek_sync(email, password, log_cb):
+    from partyrun_core import peek_account  # noqa: WPS433 — server-only
+
+    return peek_account(email=email, password=password, log_cb=log_cb)
+
+
+@app.post("/api/farm/peek")
+async def farm_peek(body: PeekBody, user: dict[str, Any] = Depends(verify_user)):
+    """Peek game account nickname/coins/XP. Requires tokens >= 1 but does not consume."""
+    global _farm_busy
+    profile = await load_profile(user)
+    uid = user["id"]
+    tokens = int(profile.get("token_balance") or 0)
+
+    if tokens < 1:
+        raise HTTPException(status_code=402, detail="insufficient_tokens_for_peek")
+
+    _check_peek_rate(uid)
+
+    if _farm_busy or not _farm_lock.acquire(blocking=False):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy"},
+        )
+
+    _farm_busy = True
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    try:
+        if _has_service_role():
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, None)
+            except Exception:
+                pass
+
+        result = await asyncio.to_thread(
+            _run_peek_sync,
+            body.email,
+            body.password,
+            log_cb,
+        )
+        if not result or not result.get("ok"):
+            err = (result or {}).get("error") or "peek_failed"
+            status = 401 if err == "login_failed" else 400
+            raise HTTPException(
+                status_code=status,
+                detail={
+                    "code": err,
+                    "message": err,
+                    "logs": logs[-40:],
+                },
+            )
+
+        _peek_last_ts[uid] = time.time()
+        return {
+            "ok": True,
+            "nickname": result.get("nickname"),
+            "mid": result.get("mid"),
+            "coin": result.get("coin"),
+            "exp": result.get("exp"),
+            "level": result.get("level"),
+            "retry_after": _PEEK_COOLDOWN_SEC,
+            "token_balance": tokens,
+            "logs": logs[-40:],
+        }
+    finally:
+        _farm_busy = False
+        try:
+            _farm_lock.release()
+        except RuntimeError:
+            pass
+        if _has_service_role():
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
+            except Exception:
+                pass
 
 
 async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:

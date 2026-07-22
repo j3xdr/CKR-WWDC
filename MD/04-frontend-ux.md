@@ -29,6 +29,7 @@ Config (`js/config.js`):
 | `#logout-btn` | logout |
 | `#farm-form` | DevPlay creds + stats + submit |
 | `#dp-acct-mail`, `#dp-acct-secret` | game account fields (readonly until focus unlock pattern) |
+| `#peek-btn`, `#peek-cooldown` | account peek (token≥1, no charge, 180s cooldown) |
 | `#farm-score`, `#farm-coin`, `#farm-exp` | number inputs (comma + Thai magnitude hints) |
 | `#farm-score-hint`, `#farm-coin-hint`, `#farm-exp-hint` | magnitude hints |
 | `#farm-btn` | submit — “เริ่มฟาร์ม · ใช้ 1 โทเค็น” |

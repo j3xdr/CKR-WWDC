@@ -212,14 +212,23 @@
   let stageTimer = null;
   let balancePollTimer = null;
   let queuePollTimer = null;
-  let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | null
+  let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | "peek" | null
   let farmRunning = false;
+  let peekRunning = false;
+  let peekCooldownUntil = 0;
+  let peekCooldownTimer = null;
   let lastGate = null;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
+  const PEEK_COOLDOWN_SEC = 180;
+  const PEEK_CD_KEY = "ckr_peek_cd_until";
 
   const ERR_TH = {
     insufficient_tokens: "coins หมด กรุณาเติม",
+    insufficient_tokens_for_peek:
+      "ต้องมีโทเค็นถึงจะดูสถานะบัญชีเกมได้ (ไม่หักโทเค็น)",
+    peek_rate_limited: "ดูสถานะถี่เกินไป รอให้ครบเวลาก่อน",
+    peek_failed: "ดูสถานะบัญชีเกมไม่สำเร็จ ลองใหม่",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -671,17 +680,123 @@
 
   function updateFarmAvailability() {
     const btn = $("farm-btn");
-    if (!btn) return;
+    const peekBtn = $("peek-btn");
     const empty = !hasTokens();
-    if (!farmRunning) {
-      btn.disabled = empty;
+    const peekCdLeft = peekCooldownRemaining();
+
+    if (btn && !farmRunning) {
+      btn.disabled = empty || peekRunning;
+    }
+    if (peekBtn) {
+      peekBtn.disabled = empty || farmRunning || peekRunning || peekCdLeft > 0;
     }
     setFarmInputsLocked(empty);
+    paintPeekCooldown();
     if (empty && userView && !userView.classList.contains("hidden")) {
       if (modalMode !== "empty") showEmptyCoinsModal();
     } else if (!empty && modalMode === "empty") {
       forceCloseModal();
     }
+  }
+
+  function peekCooldownRemaining() {
+    return Math.max(0, Math.ceil((peekCooldownUntil - Date.now()) / 1000));
+  }
+
+  function peekCdStorageKey() {
+    const id = profile?.id || "anon";
+    return PEEK_CD_KEY + ":" + id;
+  }
+
+  function persistPeekCooldown() {
+    try {
+      if (peekCooldownUntil > Date.now()) {
+        sessionStorage.setItem(peekCdStorageKey(), String(peekCooldownUntil));
+      } else {
+        sessionStorage.removeItem(peekCdStorageKey());
+      }
+    } catch (_) {}
+  }
+
+  function restorePeekCooldown() {
+    try {
+      const raw = sessionStorage.getItem(peekCdStorageKey());
+      const until = Number(raw || 0);
+      if (until > Date.now()) {
+        startPeekCooldown(Math.ceil((until - Date.now()) / 1000));
+      }
+    } catch (_) {}
+  }
+
+  function formatPeekCountdown(sec) {
+    const s = Math.max(0, Number(sec) || 0);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return mm + ":" + ss;
+  }
+
+  function paintPeekCooldown() {
+    const el = $("peek-cooldown");
+    if (!el) return;
+    const left = peekCooldownRemaining();
+    if (left > 0) {
+      el.textContent = "ดูสถานะได้อีกครั้งใน " + formatPeekCountdown(left);
+      el.classList.add("is-active");
+    } else {
+      el.textContent = hasTokens()
+        ? "ไม่หักโทเค็น · ใช้ได้ทุก 3 นาที"
+        : "ต้องมีโทเค็นถึงจะดูสถานะได้ (ไม่หัก)";
+      el.classList.remove("is-active");
+    }
+  }
+
+  function startPeekCooldown(retryAfterSec) {
+    const sec = Math.max(0, Number(retryAfterSec) || PEEK_COOLDOWN_SEC);
+    peekCooldownUntil = Date.now() + sec * 1000;
+    persistPeekCooldown();
+    if (peekCooldownTimer) clearInterval(peekCooldownTimer);
+    paintPeekCooldown();
+    updateFarmAvailability();
+    peekCooldownTimer = setInterval(() => {
+      if (peekCooldownRemaining() <= 0) {
+        clearInterval(peekCooldownTimer);
+        peekCooldownTimer = null;
+        peekCooldownUntil = 0;
+        persistPeekCooldown();
+      }
+      paintPeekCooldown();
+      updateFarmAvailability();
+    }, 1000);
+  }
+
+  function showPeekResultModal(data) {
+    const dash = (v) =>
+      v === null || v === undefined || v === "" ? "—" : formatNumTh(v);
+    const rows = [
+      ["ชื่อในเกม", escapeHtml(data.nickname || "—")],
+      ["เลเวล", escapeHtml(dash(data.level))],
+      ["เหรียญ", escapeHtml(dash(data.coin))],
+      ["XP", escapeHtml(dash(data.exp))],
+    ];
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows
+        .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+        .join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ไม่หักโทเค็น · กรอกคะแนน/เหรียญ/XP แล้วกดฟาร์มได้ตามปกติ</p>';
+
+    clearModalActions();
+    openModal({
+      mode: "peek",
+      title: "สถานะบัญชีเกม",
+      bodyHtml: html,
+      icon: "assets/crc_cookie_stone_box.png",
+      locked: false,
+    });
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
   }
 
   function formatApiDetail(detail) {
@@ -690,6 +805,12 @@
     if (typeof detail === "object" && !Array.isArray(detail)) {
       if (detail.code === "farm_busy" || detail.message === "farm_busy") {
         return "farm_busy";
+      }
+      if (detail.code === "peek_rate_limited" || detail.message === "peek_rate_limited") {
+        return "peek_rate_limited";
+      }
+      if (detail.code === "insufficient_tokens_for_peek") {
+        return "insufficient_tokens_for_peek";
       }
       return detail.msg || detail.message || detail.reason || detail.code || "request_failed";
     }
@@ -755,6 +876,7 @@
     userView.classList.remove("hidden");
     $("logout-btn").classList.remove("hidden");
     $("nav-balance").classList.remove("hidden");
+    restorePeekCooldown();
     updateFarmAvailability();
     refreshGateAndQueueUi().catch(() => {});
   }
@@ -1392,9 +1514,69 @@
     showLogin();
   });
 
+  $("peek-btn")?.addEventListener("click", async () => {
+    if (peekRunning || farmRunning) return;
+    if (!hasTokens()) {
+      showErrorModal(ERR_TH.insufficient_tokens_for_peek, "ต้องมีโทเค็น");
+      return;
+    }
+    if (peekCooldownRemaining() > 0) {
+      showErrorModal(ERR_TH.peek_rate_limited, "รออีกสักครู่");
+      return;
+    }
+    const dpEmail = ($("dp-acct-mail").value || "").trim();
+    const dpPass = $("dp-acct-secret").value || "";
+    if (!dpEmail || !dpPass) {
+      showErrorModal(
+        "กรอกอีเมลและรหัสผ่าน DevPlay ของเกมให้ครบก่อนดูสถานะ",
+        "ข้อมูลไม่ครบ"
+      );
+      return;
+    }
+
+    peekRunning = true;
+    updateFarmAvailability();
+    setStatus($("farm-status"), "กำลังดูสถานะบัญชีเกม…", "muted");
+    try {
+      const data = await api("/api/farm/peek", {
+        method: "POST",
+        body: { email: dpEmail, password: dpPass },
+      });
+      const retry = Number(data.retry_after ?? PEEK_COOLDOWN_SEC);
+      startPeekCooldown(retry);
+      showPeekResultModal(data);
+      setStatus($("farm-status"), "ดูสถานะสำเร็จ · ไม่หักโทเค็น", "ok");
+    } catch (e) {
+      const raw = String(e.message || "");
+      const detail = e.data?.detail;
+      if (e.status === 429 || /peek_rate_limited/i.test(raw)) {
+        const retry =
+          (detail && typeof detail === "object" && Number(detail.retry_after)) ||
+          PEEK_COOLDOWN_SEC;
+        startPeekCooldown(retry);
+        showErrorModal(ERR_TH.peek_rate_limited, "รออีกสักครู่");
+      } else if (e.status === 402 || /insufficient_tokens_for_peek/i.test(raw)) {
+        showErrorModal(ERR_TH.insufficient_tokens_for_peek, "ต้องมีโทเค็น");
+      } else if (e.status === 409 || /farm_busy/i.test(raw)) {
+        showErrorModal(
+          "ระบบกำลังฟาร์มหรือไม่ว่าง — ลองใหม่เมื่อว่าง (ไม่ต้องเข้าคิวเพื่อดูสถานะ)",
+          "ระบบไม่ว่าง"
+        );
+      } else if (/login_failed/i.test(raw)) {
+        showErrorModal(ERR_TH.login_failed, "เข้าสู่ระบบเกมไม่สำเร็จ");
+      } else {
+        showErrorModal(thError(e.message) || ERR_TH.peek_failed, "ดูสถานะไม่สำเร็จ");
+      }
+      setStatus($("farm-status"), thError(e.message) || "ดูสถานะไม่สำเร็จ", "err");
+    } finally {
+      peekRunning = false;
+      updateFarmAvailability();
+    }
+  });
+
   $("farm-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (farmRunning) return;
+    if (farmRunning || peekRunning) return;
 
     if (!hasTokens()) {
       showEmptyCoinsModal();

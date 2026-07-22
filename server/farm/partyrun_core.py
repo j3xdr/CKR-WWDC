@@ -214,6 +214,120 @@ def get_my_equipment():
     }
 
 
+def _fetch_member_summary_raw():
+    return unary(
+        GSERVER,
+        "service.api.MemberAPI",
+        "GetMemberSummary",
+        {"common_req": {}, "player_id": MID},
+        [("authorization", "Bearer " + TOK)],
+    )
+
+
+def _fetch_balances_best_effort():
+    """Read coin/XP without farming.
+
+    GetMemberSummary has nickname/level but no currency fields in the descriptor
+    set. ClaimQuestRewardAll is the only API that returns cash_info.coin + exp as
+    a snapshot; if no quests are claimable it typically returns empty rewards with
+    current balances. May claim pending quest rewards if any exist for episode 0/1.
+    """
+    coin = None
+    exp = None
+    level = None
+    for episode_seq in (0, 1):
+        r = unary(
+            GSERVER,
+            "service.api.RewardAPI",
+            "ClaimQuestRewardAll",
+            {"common_req": {}, "episode_seq": int(episode_seq)},
+            [("authorization", "Bearer " + TOK)],
+        )
+        if r.get("__error__"):
+            continue
+        cash = r.get("cash_info") if isinstance(r.get("cash_info"), dict) else {}
+        if cash.get("coin") is not None:
+            try:
+                coin = int(cash.get("coin"))
+            except (TypeError, ValueError):
+                coin = cash.get("coin")
+        if r.get("exp") is not None:
+            try:
+                exp = int(r.get("exp"))
+            except (TypeError, ValueError):
+                exp = r.get("exp")
+        if r.get("level") is not None:
+            try:
+                level = int(r.get("level"))
+            except (TypeError, ValueError):
+                level = r.get("level")
+        if coin is not None or exp is not None:
+            break
+    return {"coin": coin, "exp": exp, "level": level}
+
+
+def peek_account(email, password, log_cb=None):
+    """Login + member snapshot only. No matchmaking / run / claim party run."""
+    global EMAIL, PASSWORD
+    EMAIL = email
+    PASSWORD = password
+
+    import builtins
+    old_print = builtins.print
+
+    def _print(*args, **kwargs):
+        msg = " ".join(str(a) for a in args)
+        if log_cb is not None:
+            try:
+                log_cb(msg)
+            except Exception:
+                old_print(msg)
+        else:
+            old_print(*args, **kwargs)
+
+    builtins.print = _print
+    try:
+        _init_session()
+        summary = _fetch_member_summary_raw()
+        if summary.get("__error__"):
+            return {
+                "ok": False,
+                "error": "peek_failed",
+                "detail": summary.get("details") or summary.get("code"),
+            }
+        ms = summary.get("member_summary") or {}
+        profile = ms.get("profile") or {}
+        nickname = profile.get("nickname") or "player"
+        try:
+            level = int(ms["level"]) if ms.get("level") is not None else None
+        except (TypeError, ValueError):
+            level = ms.get("level")
+
+        balances = _fetch_balances_best_effort()
+        if balances.get("level") is not None:
+            level = balances["level"]
+
+        return {
+            "ok": True,
+            "nickname": nickname,
+            "mid": MID,
+            "coin": balances.get("coin"),
+            "exp": balances.get("exp"),
+            "level": level,
+        }
+    except FarmError as exc:
+        return {"ok": False, "error": exc.code, "detail": exc.detail}
+    except SystemExit as exc:
+        msg = str(exc)
+        if "LOGIN FAILED" in msg:
+            return {"ok": False, "error": "login_failed"}
+        return {"ok": False, "error": "peek_failed", "detail": msg}
+    except Exception as exc:
+        return {"ok": False, "error": "peek_failed", "detail": str(exc)}
+    finally:
+        builtins.print = old_print
+
+
 # --------------------------- clear pending ---------------------------------
 def finalize_session(session, my):
     """Reconnect to a stuck/unfinished ingame session and send quit_request so the
