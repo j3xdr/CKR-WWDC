@@ -46,17 +46,19 @@ Admin endpoints require `profiles.role == "admin"`.
 | Method | Path | Auth | Notes |
 |--------|------|------|-------|
 | GET | `/` | no | JSON pointers to UI/admin |
-| GET | `/api/health` | no | `farm_busy`, supabase flags, `topup_configured` |
-| POST | `/api/auth/login` | no | username login → JWT + `session_token` |
+| GET | `/api/health` | no | `farm_busy`, flags, maintenance, soft_caps |
+| POST | `/api/auth/login` | no | username login → JWT + `session_token` (blocked if banned) |
 | POST | `/api/auth/register` | no | self-signup → JWT (0 tokens) + `session_token` |
 | GET | `/api/me` | JWT+session | profile + tokens |
 | GET | `/api/topup/packages` | no | package price table (1–10 tokens) |
 | GET | `/api/topup/history` | JWT+session | last 20 own redemptions |
-| POST | `/api/topup/redeem` | JWT+session | redeem angpao; rate-limit user/IP/voucher; sanitize TMN errors |
-| GET | `/api/farm/gate` | JWT+session | queue snapshot + `can_run` |
+| POST | `/api/topup/verify` | JWT+session | check voucher amount **without** redeem |
+| POST | `/api/topup/redeem` | JWT+session | redeem angpao; rate-limit; maintenance gate |
+| GET | `/api/farm/gate` | JWT+session | queue snapshot + `can_run` + maintenance |
 | POST | `/api/farm/queue/join` | JWT+session | enqueue / activate turn |
-| POST | `/api/farm/run` | JWT+session | **consumes 1 token**, runs farm |
-| POST | `/api/farm/peek` | JWT+session | nickname/coin/XP — needs tokens≥1, **no consume**, 180s cooldown |
+| GET | `/api/farm/history` | JWT+session | last run_jobs for self |
+| POST | `/api/farm/run` | JWT+session | consume 1 token; soft-cap coin/exp; **refund on fail** |
+| POST | `/api/farm/peek` | JWT+session | nick/coin/XP + tier/cookie/pet/treas; no consume |
 
 ### Admin (Login_j3xdr)
 
@@ -64,14 +66,23 @@ Admin endpoints require `profiles.role == "admin"`.
 |--------|------|-------|
 | GET | `/api/admin/lookup?q=` | find user by username |
 | GET | `/api/admin/audit?limit=` | admin_audit_log (default 50) |
+| GET | `/api/admin/stats?date=` | daily summary (Asia/Bangkok) |
+| GET/POST | `/api/admin/settings` | farm/topup maintenance flags |
 | GET | `/api/admin/topups?status=` | list redemptions; `needs_manual` / `credited` |
 | GET | `/api/admin/users/{id}/topups` | last 5 topups for user |
 | POST | `/api/admin/topups/{id}/credit` | manual credit retry → mark credited |
 | POST | `/api/admin/add-tokens` | credit tokens (+ audit) |
 | POST | `/api/admin/set-tokens` | set balance (+ audit) |
 | POST | `/api/admin/create-user` | create Auth user + profile (+ audit) |
-| GET | `/api/admin/users` | list profiles |
+| GET | `/api/admin/users` | list profiles (incl. banned_at) |
+| POST | `/api/admin/users/{id}/ban` | ban + rotate session_token |
+| POST | `/api/admin/users/{id}/unban` | clear ban |
 | DELETE | `/api/admin/users/{id}` | delete user (+ audit) |
+
+### Soft caps / refund
+
+- Soft caps (API): coin ≤ 50000, exp ≤ 5000 (`value_capped`) — conservative, not official game limits
+- After successful `consume_token`, failed farm runs credit +1 (`farm_fail_refund`)
 
 ### Previously planned (done)
 

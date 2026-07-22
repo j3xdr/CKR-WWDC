@@ -10,9 +10,10 @@ import time
 import traceback
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -173,6 +174,12 @@ class FarmRunBody(BaseModel):
         return s
 
 
+# Conservative soft caps (not official game limits) — reduce corrupt_pending risk
+FARM_SOFT_CAP_COIN = 50_000
+FARM_SOFT_CAP_EXP = 5_000
+BKK = ZoneInfo("Asia/Bangkok")
+
+
 class PeekBody(BaseModel):
     email: str = Field(min_length=3, max_length=256)
     password: str = Field(min_length=1)
@@ -187,6 +194,19 @@ class PeekBody(BaseModel):
 
 
 class TopupRedeemBody(BaseModel):
+    voucher: str = Field(min_length=4, max_length=2048)
+    package_tokens: int = Field(ge=1, le=10)
+
+    @field_validator("voucher")
+    @classmethod
+    def _trim_voucher(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("voucher_required")
+        return s
+
+
+class TopupVerifyBody(BaseModel):
     voucher: str = Field(min_length=4, max_length=2048)
     package_tokens: int = Field(ge=1, le=10)
 
@@ -221,6 +241,15 @@ class AdminSetTokensBody(BaseModel):
     user_id: str = Field(min_length=8, description="profiles.id / auth user uuid")
     token_balance: int = Field(ge=0, le=1_000_000)
     reason: str = "admin_set"
+
+
+class AdminBanBody(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+
+class AdminSettingsBody(BaseModel):
+    farm_maintenance: Optional[bool] = None
+    topup_maintenance: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
@@ -386,6 +415,97 @@ async def _write_audit(
         print(f"[audit] write failed: {e}")
 
 
+def _as_bool_json(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return False
+
+
+async def _read_app_settings(keys: list[str]) -> dict[str, Any]:
+    out: dict[str, Any] = {k: False for k in keys}
+    if not keys or not SUPABASE_URL:
+        return out
+    headers = None
+    if _has_service_role():
+        headers = _service_headers()
+    elif SUPABASE_ANON_KEY:
+        headers = _sb_headers(SUPABASE_ANON_KEY)
+    if not headers:
+        return out
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/app_settings",
+            headers={**headers, "Accept": "application/json"},
+            params={
+                "key": f"in.({','.join(keys)})",
+                "select": "key,value",
+            },
+        )
+    if r.status_code != 200:
+        return out
+    for row in r.json() or []:
+        k = row.get("key")
+        if k in out:
+            out[k] = _as_bool_json(row.get("value"))
+    return out
+
+
+async def _require_farm_open() -> None:
+    flags = await _read_app_settings(["farm_maintenance"])
+    if flags.get("farm_maintenance"):
+        raise HTTPException(status_code=503, detail="maintenance")
+
+
+async def _require_topup_open() -> None:
+    flags = await _read_app_settings(["topup_maintenance"])
+    if flags.get("topup_maintenance"):
+        raise HTTPException(status_code=503, detail="maintenance")
+
+
+def _reject_if_banned(profile: dict[str, Any]) -> None:
+    if profile.get("banned_at"):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "code": "account_banned",
+                "message": "account_banned",
+                "reason": profile.get("ban_reason") or "",
+            },
+        )
+
+
+def _enforce_farm_soft_caps(coin: int, exp: int) -> None:
+    if int(coin) > FARM_SOFT_CAP_COIN or int(exp) > FARM_SOFT_CAP_EXP:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "code": "value_capped",
+                "message": "value_capped",
+                "max_coin": FARM_SOFT_CAP_COIN,
+                "max_exp": FARM_SOFT_CAP_EXP,
+            },
+        )
+
+
+def _bkk_day_bounds(date_str: Optional[str] = None) -> tuple[str, str, str]:
+    """Return (date_label, start_utc_iso, end_utc_iso) for Asia/Bangkok calendar day."""
+    if date_str:
+        day = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=BKK)
+    else:
+        day = datetime.now(BKK).replace(hour=0, minute=0, second=0, microsecond=0)
+    start = day.replace(hour=0, minute=0, second=0, microsecond=0)
+    end = start + timedelta(days=1)
+    return (
+        start.strftime("%Y-%m-%d"),
+        start.astimezone(timezone.utc).isoformat(),
+        end.astimezone(timezone.utc).isoformat(),
+    )
+
+
 def _validate_public_username(username: str) -> str:
     """Normalize + reject reserved / email-like usernames for public signup."""
     username = (username or "").strip()
@@ -537,7 +657,9 @@ async def load_profile(user: dict[str, Any]) -> dict[str, Any]:
         )
     if r.status_code != 200 or not r.json():
         raise HTTPException(status_code=403, detail="profile_missing")
-    return r.json()[0]
+    profile = r.json()[0]
+    _reject_if_banned(profile)
+    return profile
 
 
 async def require_admin(user: dict[str, Any] = Depends(verify_user)) -> dict[str, Any]:
@@ -555,6 +677,7 @@ def _public_profile(profile: dict[str, Any]) -> dict[str, Any]:
         "username": profile.get("username"),
         "display_name": profile.get("display_name"),
         "token_balance": profile.get("token_balance", 0),
+        "banned_at": profile.get("banned_at"),
     }
 
 
@@ -574,6 +697,7 @@ async def root():
 
 @app.get("/api/health")
 async def health():
+    flags = await _read_app_settings(["farm_maintenance", "topup_maintenance"])
     return {
         "ok": True,
         "service": "ckr-wwdc",
@@ -583,6 +707,9 @@ async def health():
         "topup_configured": bool(
             (TRUEWALLET_PHONE or os.environ.get("TRUEWALLET_PHONE", "")).strip()
         ),
+        "farm_maintenance": bool(flags.get("farm_maintenance")),
+        "topup_maintenance": bool(flags.get("topup_maintenance")),
+        "soft_caps": {"coin": FARM_SOFT_CAP_COIN, "exp": FARM_SOFT_CAP_EXP},
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -667,6 +794,9 @@ async def auth_login(body: LoginBody):
             )
             if pr.status_code == 200 and pr.json():
                 profile_row = pr.json()[0]
+
+    if profile_row.get("banned_at"):
+        raise HTTPException(status_code=403, detail="account_banned")
 
     profile_out = {
         "id": profile_row.get("id") or resolved.get("id") or uid,
@@ -781,11 +911,18 @@ async def _gate_for(user_id: str) -> dict[str, Any]:
 @app.get("/api/farm/gate")
 async def farm_gate(user: dict[str, Any] = Depends(verify_user)):
     snap = await _gate_for(user["id"])
-    return {"ok": True, **snap}
+    flags = await _read_app_settings(["farm_maintenance"])
+    return {
+        "ok": True,
+        **snap,
+        "farm_maintenance": bool(flags.get("farm_maintenance")),
+    }
 
 
 @app.post("/api/farm/queue/join")
 async def farm_queue_join(user: dict[str, Any] = Depends(verify_user)):
+    await _require_farm_open()
+    await load_profile(user)
     async with httpx.AsyncClient(timeout=20.0) as client:
         snap = await fq.join_queue(
             client, SUPABASE_URL, _svc(), user["id"], _farm_busy
@@ -799,6 +936,7 @@ async def farm_queue_join(user: dict[str, Any] = Depends(verify_user)):
 @app.post("/api/farm/run")
 async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user)):
     global _farm_busy
+    await _require_farm_open()
     profile = await load_profile(user)
     token = user["_access_token"]
     uid = user["id"]
@@ -806,6 +944,8 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
 
     if tokens_before < 1:
         raise HTTPException(status_code=402, detail="insufficient_tokens")
+
+    _enforce_farm_soft_caps(body.coin, body.exp)
 
     # Queue / busy gate BEFORE spending a token
     gate = await _gate_for(uid)
@@ -860,11 +1000,17 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 job_id = jr.json()[0]["id"]
 
     if not _farm_lock.acquire(blocking=False):
-        await _refund_token(uid, "farm_busy_refund")
+        bal = await _refund_token(uid, "farm_busy_refund")
         gate2 = await _gate_for(uid)
         raise HTTPException(
             status_code=409,
-            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate2},
+            detail={
+                "code": "farm_busy",
+                "message": "farm_busy",
+                "gate": gate2,
+                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
+                "refunded": True,
+            },
         )
 
     _farm_busy = True
@@ -893,33 +1039,55 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         )
 
         ok = bool(result and result.get("ok"))
-        if job_id and _has_service_role():
+        token_balance = cons_data.get("token_balance")
+        refunded = False
+        err_code = None if ok else (result or {}).get("error") or "farm_error"
+
+        if not ok:
+            bal = await _refund_token(uid, "farm_fail_refund")
+            refunded = True
+            if bal is not None:
+                token_balance = bal
+            if job_id and _has_service_role():
+                await _patch_job(
+                    job_id,
+                    {
+                        "status": "failed",
+                        "result": result,
+                        "error": f"{err_code};refunded",
+                        "finished_at": _now(),
+                    },
+                )
+        elif job_id and _has_service_role():
             await _patch_job(
                 job_id,
                 {
-                    "status": "succeeded" if ok else "failed",
+                    "status": "succeeded",
                     "result": result,
-                    "error": None if ok else (result or {}).get("error"),
+                    "error": None,
                     "finished_at": _now(),
                 },
             )
 
         return {
             "ok": ok,
-            "token_balance": cons_data.get("token_balance"),
+            "token_balance": token_balance,
             "tokens_before": tokens_before,
-            "tokens_after": cons_data.get("token_balance"),
+            "tokens_after": token_balance,
             "job_id": job_id,
             "result": result,
+            "refunded": refunded,
+            "error": err_code,
             "logs": logs[-80:],
         }
     except Exception as exc:
+        bal = await _refund_token(uid, "farm_fail_refund")
         if job_id and _has_service_role():
             await _patch_job(
                 job_id,
                 {
                     "status": "failed",
-                    "error": str(exc),
+                    "error": f"{exc};refunded",
                     "finished_at": _now(),
                 },
             )
@@ -929,8 +1097,9 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 "ok": False,
                 "detail": "farm_error",
                 "error": str(exc),
-                "token_balance": cons_data.get("token_balance"),
+                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
                 "tokens_before": tokens_before,
+                "refunded": True,
                 "logs": logs[-80:],
                 "trace": traceback.format_exc()[-2000:],
             },
@@ -995,6 +1164,7 @@ def _run_peek_sync(email, password, log_cb):
 async def farm_peek(body: PeekBody, user: dict[str, Any] = Depends(verify_user)):
     """Peek game account nickname/coins/XP. Requires tokens >= 1 but does not consume."""
     global _farm_busy
+    await _require_farm_open()
     profile = await load_profile(user)
     uid = user["id"]
     tokens = int(profile.get("token_balance") or 0)
@@ -1050,6 +1220,11 @@ async def farm_peek(body: PeekBody, user: dict[str, Any] = Depends(verify_user))
             "coin": result.get("coin"),
             "exp": result.get("exp"),
             "level": result.get("level"),
+            "tier": result.get("tier"),
+            "cookie": result.get("cookie"),
+            "pet": result.get("pet"),
+            "pic": result.get("pic"),
+            "treas": result.get("treas") or [],
             "retry_after": _PEEK_COOLDOWN_SEC,
             "token_balance": tokens,
             "logs": logs[-40:],
@@ -1068,6 +1243,33 @@ async def farm_peek(body: PeekBody, user: dict[str, Any] = Depends(verify_user))
                 pass
 
 
+@app.get("/api/farm/history")
+async def farm_history(
+    limit: int = 20,
+    user: dict[str, Any] = Depends(verify_user),
+):
+    profile = await load_profile(user)
+    uid = str(profile["id"])
+    lim = max(1, min(int(limit or 20), 50))
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.get(
+            f"{SUPABASE_URL}/rest/v1/run_jobs",
+            headers={
+                **_sb_headers(SUPABASE_ANON_KEY, user["_access_token"]),
+                "Accept": "application/json",
+            },
+            params={
+                "user_id": f"eq.{uid}",
+                "select": "id,status,score,coin,exp,error,created_at,finished_at",
+                "order": "created_at.desc",
+                "limit": str(lim),
+            },
+        )
+    if r.status_code != 200:
+        raise HTTPException(status_code=500, detail="farm_history_failed")
+    return {"ok": True, "items": r.json() or []}
+
+
 async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:
     async with httpx.AsyncClient(timeout=20.0) as client:
         await client.patch(
@@ -1078,15 +1280,26 @@ async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:
         )
 
 
-async def _refund_token(user_id: str, reason: str) -> None:
+async def _refund_token(user_id: str, reason: str) -> Optional[int]:
     if not _has_service_role():
-        return
+        return None
     async with httpx.AsyncClient(timeout=20.0) as client:
-        await client.post(
+        credit = await client.post(
             f"{SUPABASE_URL}/rest/v1/rpc/admin_credit_tokens",
             headers=_service_headers(),
             json={"p_user_id": user_id, "p_amount": 1, "p_reason": reason},
         )
+    if credit.status_code != 200:
+        print(f"[refund] failed uid={user_id} reason={reason} {credit.text[:120]}")
+        return None
+    out = credit.json() or {}
+    if not out.get("ok"):
+        print(f"[refund] rpc not ok uid={user_id} {out}")
+        return None
+    try:
+        return int(out.get("token_balance"))
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -1095,6 +1308,49 @@ async def _refund_token(user_id: str, reason: str) -> None:
 @app.get("/api/topup/packages")
 async def topup_packages():
     return {"ok": True, "packages": topup_pkg.package_list()}
+
+
+@app.post("/api/topup/verify")
+async def topup_verify(
+    body: TopupVerifyBody,
+    user: dict[str, Any] = Depends(verify_user),
+):
+    """Check voucher amount/status without redeeming."""
+    await load_profile(user)
+    await _require_topup_open()
+    pkg = topup_pkg.get_package(int(body.package_tokens))
+    if not pkg:
+        raise HTTPException(status_code=400, detail="invalid_package")
+    client = TmnVoucherClient()
+    verified = await client.verify_voucher(
+        body.voucher,
+        expected_satang=int(pkg["price_satang"]),
+    )
+    if not verified.get("success"):
+        code = str(verified.get("code") or "verify_failed")
+        print(
+            f"[topup] verify fail code={code} "
+            f"msg={(verified.get('message') or '')[:120]}"
+        )
+        raise HTTPException(
+            status_code=_tmn_http_status(code),
+            detail=_tmn_public_detail(code),
+        )
+    data = verified.get("data") or {}
+    voucher = data.get("voucher") or {}
+    amount_satang = int(
+        voucher.get("amount_satang")
+        or voucher.get("remaining_amount")
+        or pkg["price_satang"]
+        or 0
+    )
+    return {
+        "ok": True,
+        "package_tokens": int(pkg["tokens"]),
+        "expected_baht": int(pkg["price_satang"]) / 100.0,
+        "amount_baht": amount_satang / 100.0 if amount_satang else int(pkg["price_satang"]) / 100.0,
+        "voucher_code": data.get("voucher_code"),
+    }
 
 
 @app.get("/api/topup/history")
@@ -1140,6 +1396,7 @@ async def topup_redeem(
     if not _has_service_role():
         raise HTTPException(status_code=503, detail="service_role_not_configured")
 
+    await _require_topup_open()
     profile = await load_profile(user)
     uid = str(profile["id"])
     voucher_code = extract_voucher_code(body.voucher) or ""
@@ -1528,10 +1785,216 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
                 "display_name": p.get("display_name"),
                 "role": p.get("role"),
                 "token_balance": p.get("token_balance", 0),
+                "banned_at": p.get("banned_at"),
+                "ban_reason": p.get("ban_reason"),
                 "created_at": p.get("created_at"),
             }
         )
     return {"ok": True, "users": safe}
+
+
+@app.get("/api/admin/settings")
+async def admin_get_settings(admin: dict[str, Any] = Depends(require_admin)):
+    flags = await _read_app_settings(["farm_maintenance", "topup_maintenance"])
+    return {
+        "ok": True,
+        "farm_maintenance": bool(flags.get("farm_maintenance")),
+        "topup_maintenance": bool(flags.get("topup_maintenance")),
+    }
+
+
+@app.post("/api/admin/settings")
+async def admin_set_settings(
+    body: AdminSettingsBody,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    if not _has_service_role():
+        raise HTTPException(status_code=503, detail="service_role_not_configured")
+    updates: dict[str, bool] = {}
+    if body.farm_maintenance is not None:
+        updates["farm_maintenance"] = bool(body.farm_maintenance)
+    if body.topup_maintenance is not None:
+        updates["topup_maintenance"] = bool(body.topup_maintenance)
+    if not updates:
+        return await admin_get_settings(admin)
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        for key, val in updates.items():
+            await client.post(
+                f"{SUPABASE_URL}/rest/v1/app_settings",
+                headers={
+                    **_service_headers(),
+                    "Prefer": "resolution=merge-duplicates,return=minimal",
+                },
+                json={
+                    "key": key,
+                    "value": val,
+                    "updated_at": _now(),
+                    "updated_by": admin.get("id"),
+                },
+            )
+    await _write_audit(
+        admin.get("id"),
+        "update_settings",
+        meta=updates,
+    )
+    return await admin_get_settings(admin)
+
+
+@app.post("/api/admin/users/{user_id}/ban")
+async def admin_ban_user(
+    user_id: str,
+    body: AdminBanBody,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    if user_id == admin.get("id"):
+        raise HTTPException(status_code=400, detail="cannot_ban_self")
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    reason = (body.reason or "").strip()[:500]
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        got = await client.get(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            headers={**headers, "Accept": "application/json"},
+            params={"id": f"eq.{user_id}", "select": "id,username,role,banned_at"},
+        )
+        rows = got.json() if got.status_code == 200 else []
+        if not rows:
+            raise HTTPException(status_code=404, detail="user_not_found")
+        if rows[0].get("role") == "admin":
+            raise HTTPException(status_code=400, detail="cannot_ban_admin")
+        patched = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            params={"id": f"eq.{user_id}"},
+            headers={**headers, "Prefer": "return=representation"},
+            json={
+                "banned_at": _now(),
+                "ban_reason": reason or None,
+                "session_token": str(uuid.uuid4()),
+            },
+        )
+    if patched.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=patched.text)
+    await _write_audit(
+        admin.get("id"),
+        "ban_user",
+        target_user_id=user_id,
+        meta={"reason": reason, "username": rows[0].get("username")},
+    )
+    return {"ok": True, "id": user_id, "banned": True}
+
+
+@app.post("/api/admin/users/{user_id}/unban")
+async def admin_unban_user(
+    user_id: str,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        patched = await client.patch(
+            f"{SUPABASE_URL}/rest/v1/profiles",
+            params={"id": f"eq.{user_id}"},
+            headers={**headers, "Prefer": "return=representation"},
+            json={"banned_at": None, "ban_reason": None},
+        )
+    if patched.status_code not in (200, 204):
+        raise HTTPException(status_code=500, detail=patched.text)
+    await _write_audit(admin.get("id"), "unban_user", target_user_id=user_id)
+    return {"ok": True, "id": user_id, "banned": False}
+
+
+@app.get("/api/admin/stats")
+async def admin_stats(
+    date: Optional[str] = None,
+    admin: dict[str, Any] = Depends(require_admin),
+):
+    try:
+        label, start_iso, end_iso = _bkk_day_bounds(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid_date")
+
+    headers = (
+        _service_headers()
+        if _has_service_role()
+        else _sb_headers(SUPABASE_ANON_KEY, admin["_access_token"])
+    )
+    runs_by_status: dict[str, int] = {}
+    tokens_credited = 0
+    tokens_consumed = 0
+    topups = 0
+    needs_manual = 0
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        jobs = await client.get(
+            f"{SUPABASE_URL}/rest/v1/run_jobs",
+            headers={**headers, "Accept": "application/json"},
+            params=[
+                ("created_at", f"gte.{start_iso}"),
+                ("created_at", f"lt.{end_iso}"),
+                ("select", "status"),
+                ("limit", "10000"),
+            ],
+        )
+        if jobs.status_code == 200:
+            for row in jobs.json() or []:
+                st = row.get("status") or "unknown"
+                runs_by_status[st] = runs_by_status.get(st, 0) + 1
+
+        ledger = await client.get(
+            f"{SUPABASE_URL}/rest/v1/token_ledger",
+            headers={**headers, "Accept": "application/json"},
+            params=[
+                ("created_at", f"gte.{start_iso}"),
+                ("created_at", f"lt.{end_iso}"),
+                ("select", "delta"),
+                ("limit", "20000"),
+            ],
+        )
+        if ledger.status_code == 200:
+            for row in ledger.json() or []:
+                try:
+                    d = int(row.get("delta") or 0)
+                except (TypeError, ValueError):
+                    d = 0
+                if d > 0:
+                    tokens_credited += d
+                elif d < 0:
+                    tokens_consumed += -d
+
+        tops = await client.get(
+            f"{SUPABASE_URL}/rest/v1/topup_redemptions",
+            headers={**headers, "Accept": "application/json"},
+            params=[
+                ("created_at", f"gte.{start_iso}"),
+                ("created_at", f"lt.{end_iso}"),
+                ("select", "credit_status"),
+                ("limit", "10000"),
+            ],
+        )
+        if tops.status_code == 200:
+            for row in tops.json() or []:
+                topups += 1
+                if row.get("credit_status") == "needs_manual":
+                    needs_manual += 1
+
+    return {
+        "ok": True,
+        "date": label,
+        "timezone": "Asia/Bangkok",
+        "runs": runs_by_status,
+        "runs_total": sum(runs_by_status.values()),
+        "tokens_credited": tokens_credited,
+        "tokens_consumed": tokens_consumed,
+        "topups": topups,
+        "topups_needs_manual": needs_manual,
+    }
 
 
 @app.post("/api/admin/set-tokens")

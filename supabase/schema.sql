@@ -22,6 +22,8 @@ create table if not exists public.profiles (
   username text null,
   display_name text null,
   token_balance integer not null default 0 check (token_balance >= 0),
+  banned_at timestamptz null,
+  ban_reason text null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -30,7 +32,9 @@ alter table public.profiles
   add column if not exists username text,
   add column if not exists display_name text,
   add column if not exists token_balance integer not null default 0
-    check (token_balance >= 0);
+    check (token_balance >= 0),
+  add column if not exists banned_at timestamptz null,
+  add column if not exists ban_reason text null;
 
 create unique index if not exists profiles_username_lower_uidx
   on public.profiles (lower(username))
@@ -40,6 +44,10 @@ create index if not exists profiles_token_balance_idx
   on public.profiles (token_balance);
 
 create index if not exists profiles_role_idx on public.profiles (role);
+
+create index if not exists profiles_banned_at_idx
+  on public.profiles (banned_at)
+  where banned_at is not null;
 
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
@@ -488,3 +496,35 @@ create policy "admin_audit_log_admin_select"
 revoke insert, update, delete on public.admin_audit_log from authenticated, anon;
 grant select on public.admin_audit_log to authenticated;
 grant all on public.admin_audit_log to service_role;
+
+-- ---------------------------------------------------------------------------
+-- App settings (maintenance flags, etc.)
+-- ---------------------------------------------------------------------------
+create table if not exists public.app_settings (
+  key text primary key,
+  value jsonb not null default 'false'::jsonb,
+  updated_at timestamptz not null default now(),
+  updated_by uuid null references auth.users(id) on delete set null
+);
+
+insert into public.app_settings (key, value)
+values
+  ('farm_maintenance', 'false'::jsonb),
+  ('topup_maintenance', 'false'::jsonb)
+on conflict (key) do nothing;
+
+alter table public.app_settings enable row level security;
+
+drop policy if exists "app_settings_admin_select" on public.app_settings;
+create policy "app_settings_admin_select"
+  on public.app_settings for select to authenticated
+  using (public.is_admin());
+
+drop policy if exists "app_settings_authenticated_read_maintenance" on public.app_settings;
+create policy "app_settings_authenticated_read_maintenance"
+  on public.app_settings for select to authenticated
+  using (key in ('farm_maintenance', 'topup_maintenance'));
+
+revoke insert, update, delete on public.app_settings from authenticated, anon;
+grant select on public.app_settings to authenticated;
+grant all on public.app_settings to service_role;

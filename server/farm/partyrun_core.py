@@ -307,13 +307,24 @@ def peek_account(email, password, log_cb=None):
         if balances.get("level") is not None:
             level = balances["level"]
 
+        equip = {}
+        try:
+            equip = get_my_equipment() or {}
+        except Exception:
+            equip = {}
+
         return {
             "ok": True,
-            "nickname": nickname,
+            "nickname": nickname or equip.get("nick") or "player",
             "mid": MID,
             "coin": balances.get("coin"),
             "exp": balances.get("exp"),
             "level": level,
+            "tier": equip.get("tier"),
+            "cookie": equip.get("cookie"),
+            "pet": equip.get("pet"),
+            "pic": equip.get("pic"),
+            "treas": equip.get("treas") or [],
         }
     except FarmError as exc:
         return {"ok": False, "error": exc.code, "detail": exc.detail}

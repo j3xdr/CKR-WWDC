@@ -60,13 +60,17 @@ Local: copy `.env.example` → `.env` (gitignored)
 - Admin credit ผ่าน `/api/admin/add-tokens` หรือ credit-retry จาก topup `needs_manual`
 - Topup redeem: rate-limit ต่อ user/IP/voucher; อย่าโชว์ข้อความดิบจาก TrueMoney ฝั่ง client
 - Single-session: client ต้องส่ง `X-Session-Token`; login เครื่องใหม่ทำให้ token เก่าใช้ไม่ได้
+- Soft caps: coin ≤ 50000, exp ≤ 5000 ฝั่ง API (ยังไม่ใช่เพดานทางการของเกม)
+- Farm fail หลังหักโทเค็น → auto-refund (`farm_fail_refund`)
+- Ban: `profiles.banned_at` บล็อก login/API; maintenance ผ่าน `app_settings`
 
 ---
 
 ## Game-side safety
 
 - อย่าส่ง EXP มโหฬาร — ทำให้ `corrupt_pending` แล้วฟาร์มบัญชีนั้นไม่ได้จนกว่า daily/season reset
-- Score/coin/exp cap ฝั่ง API = Int32 max แต่ “ปลอดภัยต่อบัญชี” ≠ max ทางเทคนิค
+- Score/coin/exp cap ฝั่ง API = Int32 max แต่ soft caps ด้านบนปลอดภัยกว่า; “ปลอดภัยต่อบัญชี” ≠ max ทางเทคนิค
+- Peek ยังอาจ claim quest reward ตอนอ่านยอด (ClaimQuestRewardAll) — เอกสารไว้ในโค้ด/MD
 
 ---
 

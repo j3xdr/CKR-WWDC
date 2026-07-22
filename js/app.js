@@ -14,6 +14,8 @@
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
   const INT32_MAX = 2147483647;
+  const FARM_SOFT_CAP_COIN = 50000;
+  const FARM_SOFT_CAP_EXP = 5000;
 
   const DIGIT_TH = [
     "ศูนย์",
@@ -256,6 +258,14 @@
     NETWORK_ERROR: "เชื่อมต่อ TrueMoney ไม่ได้",
     topup_credit_failed: "รับซองแล้วแต่เติมโทเค็นไม่สำเร็จ — ติดต่อแอดมิน",
     session_replaced: "มีการเข้าสู่ระบบจากที่อื่น — กรุณาเข้าสู่ระบบใหม่",
+    account_banned: "บัญชีถูกระงับ กรุณาติดต่อแอดมิน",
+    maintenance: "ระบบปิดปรับปรุงชั่วคราว ลองใหม่ภายหลัง",
+    value_capped:
+      "ค่าเหรียญ/XP สูงเกินไป (เหรียญสูงสุด " +
+      FARM_SOFT_CAP_COIN.toLocaleString("th-TH") +
+      " · XP สูงสุด " +
+      FARM_SOFT_CAP_EXP.toLocaleString("th-TH") +
+      ")",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -382,6 +392,12 @@
         if (res.ok) {
           apiReady = true;
           paintApiStatus("ready", "API พร้อม");
+          try {
+            const data = await res.json();
+            paintMaintenanceBanner(data);
+          } catch (_) {
+            paintMaintenanceBanner(null);
+          }
           return true;
         }
       } catch (_) {
@@ -395,6 +411,23 @@
     apiReady = false;
     paintApiStatus("down", "API ยังไม่พร้อม");
     return false;
+  }
+
+  function paintMaintenanceBanner(health) {
+    const el = $("maintenance-banner");
+    if (!el) return;
+    const farm = !!(health && health.farm_maintenance);
+    const topup = !!(health && health.topup_maintenance);
+    if (!farm && !topup) {
+      el.classList.add("hidden");
+      el.textContent = "";
+      return;
+    }
+    const parts = [];
+    if (farm) parts.push("ฟาร์ม");
+    if (topup) parts.push("เติมเงิน");
+    el.textContent = "ปิดปรับปรุงชั่วคราว: " + parts.join(" · ");
+    el.classList.remove("hidden");
   }
 
   async function ensureApiReady() {
@@ -959,11 +992,16 @@
   function showPeekResultModal(data) {
     const dash = (v) =>
       v === null || v === undefined || v === "" ? "—" : formatNumTh(v);
+    const treas = Array.isArray(data.treas) ? data.treas.join(", ") : "";
     const rows = [
       ["ชื่อในเกม", escapeHtml(data.nickname || "—")],
       ["เลเวล", escapeHtml(dash(data.level))],
       ["เหรียญ", escapeHtml(dash(data.coin))],
       ["XP", escapeHtml(dash(data.exp))],
+      ["เทียร์", escapeHtml(dash(data.tier))],
+      ["คุกกี้", escapeHtml(dash(data.cookie))],
+      ["สัตว์เลี้ยง", escapeHtml(dash(data.pet))],
+      ["สมบัติ", escapeHtml(treas || "—")],
     ];
     const html =
       '<table class="result-table"><tbody>' +
@@ -984,6 +1022,59 @@
     modalActions.appendChild(
       makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
     );
+  }
+
+  function renderFarmHistory(items) {
+    const root = $("farm-history");
+    if (!root) return;
+    root.innerHTML = "";
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      root.innerHTML = '<li class="muted">ยังไม่มีประวัติ</li>';
+      return;
+    }
+    list.slice(0, 8).forEach((row) => {
+      const li = document.createElement("li");
+      const st = row.status || "—";
+      const stLabel =
+        st === "succeeded"
+          ? "สำเร็จ"
+          : st === "failed"
+            ? "ล้มเหลว"
+            : st === "running"
+              ? "กำลังรัน"
+              : st;
+      const stClass = st === "succeeded" ? "hist-ok" : st === "failed" ? "hist-warn" : "";
+      li.innerHTML =
+        "<span>S " +
+        escapeHtml(formatNumTh(row.score)) +
+        " · C " +
+        escapeHtml(formatNumTh(row.coin)) +
+        " · XP " +
+        escapeHtml(formatNumTh(row.exp)) +
+        "</span>" +
+        '<span class="' +
+        stClass +
+        '">' +
+        stLabel +
+        "</span>" +
+        '<span class="hist-meta">' +
+        escapeHtml(formatTopupDay(row.created_at)) +
+        (row.error ? " · " + escapeHtml(String(row.error).slice(0, 60)) : "") +
+        "</span>";
+      root.appendChild(li);
+    });
+  }
+
+  async function loadFarmHistory() {
+    if (!accessToken) {
+      renderFarmHistory([]);
+      return;
+    }
+    try {
+      const data = await api("/api/farm/history");
+      renderFarmHistory(data.items || []);
+    } catch (_) {}
   }
 
   function fallbackTopupPackages() {
@@ -1276,6 +1367,7 @@
     updateFarmAvailability();
     refreshGateAndQueueUi().catch(() => {});
     loadTopupHistory().catch(() => {});
+    loadFarmHistory().catch(() => {});
   }
 
   function showLogin() {
@@ -1640,6 +1732,13 @@
       return;
     }
 
+    const coin = parseFarmNum($("farm-coin").value);
+    const exp = parseFarmNum($("farm-exp").value);
+    if (coin > FARM_SOFT_CAP_COIN || exp > FARM_SOFT_CAP_EXP) {
+      showErrorModal(ERR_TH.value_capped, "ค่าสูงเกินไป");
+      return;
+    }
+
     const btn = $("farm-btn");
     const tokensBefore = tokenBalance();
     farmRunning = true;
@@ -1655,8 +1754,8 @@
           email: $("dp-acct-mail").value.trim(),
           password: $("dp-acct-secret").value,
           score: parseFarmNum($("farm-score").value),
-          coin: parseFarmNum($("farm-coin").value),
-          exp: parseFarmNum($("farm-exp").value),
+          coin,
+          exp,
         },
       });
       clearStageTimer();
@@ -1691,14 +1790,31 @@
           });
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
+        loadFarmHistory().catch(() => {});
       } else {
-        const msg = farmErrorMessage(result, "ฟาร์มจบแล้วแต่มีปัญหา · โทเค็นถูกหักแล้ว");
+        let msg = farmErrorMessage(result, "ฟาร์มไม่สำเร็จ");
+        if (/corrupt_pending/i.test(String(result?.error || data.error || ""))) {
+          msg = ERR_TH.corrupt_pending;
+        }
+        msg += data.refunded ? " · คืนโทเค็นแล้ว" : " · โทเค็นถูกหักแล้ว";
         setStatus($("farm-status"), msg, "err");
-        // Error stays in status cards; no stacked error modal
+        loadFarmHistory().catch(() => {});
       }
     } catch (e) {
       clearStageTimer();
-      if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
+      if (/account_banned/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
+        setStatus($("farm-status"), ERR_TH.account_banned, "err");
+      } else if (/maintenance/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
+        setStatus($("farm-status"), ERR_TH.maintenance, "err");
+      } else if (e.status === 400 && /value_capped/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.value_capped, "ค่าสูงเกินไป");
+        setStatus($("farm-status"), ERR_TH.value_capped, "err");
+      } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
         const gate = e.gate || e.data?.detail?.gate;
         if (gate) renderQueueModal(gate);
@@ -1763,8 +1879,9 @@
     try {
       await refreshMe();
       loadTopupHistory().catch(() => {});
+      loadFarmHistory().catch(() => {});
     } catch (e) {
-      if (/session_replaced/i.test(String(e.message || ""))) return;
+      if (/session_replaced|account_banned/i.test(String(e.message || ""))) return;
       await sb.auth.signOut();
       accessToken = null;
       clearSessionToken();
@@ -1932,6 +2049,45 @@
 
   $("topup-copy-price")?.addEventListener("click", () => {
     copyTopupPrice();
+  });
+
+  $("topup-verify-btn")?.addEventListener("click", async () => {
+    if (topupBusy || farmRunning || peekRunning) return;
+    const voucher = ($("topup-voucher")?.value || "").trim();
+    if (!voucher) {
+      showErrorModal("วางลิงก์หรือโค้ดซอง TrueMoney ก่อน", "ข้อมูลไม่ครบ");
+      return;
+    }
+    if (!accessToken) {
+      showErrorModal("กรุณาเข้าสู่ระบบก่อน", "ต้องเข้าสู่ระบบ");
+      return;
+    }
+    const btn = $("topup-verify-btn");
+    if (btn) btn.disabled = true;
+    setStatus($("topup-status"), "กำลังตรวจซอง…", "muted");
+    try {
+      await ensureApiReady();
+      const data = await api("/api/topup/verify", {
+        method: "POST",
+        body: { voucher, package_tokens: selectedTopupTokens },
+      });
+      setStatus(
+        $("topup-status"),
+        "ซองผ่าน · ยอด " +
+          formatNumTh(data.amount_baht) +
+          "฿ ตรงแพ็ก " +
+          data.package_tokens +
+          "T",
+        "ok"
+      );
+    } catch (e) {
+      if (/session_replaced/i.test(String(e.message || ""))) return;
+      const msg = thError(e.message) || "ตรวจซองไม่สำเร็จ";
+      setStatus($("topup-status"), msg, "err");
+      showErrorModal(msg, "ตรวจซองไม่ผ่าน");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   });
 
   $("topup-btn")?.addEventListener("click", async () => {
