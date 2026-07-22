@@ -224,6 +224,7 @@
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
     login_no_session: "เข้าสู่ระบบไม่สำเร็จ",
+    network_error: "เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง",
     Invalid: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
     invalid_credentials: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
     username_taken: "ชื่อผู้ใช้นี้ถูกใช้แล้ว ลองชื่ออื่น",
@@ -1242,10 +1243,10 @@
       await sb.auth.signOut();
       accessToken = null;
       showLogin();
-      setStatus(
-        $("login-status"),
+      setStatus($("login-status"), "", "muted");
+      showErrorModal(
         thError(e.message) || "เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่",
-        "err"
+        "เซสชันหมดอายุ"
       );
     }
   }
@@ -1279,7 +1280,9 @@
       setStatus($("login-status"), "", "muted");
       setupDevPlayAutofillGuards();
     } catch (e) {
-      setStatus($("login-status"), thError(e.message) || "เข้าสู่ระบบไม่สำเร็จ", "err");
+      const msg = thError(e.message) || "เข้าสู่ระบบไม่สำเร็จ";
+      setStatus($("login-status"), "", "muted");
+      showErrorModal(msg, "เข้าสู่ระบบไม่สำเร็จ");
     } finally {
       $("login-btn").disabled = false;
     }
@@ -1311,15 +1314,18 @@
     const confirmPassword = $("signup-pass2")?.value || "";
 
     if (password !== confirmPassword) {
-      setStatus($("signup-status"), ERR_TH.password_mismatch, "err");
+      setStatus($("signup-status"), "", "muted");
+      showErrorModal(ERR_TH.password_mismatch, "ยืนยันรหัสผ่านไม่ตรง");
       return;
     }
     if (username.includes("@")) {
-      setStatus($("signup-status"), ERR_TH.invalid_username, "err");
+      setStatus($("signup-status"), "", "muted");
+      showErrorModal(ERR_TH.invalid_username, "ชื่อผู้ใช้ไม่ถูกต้อง");
       return;
     }
     if (password.length < 6) {
-      setStatus($("signup-status"), "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "err");
+      setStatus($("signup-status"), "", "muted");
+      showErrorModal("รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "รหัสผ่านสั้นเกินไป");
       return;
     }
 
@@ -1349,7 +1355,20 @@
       setStatus($("signup-status"), "", "muted");
       setupDevPlayAutofillGuards();
     } catch (e) {
-      setStatus($("signup-status"), thError(e.message) || "สมัครสมาชิกไม่สำเร็จ", "err");
+      const raw = String(e.message || "");
+      let title = "สมัครสมาชิกไม่สำเร็จ";
+      if (raw.includes("username_taken")) title = "ชื่อผู้ใช้ซ้ำ";
+      else if (raw.includes("signup_rate_limited")) title = "สมัครถี่เกินไป";
+      else if (raw.includes("password_mismatch")) title = "ยืนยันรหัสผ่านไม่ตรง";
+      else if (raw.includes("invalid_username")) title = "ชื่อผู้ใช้ไม่ถูกต้อง";
+      else if (raw.includes("service_role_not_configured") || raw.includes("auth_not_configured")) {
+        title = "ระบบยังไม่พร้อม";
+      } else if (raw.includes("register_session_failed")) {
+        title = "สมัครแล้ว แต่เข้าสู่ระบบไม่ได้";
+      }
+      const msg = thError(e.message) || "สมัครสมาชิกไม่สำเร็จ";
+      setStatus($("signup-status"), "", "muted");
+      showErrorModal(msg, title);
     } finally {
       $("signup-btn").disabled = false;
     }
