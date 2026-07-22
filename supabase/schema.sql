@@ -3,7 +3,8 @@
 -- Internal Auth email may be synthetic: {sanitized}@users.ckr.local
 -- Admin username is set to their existing auth email string
 -- Roles: admin | normal
--- No self-registration — admin creates users via Render /api/admin/create-user
+-- Public self-registration via Render POST /api/auth/register (0 tokens).
+-- Admin can still create/credit via /api/admin/create-user and /api/admin/add-tokens.
 -- 1 token = 1 farm run
 
 -- ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@
 | Strip public README to title only | ไม่โฆษณาวิธีใช้/ความลับบน GitHub |
 | Username login (ไม่โชว์ email) | UX ลูกค้า + synthetic `@users.ckr.local` |
 | Admin แยกที่ Login_j3xdr | ไม่ปนปุ่มแอดมินในหน้าฟาร์มสาธารณะ |
+| **Self-registration** (`/api/auth/register`) | ลดขั้นตอนติดต่อแอดมินเพื่อสร้างบัญชี; tokens เริ่ม 0 |
 
 Commits ที่เกี่ยวข้องโดยประมาณ: `255fa39` … `926aa69` … `89af18f` … `73f1dab`
 

@@ -23,6 +23,7 @@
 ## Auth model
 
 1. Client `POST /api/auth/login` ด้วย `{username, password}`
+   - หรือ `POST /api/auth/register` ด้วย `{username, password, confirm_password}` → สร้างบัญชี + ออก JWT ทันที
 2. Server resolve auth email:
    - Prefer RPC `resolve_username_email` (service_role)
    - Fallback: username-as-email (admin) + synthetic `{sanitized}@users.ckr.local`
@@ -31,6 +32,7 @@
 5. `verify_user` → `GET {SUPABASE}/auth/v1/user`
 6. Profile from `profiles` (role, username, token_balance)
 
+**Self-register:** public; role บังคับ `normal`; `token_balance` เริ่ม **0**; rate limit in-memory ~5/ชม./IP  
 Admin endpoints require `profiles.role == "admin"`.
 
 ---
@@ -44,6 +46,7 @@ Admin endpoints require `profiles.role == "admin"`.
 | GET | `/` | no | JSON pointers to UI/admin |
 | GET | `/api/health` | no | `farm_busy`, supabase flags |
 | POST | `/api/auth/login` | no | username login |
+| POST | `/api/auth/register` | no | self-signup → JWT (0 tokens) |
 | GET | `/api/me` | JWT | profile + tokens |
 | GET | `/api/farm/gate` | JWT | queue snapshot + `can_run` |
 | POST | `/api/farm/queue/join` | JWT | enqueue / activate turn |

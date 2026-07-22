@@ -225,6 +225,14 @@
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
     login_no_session: "เข้าสู่ระบบไม่สำเร็จ",
     Invalid: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+    invalid_credentials: "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง",
+    username_taken: "ชื่อผู้ใช้นี้ถูกใช้แล้ว ลองชื่ออื่น",
+    password_mismatch: "รหัสผ่านกับยืนยันรหัสผ่านไม่ตรงกัน",
+    invalid_username: "ชื่อผู้ใช้ไม่ถูกต้อง (ห้ามใช้อีเมล)",
+    signup_rate_limited: "สมัครถี่เกินไป รอสักครู่แล้วลองใหม่",
+    service_role_not_configured: "ระบบสมัครยังไม่พร้อม ลองใหม่ภายหลัง",
+    auth_not_configured: "ระบบยืนยันตัวตนยังไม่พร้อม",
+    register_session_failed: "สมัครสำเร็จแต่เข้าสู่ระบบอัตโนมัติไม่ได้ ลองล็อกอินเอง",
     login_failed: "เข้าสู่ระบบเกมไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน DevPlay",
     LOGIN_FAILED: "เข้าสู่ระบบเกมไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน DevPlay",
     corrupt_pending:
@@ -1274,6 +1282,76 @@
       setStatus($("login-status"), thError(e.message) || "เข้าสู่ระบบไม่สำเร็จ", "err");
     } finally {
       $("login-btn").disabled = false;
+    }
+  });
+
+  function setAuthMode(mode) {
+    const isSignup = mode === "signup";
+    $("login-mode")?.classList.toggle("hidden", isSignup);
+    $("signup-mode")?.classList.toggle("hidden", !isSignup);
+    $("tab-login")?.classList.toggle("is-active", !isSignup);
+    $("tab-signup")?.classList.toggle("is-active", isSignup);
+    $("tab-login")?.setAttribute("aria-selected", String(!isSignup));
+    $("tab-signup")?.setAttribute("aria-selected", String(isSignup));
+    setStatus($("login-status"), "", "muted");
+    setStatus($("signup-status"), "", "muted");
+  }
+
+  $("tab-login")?.addEventListener("click", () => setAuthMode("login"));
+  $("tab-signup")?.addEventListener("click", () => setAuthMode("signup"));
+
+  $("signup-form")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const remember = !!$("signup-remember")?.checked;
+    setRememberPref(remember);
+    if ($("remember-me")) $("remember-me").checked = remember;
+
+    const username = ($("signup-user")?.value || "").trim();
+    const password = $("signup-pass")?.value || "";
+    const confirmPassword = $("signup-pass2")?.value || "";
+
+    if (password !== confirmPassword) {
+      setStatus($("signup-status"), ERR_TH.password_mismatch, "err");
+      return;
+    }
+    if (username.includes("@")) {
+      setStatus($("signup-status"), ERR_TH.invalid_username, "err");
+      return;
+    }
+    if (password.length < 6) {
+      setStatus($("signup-status"), "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร", "err");
+      return;
+    }
+
+    setStatus($("signup-status"), "กำลังสมัครสมาชิก…", "muted");
+    $("signup-btn").disabled = true;
+    try {
+      const data = await api("/api/auth/register", {
+        method: "POST",
+        body: {
+          username,
+          password,
+          confirm_password: confirmPassword,
+        },
+      });
+      if (!data.access_token || !data.refresh_token) {
+        throw new Error("register_session_failed");
+      }
+      const { error } = await sb.auth.setSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+      });
+      if (error) throw error;
+      accessToken = data.access_token;
+      profile = data.profile;
+      paintProfile();
+      showApp();
+      setStatus($("signup-status"), "", "muted");
+      setupDevPlayAutofillGuards();
+    } catch (e) {
+      setStatus($("signup-status"), thError(e.message) || "สมัครสมาชิกไม่สำเร็จ", "err");
+    } finally {
+      $("signup-btn").disabled = false;
     }
   });
 

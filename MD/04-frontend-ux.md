@@ -20,8 +20,10 @@ Config (`js/config.js`):
 
 | ID | Role |
 |----|------|
-| `#login-view` | username/password login |
-| `#login-form`, `#login-user`, `#login-pass`, `#remember-me` | login form |
+| `#login-view` | login / signup shell |
+| `#tab-login`, `#tab-signup` | สลับโหมดเข้าสู่ระบบ / สมัคร |
+| `#login-mode`, `#login-form`, `#login-user`, `#login-pass`, `#remember-me` | login form |
+| `#signup-mode`, `#signup-form`, `#signup-user`, `#signup-pass`, `#signup-pass2`, `#signup-remember` | signup form |
 | `#user-view` | post-login farm UI |
 | `#who-user`, `#token-balance`, `#nav-balance-num` | identity + tokens |
 | `#logout-btn` | logout |

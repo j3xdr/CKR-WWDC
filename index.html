@@ -46,49 +46,116 @@
           <img class="hero-logo" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
           <h1 class="hero-title">CKR WWDC</h1>
           <p class="hero-lead">ฟาร์มคุกกี้รันง่าย ๆ · ใช้ 1 โทเค็นต่อการวิ่ง</p>
-          <p class="hero-note">ขอบัญชีจากแอดมินเท่านั้น — ไม่มีสมัครเอง</p>
+          <p class="hero-note">สมัครฟรีได้เลย · โทเค็นเริ่มต้น 0 (เติมกับแอดมิน)</p>
         </div>
 
         <div class="panel login-panel">
           <div class="panel-ribbon" aria-hidden="true">
             <img src="assets/crc_cookie_stone_box.png" alt="" />
           </div>
-          <h2 class="panel-title">เข้าสู่ระบบ</h2>
-          <p class="panel-hint">ใส่ชื่อผู้ใช้และรหัสผ่านที่ได้รับ</p>
-          <form id="login-form" autocomplete="on">
-            <label class="field">
-              <span>ชื่อผู้ใช้</span>
-              <input
-                id="login-user"
-                name="username"
-                type="text"
-                required
-                autocomplete="username"
-                placeholder="ชื่อผู้ใช้ของคุณ"
-                spellcheck="false"
-              />
-            </label>
-            <label class="field">
-              <span>รหัสผ่าน</span>
-              <input
-                id="login-pass"
-                name="password"
-                type="password"
-                required
-                autocomplete="current-password"
-                placeholder="••••••••"
-              />
-            </label>
-            <label class="remember-row">
-              <input id="remember-me" type="checkbox" checked />
-              <span>จำฉันไว้บนเครื่องนี้</span>
-            </label>
-            <button class="btn btn-candy" type="submit" id="login-btn">
-              <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+          <div class="auth-tabs" role="tablist" aria-label="โหมดเข้าสู่ระบบ">
+            <button type="button" class="auth-tab is-active" id="tab-login" role="tab" aria-selected="true">
               เข้าสู่ระบบ
             </button>
-            <p id="login-status" class="status" role="status"></p>
-          </form>
+            <button type="button" class="auth-tab" id="tab-signup" role="tab" aria-selected="false">
+              สมัครสมาชิก
+            </button>
+          </div>
+
+          <div id="login-mode">
+            <h2 class="panel-title">เข้าสู่ระบบ</h2>
+            <p class="panel-hint">ใส่ชื่อผู้ใช้และรหัสผ่านของคุณ</p>
+            <form id="login-form" autocomplete="on">
+              <label class="field">
+                <span>ชื่อผู้ใช้</span>
+                <input
+                  id="login-user"
+                  name="username"
+                  type="text"
+                  required
+                  minlength="2"
+                  maxlength="64"
+                  autocomplete="username"
+                  placeholder="ชื่อผู้ใช้ของคุณ"
+                  spellcheck="false"
+                />
+              </label>
+              <label class="field">
+                <span>รหัสผ่าน</span>
+                <input
+                  id="login-pass"
+                  name="password"
+                  type="password"
+                  required
+                  autocomplete="current-password"
+                  placeholder="••••••••"
+                />
+              </label>
+              <label class="remember-row">
+                <input id="remember-me" type="checkbox" checked />
+                <span>จำฉันไว้บนเครื่องนี้</span>
+              </label>
+              <button class="btn btn-candy" type="submit" id="login-btn">
+                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+                เข้าสู่ระบบ
+              </button>
+              <p id="login-status" class="status" role="status"></p>
+            </form>
+          </div>
+
+          <div id="signup-mode" class="hidden">
+            <h2 class="panel-title">สมัครสมาชิก</h2>
+            <p class="panel-hint">ตั้งชื่อผู้ใช้และรหัสผ่าน (ยืนยันรหัสผ่านให้ตรงกัน)</p>
+            <form id="signup-form" autocomplete="on">
+              <label class="field">
+                <span>ชื่อผู้ใช้</span>
+                <input
+                  id="signup-user"
+                  name="username"
+                  type="text"
+                  required
+                  minlength="2"
+                  maxlength="64"
+                  autocomplete="username"
+                  placeholder="ตั้งชื่อผู้ใช้"
+                  spellcheck="false"
+                />
+              </label>
+              <label class="field">
+                <span>รหัสผ่าน</span>
+                <input
+                  id="signup-pass"
+                  name="password"
+                  type="password"
+                  required
+                  minlength="6"
+                  autocomplete="new-password"
+                  placeholder="อย่างน้อย 6 ตัวอักษร"
+                />
+              </label>
+              <label class="field">
+                <span>ยืนยันรหัสผ่าน</span>
+                <input
+                  id="signup-pass2"
+                  name="confirm_password"
+                  type="password"
+                  required
+                  minlength="6"
+                  autocomplete="new-password"
+                  placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+                />
+              </label>
+              <label class="remember-row">
+                <input id="signup-remember" type="checkbox" checked />
+                <span>จำฉันไว้บนเครื่องนี้</span>
+              </label>
+              <button class="btn btn-candy" type="submit" id="signup-btn">
+                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+                สมัครสมาชิก
+              </button>
+              <p id="signup-status" class="status" role="status"></p>
+            </form>
+          </div>
         </div>
       </div>
     </section>

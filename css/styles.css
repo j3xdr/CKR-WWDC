@@ -284,6 +284,38 @@ input {
   color: var(--cream-dim);
 }
 
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.auth-tab {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: rgba(20, 12, 8, 0.45);
+  color: var(--cream-dim);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.auth-tab:hover {
+  color: var(--cream);
+  border-color: rgba(232, 196, 120, 0.45);
+}
+
+.auth-tab.is-active {
+  color: #2a160c;
+  background: linear-gradient(180deg, #ffd36a 0%, var(--gold) 100%);
+  border-color: rgba(232, 196, 120, 0.85);
+}
+
 .login-panel {
   position: relative;
   max-width: 420px;

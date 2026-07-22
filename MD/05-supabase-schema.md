@@ -83,6 +83,7 @@ Server patches via service_role (`farm_queue.set_farm_lock`).
 - Customer Auth email: `{sanitized_username}@users.ckr.local` (synthetic; not shown in UI)
 - Admin may use real email as username string
 - Public Pages login never asks for email — only username
+- **Self-register** ผ่าน `POST /api/auth/register` (สร้าง Auth + profile role `normal`, tokens 0)
 
 ---
 
