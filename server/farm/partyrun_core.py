@@ -735,8 +735,15 @@ def play_and_submit(session, my):
             # Evaluate deadlines before filtering (ping/sync would otherwise skip them)
             if run_ended[0] and quit_sent[0] and quit_deadline is None:
                 quit_deadline = time.time() + 20
-            if run_ended[0] and not quit_sent[0] and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + RESULT_WAIT_SECONDS:
+            # RESULT wait is only for QUIT_ON_RESULT=True; when False, submit() quits after run_end
+            if (QUIT_ON_RESULT and run_ended[0] and not quit_sent[0]
+                    and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + RESULT_WAIT_SECONDS):
                 print("   RESULT slow — forcing quit")
+                ensure_quit()
+            # Safety: if immediate-quit path stalled after run_end, force quit
+            if (not QUIT_ON_RESULT and run_ended[0] and not quit_sent[0]
+                    and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + QUIT_AFTER_SECONDS + 8):
+                print("   quit stalled after run_end — forcing quit")
                 ensure_quit()
             out = json_format.MessageToDict(resp, preserving_proto_field_name=True)
             if any(k in out for k in ("char_minimum_sync", "char_full_sync",
