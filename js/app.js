@@ -998,54 +998,6 @@
     }
   }
 
-  function setupXpCalculator() {
-    const card = $("xp-calc-card");
-    const openBtn = $("xp-calc-open");
-    const closeBtn = $("xp-calc-close");
-    const applyBtn = $("xp-calc-apply");
-    const cur = $("xp-cur");
-    const tgt = $("xp-tgt");
-    const out = $("xp-calc-result");
-    if (!card || !openBtn || !window.CKR_LEVEL_XP) return;
-
-    function refresh() {
-      const xp = window.CKR_LEVEL_XP.calculateRequiredXp(cur.value, tgt.value);
-      if (xp == null) {
-        out.innerHTML = "ใส่เลเวล 1–110 ให้ถูกต้อง";
-        return;
-      }
-      out.innerHTML =
-        "ต้องใช้ <strong>" + formatNumTh(xp) + "</strong> XP";
-      out.dataset.xp = String(xp);
-    }
-
-    openBtn.addEventListener("click", () => {
-      card.classList.remove("hidden");
-      card.hidden = false;
-      animateOpen(card);
-      refresh();
-    });
-    closeBtn?.addEventListener("click", () => {
-      animateClose(card, () => {
-        card.hidden = true;
-      });
-    });
-    cur?.addEventListener("input", refresh);
-    tgt?.addEventListener("input", refresh);
-    applyBtn?.addEventListener("click", () => {
-      refresh();
-      const xp = Number(out.dataset.xp || 0);
-      const expInput = $("farm-exp");
-      if (!expInput || !Number.isFinite(xp) || xp < 0) return;
-      expInput.value = formatCommas(String(Math.trunc(xp)));
-      syncFarmNumField(expInput, { silent: true });
-      animateClose(card, () => {
-        card.hidden = true;
-      });
-      setStatus($("farm-status"), "ใส่ XP จากเครื่องคิดเลขแล้ว", "ok");
-    });
-  }
-
   function showConfirmModal(ticketN) {
     const n = Math.max(1, Number(ticketN) || 1);
     return new Promise((resolve) => {
@@ -1138,10 +1090,9 @@
       if (!isDevPlayConnected()) {
         hint.textContent = "เชื่อม DevPlay เพื่อเริ่มเลือกจำนวนตั๋ว";
       } else if (devplaySession?.tickets == null) {
-        hint.textContent =
-          "ยอดตั๋วในเกมไม่โชว์ตอนเชื่อม — เลือกจำนวนได้ (สูงสุด " +
-          formatNumTh(max) +
-          ") · ใช้ 1 โทเค็นเว็บ";
+        hint.textContent = "ยังอ่านยอดตั๋วไม่ได้ — ลองเชื่อมใหม่";
+      } else if (Number(devplaySession.tickets) <= 0) {
+        hint.textContent = "ไม่มีตั๋ว Party Run ในไอดีนี้";
       } else {
         hint.textContent =
           "เหลือ " +
@@ -1171,21 +1122,19 @@
     const ttlMs = (Number(data.expires_in) || 900) * 1000;
     const ticketsKnown =
       data.party_run_tickets != null && Number.isFinite(Number(data.party_run_tickets));
+    const ticketsN = ticketsKnown ? Math.max(0, Number(data.party_run_tickets)) : null;
     devplaySession = {
       id: data.devplay_session_id,
       nickname: data.nickname || "player",
-      tickets: ticketsKnown ? Number(data.party_run_tickets) : null,
+      tickets: ticketsN,
       expiresAt: Date.now() + ttlMs,
     };
-    // Owned balance is often unknown at connect (API quirk). Allow up to 99.
-    ticketMax = ticketsKnown
-      ? Math.max(1, Number(devplaySession.tickets) || 1)
-      : 99;
-    ticketCount = ticketsKnown ? ticketMax : Math.min(5, ticketMax);
+    ticketMax = ticketsKnown ? Math.max(1, ticketsN || 1) : 99;
+    ticketCount = ticketsKnown
+      ? Math.min(Math.max(1, ticketsN || 1), ticketMax)
+      : Math.min(5, ticketMax);
     const nick = devplaySession.nickname;
-    const ticketsLabel = ticketsKnown
-      ? formatNumTh(devplaySession.tickets)
-      : "จะอัปเดตหลังรัน";
+    const ticketsLabel = ticketsKnown ? formatNumTh(ticketsN) + " ใบ" : "—";
     const coin = data.coin == null ? "—" : formatNumTh(data.coin);
     const exp = data.exp == null ? "—" : formatNumTh(data.exp);
     const lvl = data.level == null ? "—" : String(data.level);
@@ -1208,7 +1157,7 @@
       return;
     }
     devplayConnecting = true;
-    paintDevPlayConnectStatus("กำลังเชื่อมต่อ…", "muted");
+    paintDevPlayConnectStatus("กำลังเชื่อมต่อและนับตั๋ว Party Run…", "muted");
     updateFarmAvailability();
     try {
       await ensureApiReady();
@@ -1220,7 +1169,12 @@
         },
       });
       applyDevPlayConnect(data);
-      setStatus($("farm-status"), "เชื่อม DevPlay แล้ว · พร้อม Party Run", "ok");
+      const t = data.party_run_tickets;
+      const ticketMsg =
+        t == null
+          ? "เชื่อม DevPlay แล้ว"
+          : "เชื่อมแล้ว · ตั๋ว Party Run " + formatNumTh(t) + " ใบ";
+      setStatus($("farm-status"), ticketMsg, "ok");
     } catch (e) {
       resetDevPlaySession();
       paintDevPlayConnectStatus(
@@ -1250,11 +1204,16 @@
     if (connectBtn) {
       connectBtn.disabled = busy || !credsReady;
     }
+    const noTickets =
+      connected &&
+      devplaySession?.tickets != null &&
+      Number(devplaySession.tickets) <= 0;
     if (btn && !farmRunning) {
-      btn.disabled = empty || !connected || busy;
+      btn.disabled = empty || !connected || busy || noTickets;
     }
     if (sub) {
       if (!connected) sub.textContent = "เชื่อม DevPlay ก่อน";
+      else if (noTickets) sub.textContent = "ไม่มีตั๋ว Party Run";
       else sub.textContent = "รัน " + ticketCount + " ตั๋ว · หัก 1 โทเค็น";
     }
     setFarmInputsLocked(empty || !connected || busy);
@@ -2484,7 +2443,6 @@
     sessionToken = loadStoredSessionToken();
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
-    setupXpCalculator();
     paintTicketStepper();
     loadTopupPackages();
     pingApiHealth(2).catch(() => {});

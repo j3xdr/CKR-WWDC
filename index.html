@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun2" />
+  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun3" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -391,32 +391,6 @@
                   </label>
                 </div>
 
-                <div class="xp-tools">
-                  <button type="button" class="btn btn-ghost btn-sm-inline" id="xp-calc-open">
-                    คำนวณ XP จากเลเวล
-                  </button>
-                </div>
-
-                <div id="xp-calc-card" class="xp-calc-card hidden" hidden>
-                  <div class="xp-calc-head">
-                    <h3>คำนวณ XP ตามเลเวล</h3>
-                    <button type="button" class="xp-calc-close" id="xp-calc-close" aria-label="ปิด">×</button>
-                  </div>
-                  <p class="xp-calc-lead">ใส่เลเวลปัจจุบันกับเลเวลเป้าหมาย</p>
-                  <div class="xp-calc-grid">
-                    <label class="field">
-                      <span>Lv ปัจจุบัน</span>
-                      <input id="xp-cur" type="number" min="1" max="110" value="25" />
-                    </label>
-                    <label class="field">
-                      <span>Lv เป้าหมาย</span>
-                      <input id="xp-tgt" type="number" min="1" max="110" value="75" />
-                    </label>
-                  </div>
-                  <p class="xp-calc-result" id="xp-calc-result">ต้องใช้ <strong>0</strong> XP</p>
-                  <button type="button" class="btn btn-candy" id="xp-calc-apply">ยืนยัน · ใส่ในช่อง XP</button>
-                </div>
-
                 <button class="btn btn-run" type="submit" id="farm-btn" disabled>
                   <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
@@ -646,8 +620,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260725-partyrun2"></script>
-  <script src="js/level_xp.js?v=20260725-partyrun2"></script>
-  <script src="js/app.js?v=20260725-partyrun2"></script>
+  <script src="js/config.js?v=20260725-partyrun3"></script>
+  <script src="js/app.js?v=20260725-partyrun3"></script>
 </body>
 </html>

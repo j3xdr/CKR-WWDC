@@ -271,6 +271,62 @@ def _extract_ticket_total_from_claim(res):
 _PARTY_RUN_TICKETS_CACHED = None
 
 
+def peek_party_run_ticket_balance(my):
+    """Read owned Party Run ticket count at connect (no net ticket loss).
+
+    The live APIs do not expose inventory. Starting a debug match consumes 1
+    ticket; quitting without run_end + ClaimPartyRunReward refunds it and
+    returns party_run_ticket.total. Pending claims are cleared first — those
+    may already populate the cache without a probe match.
+    """
+    global _PARTY_RUN_TICKETS_CACHED
+    cached = get_party_run_tickets()
+    if cached is not None:
+        return cached
+
+    try:
+        clear_pending(my, max_loops=4)
+    except Exception as exc:
+        print("  ticket peek clear_pending:", exc)
+    cached = get_party_run_tickets()
+    if cached is not None:
+        return cached
+
+    print("  probing party-run ticket balance (match → quit → refund claim) ...")
+    session = matchmake(my, is_debug=True)
+    if session and session.get("__error__") and USE_DEBUG_MATCH:
+        print("  debug queue failed for ticket peek — retrying live ...")
+        session = matchmake(my, is_debug=False)
+    if not session or session.get("__error__"):
+        err = (session or {}).get("__error__") or {}
+        code = err.get("code") if isinstance(err, dict) else None
+        if code == "ERROR_CODE_NOT_ENOUGH_TICKET":
+            _PARTY_RUN_TICKETS_CACHED = 0
+            print("  party-run tickets = 0")
+            return 0
+        print("  ticket peek matchmaking failed")
+        return None
+
+    try:
+        finalize_session(session, my)
+    except Exception as exc:
+        print("  ticket peek finalize:", exc)
+
+    for attempt, delay in enumerate((0.0, 0.5, 1.0, 2.0)):
+        if delay:
+            time.sleep(delay)
+        res = claim(session["ingame_id"])
+        if res.get("__error__"):
+            print("  ticket peek claim retry:", (res.get("details") or "")[:120])
+            continue
+        total = _extract_ticket_total_from_claim(res)
+        if total is not None:
+            print(f"  party-run tickets = {total}")
+            return total
+    print("  ticket peek could not read balance")
+    return None
+
+
 def export_session():
     return {
         "tok": TOK,
@@ -943,12 +999,15 @@ def connect_devplay(email, password, log_cb=None):
             level = balances["level"]
 
         ticket_cost = get_party_run_ticket_cost()
-        tickets = get_party_run_tickets()  # usually None until a claim caches total
         equip = {}
         try:
             equip = get_my_equipment() or {}
         except Exception:
             equip = {}
+
+        tickets = get_party_run_tickets()
+        if tickets is None and equip:
+            tickets = peek_party_run_ticket_balance(equip)
 
         return {
             "ok": True,
