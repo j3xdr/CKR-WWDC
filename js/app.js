@@ -588,8 +588,21 @@
             if (Number.isFinite(data.farm_exp_max)) farmExpMax = data.farm_exp_max;
             const coinEl = $("farm-coin");
             const expEl = $("farm-exp");
-            if (coinEl) coinEl.dataset.farmCap = String(farmCoinMax);
-            if (expEl) expEl.dataset.farmCap = String(farmExpMax);
+            if (coinEl) {
+              coinEl.dataset.farmCap = String(farmCoinMax);
+              // Keep default at safe max when still empty / 0
+              if (!parseFarmNum(coinEl.value)) {
+                coinEl.value = formatCommas(String(farmCoinMax));
+                syncFarmNumField(coinEl, { silent: true });
+              }
+            }
+            if (expEl) {
+              expEl.dataset.farmCap = String(farmExpMax);
+              if (!parseFarmNum(expEl.value)) {
+                expEl.value = formatCommas(String(farmExpMax));
+                syncFarmNumField(expEl, { silent: true });
+              }
+            }
             paintMaintenanceBanner(data);
           } catch (_) {
             paintMaintenanceBanner(null);
@@ -1076,33 +1089,55 @@
     else el.classList.add("muted");
   }
 
+  function clampTicketCount(raw) {
+    const max = Math.max(1, ticketMax || 1);
+    const n = Math.floor(Number(String(raw).replace(/[^\d]/g, "")));
+    if (!Number.isFinite(n) || n < 1) return 1;
+    return Math.min(n, max);
+  }
+
   function paintTicketStepper() {
-    const display = $("ticket-count-display");
-    const hidden = $("ticket-count");
+    const input = $("ticket-count");
     const hint = $("ticket-max-hint");
     const minus = $("ticket-minus");
     const plus = $("ticket-plus");
     const max = Math.max(1, ticketMax || 1);
-    ticketCount = Math.max(1, Math.min(ticketCount, max));
-    if (display) display.textContent = String(ticketCount);
-    if (hidden) hidden.value = String(ticketCount);
+    ticketCount = clampTicketCount(ticketCount);
+    const editing = input && document.activeElement === input;
+    if (input && !editing) input.value = String(ticketCount);
     if (hint) {
       if (!isDevPlayConnected()) {
         hint.textContent = "เชื่อม DevPlay เพื่อเริ่มเลือกจำนวนตั๋ว";
+      } else if (devplaySession?.ticketsLoading) {
+        hint.textContent = "กำลังนับตั๋วในพื้นหลัง… เลือกรันไปก่อนได้";
       } else if (devplaySession?.tickets == null) {
-        hint.textContent = "ยังอ่านยอดตั๋วไม่ได้ — ลองเชื่อมใหม่";
+        hint.textContent =
+          "ยังไม่ทราบยอดตั๋ว — เลือกจำนวนได้ (สูงสุด " +
+          formatNumTh(max) +
+          ") · ใช้ 1 โทเค็นเว็บ";
       } else if (Number(devplaySession.tickets) <= 0) {
         hint.textContent = "ไม่มีตั๋ว Party Run ในไอดีนี้";
       } else {
         hint.textContent =
           "เหลือ " +
           formatNumTh(devplaySession.tickets) +
-          " ใบ · ใช้ 1 โทเค็นเว็บ";
+          " ใบ · พิมพ์ได้ 1–" +
+          formatNumTh(max) +
+          " · ใช้ 1 โทเค็นเว็บ";
       }
     }
     const canStep = isDevPlayConnected() && !farmRunning && !devplayConnecting;
+    if (input) input.disabled = !canStep;
     if (minus) minus.disabled = !canStep || ticketCount <= 1;
     if (plus) plus.disabled = !canStep || ticketCount >= max;
+  }
+
+  function commitTicketCountFromInput() {
+    const input = $("ticket-count");
+    if (!input) return;
+    ticketCount = clampTicketCount(input.value);
+    paintTicketStepper();
+    updateFarmAvailability();
   }
 
   function resetDevPlaySession() {
@@ -1118,6 +1153,22 @@
     paintTicketStepper();
   }
 
+  function paintDevPlaySessionLine() {
+    if (!devplaySession) return;
+    const nick = devplaySession.nickname || "player";
+    const coin = devplaySession.coin == null ? "—" : formatNumTh(devplaySession.coin);
+    const exp = devplaySession.exp == null ? "—" : formatNumTh(devplaySession.exp);
+    const lvl = devplaySession.level == null ? "—" : String(devplaySession.level);
+    let ticketsLabel = "—";
+    if (devplaySession.ticketsLoading) ticketsLabel = "กำลังนับ…";
+    else if (devplaySession.tickets != null)
+      ticketsLabel = formatNumTh(devplaySession.tickets) + " ใบ";
+    paintDevPlayConnectStatus(
+      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + ticketsLabel,
+      "ok"
+    );
+  }
+
   function applyDevPlayConnect(data) {
     const ttlMs = (Number(data.expires_in) || 900) * 1000;
     const ticketsKnown =
@@ -1127,27 +1178,65 @@
       id: data.devplay_session_id,
       nickname: data.nickname || "player",
       tickets: ticketsN,
+      ticketsLoading: !ticketsKnown,
+      coin: data.coin,
+      exp: data.exp,
+      level: data.level,
       expiresAt: Date.now() + ttlMs,
     };
     ticketMax = ticketsKnown ? Math.max(1, ticketsN || 1) : 99;
     ticketCount = ticketsKnown
       ? Math.min(Math.max(1, ticketsN || 1), ticketMax)
       : Math.min(5, ticketMax);
-    const nick = devplaySession.nickname;
-    const ticketsLabel = ticketsKnown ? formatNumTh(ticketsN) + " ใบ" : "—";
-    const coin = data.coin == null ? "—" : formatNumTh(data.coin);
-    const exp = data.exp == null ? "—" : formatNumTh(data.exp);
-    const lvl = data.level == null ? "—" : String(data.level);
-    paintDevPlayConnectStatus(
-      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + ticketsLabel,
-      "ok"
-    );
+    paintDevPlaySessionLine();
     const reconnect = $("devplay-reconnect-btn");
     if (reconnect) {
       reconnect.hidden = false;
       reconnect.classList.remove("hidden");
     }
     paintTicketStepper();
+    if (!ticketsKnown && data.devplay_session_id) {
+      refreshDevPlayTickets(data.devplay_session_id);
+    }
+  }
+
+  async function refreshDevPlayTickets(sessionId) {
+    const sid = sessionId || devplaySession?.id;
+    if (!sid || !devplaySession) return;
+    try {
+      const data = await api("/api/farm/devplay/tickets", {
+        method: "POST",
+        body: { devplay_session_id: sid },
+      });
+      if (!devplaySession || devplaySession.id !== sid) return;
+      const ticketsKnown =
+        data.party_run_tickets != null && Number.isFinite(Number(data.party_run_tickets));
+      if (!ticketsKnown) {
+        devplaySession.ticketsLoading = false;
+        paintDevPlaySessionLine();
+        paintTicketStepper();
+        return;
+      }
+      const ticketsN = Math.max(0, Number(data.party_run_tickets));
+      devplaySession.tickets = ticketsN;
+      devplaySession.ticketsLoading = false;
+      ticketMax = Math.max(1, ticketsN || 1);
+      ticketCount = Math.min(Math.max(1, ticketCount), ticketMax);
+      paintDevPlaySessionLine();
+      paintTicketStepper();
+      updateFarmAvailability();
+      setStatus(
+        $("farm-status"),
+        "ตั๋ว Party Run " + formatNumTh(ticketsN) + " ใบ",
+        "ok"
+      );
+    } catch (_) {
+      if (devplaySession && devplaySession.id === sid) {
+        devplaySession.ticketsLoading = false;
+        paintDevPlaySessionLine();
+        paintTicketStepper();
+      }
+    }
   }
 
   async function connectDevPlay() {
@@ -1157,7 +1246,7 @@
       return;
     }
     devplayConnecting = true;
-    paintDevPlayConnectStatus("กำลังเชื่อมต่อและนับตั๋ว Party Run…", "muted");
+    paintDevPlayConnectStatus("กำลังเชื่อมต่อ…", "muted");
     updateFarmAvailability();
     try {
       await ensureApiReady();
@@ -1169,12 +1258,7 @@
         },
       });
       applyDevPlayConnect(data);
-      const t = data.party_run_tickets;
-      const ticketMsg =
-        t == null
-          ? "เชื่อม DevPlay แล้ว"
-          : "เชื่อมแล้ว · ตั๋ว Party Run " + formatNumTh(t) + " ใบ";
-      setStatus($("farm-status"), ticketMsg, "ok");
+      setStatus($("farm-status"), "เชื่อม DevPlay แล้ว · พร้อม Party Run", "ok");
     } catch (e) {
       resetDevPlaySession();
       paintDevPlayConnectStatus(
@@ -1202,7 +1286,9 @@
     const busy = farmRunning || devplayConnecting;
 
     if (connectBtn) {
-      connectBtn.disabled = busy || !credsReady;
+      connectBtn.disabled = busy || !credsReady || connected;
+      connectBtn.hidden = connected;
+      connectBtn.classList.toggle("hidden", connected);
     }
     const noTickets =
       connected &&
@@ -1488,46 +1574,78 @@
     );
   }
 
-  function renderFarmHistory(items) {
-    const root = $("farm-history");
-    if (!root) return;
-    root.innerHTML = "";
+  let farmHistoryItems = [];
+
+  function farmHistoryListHtml(items) {
     const list = Array.isArray(items) ? items : [];
     if (!list.length) {
-      root.innerHTML = '<li class="muted">ยังไม่มีประวัติ</li>';
-      return;
+      return '<ul class="farm-history-list"><li class="muted">ยังไม่มีประวัติ</li></ul>';
     }
-    list.slice(0, 8).forEach((row) => {
-      const li = document.createElement("li");
-      const st = row.status || "—";
-      const stLabel =
-        st === "succeeded"
-          ? "สำเร็จ"
-          : st === "failed"
-            ? "ล้มเหลว"
-            : st === "running"
-              ? "กำลังรัน"
-              : st;
-      const stClass = st === "succeeded" ? "hist-ok" : st === "failed" ? "hist-warn" : "";
-      li.innerHTML =
-        "<span>S " +
-        escapeHtml(formatNumTh(row.score)) +
-        " · C " +
-        escapeHtml(formatNumTh(row.coin)) +
-        " · XP " +
-        escapeHtml(formatNumTh(row.exp)) +
-        "</span>" +
-        '<span class="' +
-        stClass +
-        '">' +
-        stLabel +
-        "</span>" +
-        '<span class="hist-meta">' +
-        escapeHtml(formatTopupDay(row.created_at)) +
-        (row.error ? " · " + escapeHtml(String(row.error).slice(0, 60)) : "") +
-        "</span>";
-      root.appendChild(li);
+    const rows = list
+      .slice(0, 12)
+      .map((row) => {
+        const st = row.status || "—";
+        const stLabel =
+          st === "succeeded"
+            ? "สำเร็จ"
+            : st === "failed"
+              ? "ล้มเหลว"
+              : st === "running"
+                ? "กำลังรัน"
+                : st;
+        const stClass =
+          st === "succeeded" ? "hist-ok" : st === "failed" ? "hist-warn" : "";
+        return (
+          "<li>" +
+          "<span>S " +
+          escapeHtml(formatNumTh(row.score)) +
+          " · C " +
+          escapeHtml(formatNumTh(row.coin)) +
+          " · XP " +
+          escapeHtml(formatNumTh(row.exp)) +
+          "</span>" +
+          '<span class="' +
+          stClass +
+          '">' +
+          escapeHtml(stLabel) +
+          "</span>" +
+          '<span class="hist-meta">' +
+          escapeHtml(formatTopupDay(row.created_at)) +
+          (row.error ? " · " + escapeHtml(String(row.error).slice(0, 60)) : "") +
+          "</span>" +
+          "</li>"
+        );
+      })
+      .join("");
+    return '<ul class="farm-history-list">' + rows + "</ul>";
+  }
+
+  function renderFarmHistory(items) {
+    farmHistoryItems = Array.isArray(items) ? items : [];
+    const countEl = $("farm-history-count");
+    if (countEl) {
+      if (farmHistoryItems.length) {
+        countEl.hidden = false;
+        countEl.textContent = String(Math.min(farmHistoryItems.length, 99));
+      } else {
+        countEl.hidden = true;
+        countEl.textContent = "";
+      }
+    }
+  }
+
+  function showFarmHistoryModal() {
+    clearModalActions();
+    openModal({
+      mode: "farm-history",
+      title: "ประวัติฟาร์มล่าสุด",
+      bodyHtml: farmHistoryListHtml(farmHistoryItems),
+      icon: "assets/tr_event_116.png",
+      locked: false,
     });
+    modalActions.appendChild(
+      makeBtn("ปิด", "btn-candy", () => forceCloseModal())
+    );
   }
 
   async function loadFarmHistory() {
@@ -1538,7 +1656,9 @@
     try {
       const data = await api("/api/farm/history");
       renderFarmHistory(data.items || []);
-    } catch (_) {}
+    } catch (_) {
+      renderFarmHistory([]);
+    }
   }
 
   function fallbackTopupPackages() {
@@ -2781,6 +2901,10 @@
     connectDevPlay();
   });
 
+  $("farm-history-open")?.addEventListener("click", () => {
+    showFarmHistoryModal();
+  });
+
   $("ticket-minus")?.addEventListener("click", () => {
     if (ticketCount > 1) {
       ticketCount -= 1;
@@ -2797,9 +2921,33 @@
     }
   });
 
+  $("ticket-count")?.addEventListener("input", (ev) => {
+    const el = ev.target;
+    const cleaned = String(el.value || "").replace(/[^\d]/g, "");
+    if (el.value !== cleaned) el.value = cleaned;
+  });
+
+  $("ticket-count")?.addEventListener("change", () => {
+    commitTicketCountFromInput();
+  });
+
+  $("ticket-count")?.addEventListener("blur", () => {
+    commitTicketCountFromInput();
+  });
+
+  $("ticket-count")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      commitTicketCountFromInput();
+      ev.target.blur();
+    }
+  });
+
   $("farm-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (farmRunning || devplayConnecting) return;
+
+    commitTicketCountFromInput();
 
     if (!hasTokens()) {
       showEmptyCoinsModal();

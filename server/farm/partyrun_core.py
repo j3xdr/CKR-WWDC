@@ -36,13 +36,14 @@ DEFAULT_SCORE = 800_000
 
 # advanced (usually leave as-is)
 # NOTE: USE_DEBUG_MATCH=True often yields INVALID PLAY (claim ok but +0 / ignored).
-# Live queue + wait-for-RESULT is the proven path from PartyRun_Share_main.
+# Live queue + quit-after-run_end is the proven fast path (RESULT rarely arrives;
+# waiting for it wastes ~45s/round with no benefit).
 PLAYTIME_SECONDS = 12              # fake play time before submitting the run
-QUIT_AFTER_SECONDS = 2             # wait after run_end before considering quit
+QUIT_AFTER_SECONDS = 1             # brief pause after run_end before quit
 IGNORE_SAVING_REPLAY = True        # skip replay upload (anti-cheat replay gate)
 USE_DEBUG_MATCH = False            # live queue — debug bots often INVALID PLAY for real rewards
-QUIT_ON_RESULT = True              # wait for RESULT before quit (safer for claim)
-RESULT_WAIT_SECONDS = 45           # force-quit fallback if RESULT never arrives
+QUIT_ON_RESULT = False             # quit right after run_end (RESULT almost never arrives)
+RESULT_WAIT_SECONDS = 8            # only used if QUIT_ON_RESULT=True
 # ===========================================================================
 
 import os, sys, json, copy, time, queue, threading, base64, zlib
@@ -609,7 +610,7 @@ def clear_pending(my, max_loops=8):
             if "INTERNAL SERVER ERROR" in details and not (s and s.get("ingame_id") == iid):
                 return {"corrupt": iid}
         if not progressed:
-            time.sleep(2)
+            time.sleep(1)
     return True
 
 
@@ -792,7 +793,7 @@ def play_and_submit(session, my):
                 send(debug_start_request={"do_not_eliminate": True})
             # Evaluate deadlines before filtering (ping/sync would otherwise skip them)
             if run_ended[0] and quit_sent[0] and quit_deadline is None:
-                quit_deadline = time.time() + 20
+                quit_deadline = time.time() + 10
             # RESULT wait is only for QUIT_ON_RESULT=True; when False, submit() quits after run_end
             if (QUIT_ON_RESULT and run_ended[0] and not quit_sent[0]
                     and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + RESULT_WAIT_SECONDS):
@@ -828,7 +829,7 @@ def play_and_submit(session, my):
                     break
         if run_ended[0] and not quit_acked[0]:
             ensure_quit()
-            t_end = time.time() + 8
+            t_end = time.time() + 5
             while time.time() < t_end and not quit_acked[0]:
                 try:
                     resp = next(responses)
@@ -916,14 +917,17 @@ def _claim_reward(ingame_id, my, max_attempts=12):
     return {"ok": False, "error": "claim_timeout", "ingame_id": ingame_id}
 
 
-def _run_single_round(my, round_idx=1, round_total=1):
+def _run_single_round(my, round_idx=1, round_total=1, skip_clear=False):
     prefix = f"[round {round_idx}/{round_total}] " if round_total > 1 else ""
-    print(prefix + "[1/4] clearing pending rewards ...")
-    status = clear_pending(my)
-    if isinstance(status, dict) and status.get("corrupt"):
-        print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
-        print("     ingame_id =", status["corrupt"])
-        return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
+    if skip_clear:
+        print(prefix + "[1/4] skip clear (previous round claimed clean)")
+    else:
+        print(prefix + "[1/4] clearing pending rewards ...")
+        status = clear_pending(my)
+        if isinstance(status, dict) and status.get("corrupt"):
+            print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
+            print("     ingame_id =", status["corrupt"])
+            return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
 
     print(prefix + "[2/4] matchmaking ...")
     session = matchmake(my, is_debug=USE_DEBUG_MATCH)
@@ -1007,9 +1011,9 @@ def connect_devplay(email, password, log_cb=None):
         except Exception:
             equip = {}
 
+        # Do NOT probe tickets here — match→quit→claim takes ~30–40s and blocks connect.
+        # Client calls refresh_party_run_tickets in the background after connect returns.
         tickets = get_party_run_tickets()
-        if tickets is None and equip:
-            tickets = peek_party_run_ticket_balance(equip)
 
         return {
             "ok": True,
@@ -1025,6 +1029,47 @@ def connect_devplay(email, password, log_cb=None):
         }
     except FarmError as exc:
         return {"ok": False, "error": exc.code, "detail": exc.detail}
+    finally:
+        builtins.print = old_print
+
+
+def refresh_party_run_tickets(session_data=None, email=None, password=None, log_cb=None):
+    """Background ticket count (may take ~30–40s). Safe to call after connect."""
+    global EMAIL, PASSWORD
+    import builtins
+    old_print = builtins.print
+
+    def _print(*args, **kwargs):
+        msg = " ".join(str(a) for a in args)
+        if log_cb is not None:
+            try:
+                log_cb(msg)
+            except Exception:
+                old_print(msg)
+        else:
+            old_print(*args, **kwargs)
+
+    builtins.print = _print
+    try:
+        if session_data:
+            restore_session(session_data)
+        else:
+            if not email or not password:
+                return {"ok": False, "error": "missing_credentials"}
+            EMAIL, PASSWORD = email, password
+            _init_session()
+        my = get_my_equipment()
+        tickets = peek_party_run_ticket_balance(my)
+        return {
+            "ok": tickets is not None,
+            "party_run_tickets": tickets,
+            "party_run_ticket_cost": get_party_run_ticket_cost(),
+            "session": export_session(),
+        }
+    except FarmError as exc:
+        return {"ok": False, "error": exc.code, "detail": exc.detail}
+    except Exception as exc:
+        return {"ok": False, "error": "ticket_peek_failed", "detail": str(exc)}
     finally:
         builtins.print = old_print
 
@@ -1107,7 +1152,14 @@ def run_farm_multi(
         rounds_ok = 0
         tickets_left = get_party_run_tickets()
         for i in range(int(ticket_count)):
-            r = _run_single_round(my, round_idx=i + 1, round_total=int(ticket_count))
+            # After a clean claim, next round has nothing pending — skip clear RPC.
+            skip_clear = bool(rounds) and bool(rounds[-1].get("ok"))
+            r = _run_single_round(
+                my,
+                round_idx=i + 1,
+                round_total=int(ticket_count),
+                skip_clear=skip_clear,
+            )
             rounds.append(r)
             if r.get("party_run_tickets") is not None:
                 tickets_left = r.get("party_run_tickets")

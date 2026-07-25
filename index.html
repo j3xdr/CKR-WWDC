@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun3" />
+  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun8" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -233,7 +233,15 @@
                 <p class="panel-hint">เชื่อม DevPlay แล้วเลือกจำนวนตั๋ว · ใช้ 1 โทเค็น</p>
               </div>
             </div>
-            <span class="pill pill-devplay">DevPlay</span>
+            <div class="oven-head-pills">
+              <button type="button" class="pill pill-devplay pill-action" id="devplay-connect-btn" disabled>
+                เชื่อมต่อ
+              </button>
+              <button type="button" class="pill pill-devplay pill-action is-ghost hidden" id="devplay-reconnect-btn" hidden>
+                เชื่อมใหม่
+              </button>
+              <span class="pill pill-devplay">DevPlay</span>
+            </div>
           </div>
 
           <form
@@ -291,14 +299,6 @@
                   />
                 </label>
               </div>
-              <div class="devplay-connect-actions">
-                <button type="button" class="btn btn-connect" id="devplay-connect-btn" disabled>
-                  เชื่อมต่อ
-                </button>
-                <button type="button" class="btn btn-ghost btn-sm-inline hidden" id="devplay-reconnect-btn" hidden>
-                  เชื่อมใหม่
-                </button>
-              </div>
               <div id="devplay-connect-status" class="devplay-connect-status muted" role="status" aria-live="polite">
                 ยังไม่ได้เชื่อมบัญชีเกม
               </div>
@@ -322,8 +322,18 @@
                   <span class="ticket-stepper-label">จำนวนตั๋ว Party Run</span>
                   <div class="ticket-stepper-controls">
                     <button type="button" class="ticket-step-btn" id="ticket-minus" aria-label="ลดตั๋ว" disabled>−</button>
-                    <output id="ticket-count-display" class="ticket-count-display" for="ticket-count">1</output>
-                    <input type="hidden" id="ticket-count" name="ticket_count" value="1" />
+                    <input
+                      id="ticket-count"
+                      class="ticket-count-display"
+                      name="ticket_count"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      autocomplete="off"
+                      value="1"
+                      aria-label="จำนวนตั๋ว"
+                      disabled
+                    />
                     <button type="button" class="ticket-step-btn" id="ticket-plus" aria-label="เพิ่มตั๋ว" disabled>+</button>
                   </div>
                   <p class="ticket-stepper-hint" id="ticket-max-hint">เชื่อม DevPlay เพื่อดูตั๋วที่มี</p>
@@ -366,7 +376,7 @@
                       autocomplete="off"
                       data-farm-num="1"
                       data-farm-cap="449000"
-                      value="0"
+                      value="449000"
                     />
                   </label>
                   <label class="field field-stat">
@@ -386,7 +396,7 @@
                       autocomplete="off"
                       data-farm-num="1"
                       data-farm-cap="52000"
-                      value="0"
+                      value="52000"
                     />
                   </label>
                 </div>
@@ -409,12 +419,16 @@
             </div>
 
             <p id="farm-status" class="status" role="status"></p>
-            <div class="farm-history">
-              <p class="farm-history-title">ประวัติฟาร์มล่าสุด</p>
-              <ul id="farm-history" class="farm-history-list">
-                <li class="muted">ยังไม่มีประวัติ</li>
-              </ul>
-            </div>
+            <button
+              type="button"
+              class="farm-history-trigger"
+              id="farm-history-open"
+              aria-haspopup="dialog"
+            >
+              <span class="farm-history-trigger-label">ประวัติฟาร์มล่าสุด</span>
+              <span class="farm-history-trigger-count" id="farm-history-count" hidden></span>
+              <span class="farm-history-trigger-chevron" aria-hidden="true">›</span>
+            </button>
           </form>
         </div>
       </div>
@@ -620,7 +634,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260725-partyrun3"></script>
-  <script src="js/app.js?v=20260725-partyrun3"></script>
+  <script src="js/config.js?v=20260725-partyrun8"></script>
+  <script src="js/app.js?v=20260725-partyrun8"></script>
 </body>
 </html>

@@ -994,6 +994,49 @@ async def farm_devplay_connect(
     }
 
 
+class DevPlayTicketsBody(BaseModel):
+    devplay_session_id: str = Field(min_length=8, max_length=128)
+
+
+@app.post("/api/farm/devplay/tickets")
+async def farm_devplay_tickets(
+    body: DevPlayTicketsBody, user: dict[str, Any] = Depends(verify_user)
+):
+    """Background Party Run ticket count (slow — refunded probe match)."""
+    await _require_farm_open()
+    uid = user["id"]
+    row = _get_devplay_session(uid, body.devplay_session_id)
+    if not row:
+        raise HTTPException(status_code=401, detail="devplay_session_expired")
+
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    result = await asyncio.to_thread(
+        _run_ticket_refresh_sync,
+        row.get("session"),
+        row.get("email"),
+        log_cb,
+    )
+    if not result or not result.get("ok"):
+        err = (result or {}).get("error") or "ticket_peek_failed"
+        raise HTTPException(status_code=400, detail=err)
+
+    tickets = result.get("party_run_tickets")
+    if result.get("session"):
+        row["session"] = result["session"]
+    if tickets is not None:
+        row["party_run_tickets"] = tickets
+    return {
+        "ok": True,
+        "party_run_tickets": tickets,
+        "party_run_ticket_cost": result.get("party_run_ticket_cost"),
+        "logs": logs[-40:],
+    }
+
+
 # ---------------------------------------------------------------------------
 # Farm run (JWT + consume 1 token + sequential execution)
 # ---------------------------------------------------------------------------
@@ -1268,6 +1311,17 @@ def _run_connect_sync(email, password, log_cb):
     from partyrun_core import connect_devplay  # noqa: WPS433 — server-only
 
     return connect_devplay(email=email, password=password, log_cb=log_cb)
+
+
+def _run_ticket_refresh_sync(session_data, email, log_cb):
+    from partyrun_core import refresh_party_run_tickets  # noqa: WPS433 — server-only
+
+    return refresh_party_run_tickets(
+        session_data=session_data,
+        email=email,
+        password=None,
+        log_cb=log_cb,
+    )
 
 
 def _peek_retry_after(user_id: str) -> int:
