@@ -25,14 +25,21 @@
 EMAIL    = ""     # your DevPlay account email
 PASSWORD = ""              # your DevPlay account password
 
-SCORE    = 800000                  # final score to submit
-COIN     = 1               # coins you want to earn this run
-EXP      = 1              # exp you want to earn this run
+SCORE    = 800000                  # final score to submit (prefer > 0)
+COIN     = 1                       # coins you want to earn this run
+EXP      = 1                       # exp you want to earn this run
+
+# safe reward ceilings (tested — see PartyRun_Share/README.md)
+SAFE_COIN_MAX = 449_000
+SAFE_EXP_MAX = 52_000
+DEFAULT_SCORE = 800_000
 
 # advanced (usually leave as-is)
 PLAYTIME_SECONDS = 2               # fake play time before submitting the run
 QUIT_AFTER_SECONDS = 1             # wait after run_end, then quit to finalize
 IGNORE_SAVING_REPLAY = True        # skip replay upload (anti-cheat replay gate)
+USE_DEBUG_MATCH = True             # try debug bots first; fallback to live queue
+QUIT_ON_RESULT = True              # wait for RESULT before quit (safer for claim)
 # ===========================================================================
 
 import os, sys, json, copy, time, queue, threading, base64, zlib
@@ -193,6 +200,63 @@ def party_run_init():
                  {"mid": MID}, FULL_MD)
 
 
+def list_episode_season():
+    return unary(
+        GSERVER,
+        "service.api.EpisodeAPI",
+        "ListEpisodeSeason",
+        {"common_req": {}},
+        [("authorization", "Bearer " + TOK)],
+    )
+
+
+def get_party_run_tickets():
+    """Read Party Run ticket balance via ListEpisodeSeason."""
+    r = list_episode_season()
+    if r.get("__error__"):
+        return None
+    for ep in r.get("episodes") or []:
+        if not isinstance(ep, dict):
+            continue
+        et = ep.get("episode_type") or ep.get("episodeType")
+        tt = ep.get("episode_ticket_type") or ep.get("episodeTicketType")
+        is_party = et in (5, "EPISODE_TYPE_PARTY_RUN")
+        is_party_ticket = tt in (4, "EPISODE_TICKET_TYPE_PARTY_RUN_TICKET")
+        if is_party or is_party_ticket:
+            try:
+                return int(ep.get("ticketCount") or ep.get("ticket_count") or 0)
+            except (TypeError, ValueError):
+                return 0
+    return 0
+
+
+def export_session():
+    return {
+        "tok": TOK,
+        "mid": MID,
+        "lc": copy.deepcopy(LC) if LC else copy.deepcopy(DEFAULT_LC),
+    }
+
+
+def restore_session(data):
+    """Restore in-memory DevPlay session from connect store (no password)."""
+    global TOK, MID, LC, FULL_MD
+    TOK = data["tok"]
+    MID = data["mid"]
+    LC = copy.deepcopy(data.get("lc") or DEFAULT_LC)
+    FULL_MD = [
+        ("authorization", "Bearer " + TOK),
+        ("player-id", MID),
+        ("combo-name", COMBO_NAME),
+        ("index-file-hash", LIVE_INDEX_HASH),
+        ("version", LC.get("app_version", "")),
+        ("version.code", str(LC.get("app_build", ""))),
+        ("os.version", str(LC.get("os_version", ""))),
+        ("login-platform", "GUEST"),
+        ("market-type", "GOOGLE_PLAY"),
+    ]
+
+
 def claim(ingame_id):
     return unary(GSERVER, "service.api.RewardAPI", "ClaimPartyRunReward",
                  {"ingame_id": ingame_id}, [("authorization", "Bearer " + TOK)])
@@ -313,6 +377,8 @@ def peek_account(email, password, log_cb=None):
         except Exception:
             equip = {}
 
+        tickets = get_party_run_tickets()
+
         return {
             "ok": True,
             "nickname": nickname or equip.get("nick") or "player",
@@ -325,6 +391,7 @@ def peek_account(email, password, log_cb=None):
             "pet": equip.get("pet"),
             "pic": equip.get("pic"),
             "treas": equip.get("treas") or [],
+            "party_run_tickets": tickets,
         }
     except FarmError as exc:
         return {"ok": False, "error": exc.code, "detail": exc.detail}
@@ -441,13 +508,14 @@ def clear_pending(my, max_loops=8):
             if "INTERNAL SERVER ERROR" in details and not (s and s.get("ingame_id") == iid):
                 return {"corrupt": iid}
         if not progressed:
-            time.sleep(3)
+            time.sleep(2)
     return True
 
 
 # ---------------------------- matchmaking ----------------------------------
-def matchmake(my):
+def matchmake(my, is_debug=True):
     outq = queue.Queue(); msgno = [0]
+    last_error = [None]
 
     def send(**oneof):
         msgno[0] += 1
@@ -483,15 +551,18 @@ def matchmake(my):
                 send(ready_change_request={"is_ready": True})
             elif "ready_changed" in out and not started:
                 started = True
-                send(start_match_making_request={"is_debug": False})
+                send(start_match_making_request={"is_debug": bool(is_debug)})
             elif "match_making_done" in out:
                 session = out["match_making_done"].get("session_info")
                 break
             elif "error" in out:
+                last_error[0] = out["error"]
                 print("MATCHMAKING ERROR:", json.dumps(out["error"], ensure_ascii=False))
                 break
     finally:
         outq.put(None); ch.close()
+    if session is None and last_error[0]:
+        session = {"__error__": last_error[0]}
     return session
 
 
@@ -529,6 +600,14 @@ def play_and_submit(session, my):
                 return
             time.sleep(1.5)
 
+    quit_sent = [False]
+    quit_acked = [False]
+    run_ended = [False]
+    load_sent = [False]
+    bots_sent = [False]
+    debug_start_sent = [False]
+    load_at = [None]
+
     def submit(seed):
         time.sleep(PLAYTIME_SECONDS)
         send(run_end_request={
@@ -536,23 +615,56 @@ def play_and_submit(session, my):
             "ignore_saving_replay": IGNORE_SAVING_REPLAY, "statistics": "",
             "millisec_from_start": PLAYTIME_SECONDS * 1000,
         })
+        run_ended[0] = True
         print(f"   submitted run_end  score={SCORE} coin={COIN} exp={EXP}")
         time.sleep(QUIT_AFTER_SECONDS)
-        send(quit_request={})  # finalize our result instantly
+        if not QUIT_ON_RESULT and not quit_sent[0]:
+            quit_sent[0] = True
+            send(quit_request={})
 
     def maybe_submit(state_info):
         rinfo = state_info.get("round_info", {})
         key = rinfo.get("random_seed") or rinfo.get("round_index", 0)
         if key not in submitted:
             submitted.add(key)
+            print(f"   scheduling run_end (seed={key})")
             threading.Thread(target=submit, args=(key,), daemon=True).start()
+
+    def ensure_quit():
+        if not quit_sent[0]:
+            quit_sent[0] = True
+            send(quit_request={})
+
+    def handle_state(st, source):
+        s = st.get("state", "LOBBY") or "LOBBY"
+        print(f"   {source} state -> {s}")
+        if s in ("LOBBY", "LOADING") and not bots_sent[0]:
+            bots_sent[0] = True
+            send(set_bot_party_count_request={"bot_party_count": 3})
+        if s == "LOBBY" and session.get("is_debug") and not debug_start_sent[0]:
+            debug_start_sent[0] = True
+            def _dbg():
+                time.sleep(0.5)
+                send(debug_start_request={"do_not_eliminate": True})
+            threading.Thread(target=_dbg, daemon=True).start()
+        if s == "LOADING":
+            load_sent[0] = True
+            load_at[0] = time.time()
+            send(load_finished={"equipment": equip})
+        elif s == "RUN_START":
+            maybe_submit(st)
+        elif s == "RESULT":
+            if run_ended[0]:
+                ensure_quit()
+            else:
+                print("   RESULT before run_end — game never started")
 
     md = [("authorization", "Bearer " + session["auth_token"]),
           ("player-id", MID), ("combo-name", COMBO_NAME),
           ("index-file-hash", LIVE_INDEX_HASH), ("login-platform", "GUEST"),
           ("market-type", "GOOGLE_PLAY")]
 
-    ch = grpc.insecure_channel(addr)  # ingame server is plaintext gRPC (h2c)
+    ch = grpc.insecure_channel(addr)
     stub = ch.stream_stream("/service.multiplay.IngameAPI/IngameStream",
                             request_serializer=lambda x: x.SerializeToString(),
                             response_deserializer=IngOut.FromString)
@@ -561,80 +673,112 @@ def play_and_submit(session, my):
     threading.Thread(target=heartbeat, daemon=True).start()
 
     print(f"=== ingame {addr} (id {ingame_id}) ===")
+    start_deadline = time.time() + 90
+    quit_deadline = None
     try:
         for resp in responses:
+            now = time.time()
+            if quit_deadline and now > quit_deadline:
+                print("   timed out waiting for quit ack")
+                break
+            if not run_ended[0] and not submitted and now > start_deadline:
+                print("   timed out waiting for RUN_START")
+                break
+            if (load_at[0] and not submitted and not debug_start_sent[0]
+                    and now - load_at[0] > 12):
+                debug_start_sent[0] = True
+                print("   stuck after load_finished — sending debug_start_request")
+                send(debug_start_request={"do_not_eliminate": True})
             out = json_format.MessageToDict(resp, preserving_proto_field_name=True)
             if any(k in out for k in ("char_minimum_sync", "char_full_sync",
                                       "ping_response", "join", "left", "temporary_round_result")):
                 continue
             if "join_response" in out:
-                st = out["join_response"].get("current_state_info", {})
-                if st.get("state") == "RUN_START":
-                    maybe_submit(st)
+                jr = out["join_response"]
+                if jr.get("is_debug"):
+                    session["is_debug"] = True
+                handle_state(jr.get("current_state_info") or {}, "join")
             if "change_state" in out:
-                st = out["change_state"].get("state_info", {})
-                s = st.get("state", "LOBBY")
-                print("   state ->", s)
-                if s == "LOADING":
-                    send(load_finished={"equipment": equip})
-                elif s == "RUN_START":
-                    maybe_submit(st)
-                elif s == "RESULT":
-                    break
+                handle_state(out["change_state"].get("state_info") or {}, "change")
             if "quit_response" in out:
+                quit_acked[0] = True
                 print("   quit acknowledged")
                 break
             if "round_finished" in out and out["round_finished"].get("is_final_round"):
-                break
+                if run_ended[0]:
+                    ensure_quit()
             if "error" in out:
                 print("   INGAME ERROR:", json.dumps(out["error"], ensure_ascii=False))
-                break
+                code = (out["error"] or {}).get("code", "")
+                if code == "ERROR_CODE_GAME_NOT_STARTED" and not run_ended[0]:
+                    break
+            if run_ended[0] and quit_sent[0] and quit_deadline is None:
+                quit_deadline = time.time() + 20
+            if run_ended[0] and not quit_sent[0] and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + 45:
+                print("   RESULT slow — forcing quit")
+                ensure_quit()
+        if run_ended[0] and not quit_acked[0]:
+            ensure_quit()
+            t_end = time.time() + 8
+            while time.time() < t_end and not quit_acked[0]:
+                try:
+                    resp = next(responses)
+                except StopIteration:
+                    break
+                out = json_format.MessageToDict(resp, preserving_proto_field_name=True)
+                if "quit_response" in out:
+                    quit_acked[0] = True
+                    print("   quit acknowledged")
+                    break
+        elif not run_ended[0]:
+            print("   !! never submitted run_end — claim will be +0; aborting claim path")
     except grpc.RpcError as e:
         print("   ingame rpc:", e.code(), e.details())
     finally:
         done[0] = True; outq.put(None); ch.close()
-    return ingame_id
+    return ingame_id, run_ended[0]
 
 
 # --------------------------------- main / API --------------------------------
-def main():
-    _init_session()
-    my = get_my_equipment()
-    print(f"me: {my['nick']}  cookie={my['cookie']} pet={my['pet']} tier={my['tier']}")
+def _reward_summary_from_claim(res, ingame_id, nick_fallback=None):
+    coin = res.get("coin") if isinstance(res.get("coin"), dict) else {}
+    exp = res.get("exp") if isinstance(res.get("exp"), dict) else {}
+    nick = None
+    level = res.get("level")
+    try:
+        members = res.get("members") or []
+        if members and isinstance(members[0], dict):
+            nick = members[0].get("nickname")
+    except Exception:
+        nick = None
+    if not nick:
+        nick = nick_fallback
+    return {
+        "ok": True,
+        "reward": res,
+        "reward_summary": {
+            "coin_delta": coin.get("delta"),
+            "coin_total": coin.get("total"),
+            "exp_delta": exp.get("delta"),
+            "exp_total": exp.get("total"),
+            "level": level,
+            "nickname": nick,
+        },
+        "account": {"nickname": nick, "level": level},
+        "ingame_id": ingame_id,
+    }
 
-    print("[1/4] clearing pending rewards ...")
-    status = clear_pending(my)
-    if isinstance(status, dict) and status.get("corrupt"):
-        print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
-        print("     ingame_id =", status["corrupt"])
-        print("   Claiming it makes the server return INTERNAL SERVER ERROR (it was")
-        print("   created with an impossibly large EXP, so the level-up computation")
-        print("   crashes). There is NO client API to delete it.")
-        print("   -> It should clear automatically at the next daily/season reset,")
-        print("      after which matchmaking works again. Re-run this script then.")
-        print("   -> Going forward, keep EXP small so this does not happen again.")
-        return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
 
-    print("[2/4] matchmaking ...")
-    session = matchmake(my)
-    if not session:
-        print("!! matchmaking failed")
-        return {"ok": False, "error": "matchmaking_failed"}
-    print("      ingame_id =", session["ingame_id"])
-
-    print("[3/4] playing + submitting result ...")
-    ingame_id = play_and_submit(session, my)
-
-    print("[4/4] claiming reward ...")
-    for _ in range(8):
+def _claim_reward(ingame_id, my, max_attempts=12):
+    tried_finalize = False
+    for _ in range(max_attempts):
         res = claim(ingame_id)
         if not res.get("__error__"):
             coin = res.get("coin") if isinstance(res.get("coin"), dict) else {}
             exp = res.get("exp") if isinstance(res.get("exp"), dict) else {}
-            # Require a readable reward payload (avoid treating empty/garbage as success)
             if not coin and not exp and not res.get("level") and not res.get("members"):
                 print("   claim returned empty reward payload, retrying ...")
-                time.sleep(3)
+                time.sleep(2)
                 continue
             print("\n=================  REWARD CLAIMED  =================")
             def amt(x):
@@ -645,49 +789,160 @@ def main():
             print("  ticket:", amt(res.get("party_run_ticket", {}) if isinstance(res.get("party_run_ticket"), dict) else {}))
             print("  level:", res.get("level"), " rank:", res.get("final_rank"))
             print("===================================================")
-
-            nick = None
-            level = res.get("level")
-            try:
-                members = res.get("members") or []
-                if members and isinstance(members[0], dict):
-                    nick = members[0].get("nickname")
-            except Exception:
-                nick = None
-            if not nick:
-                try:
-                    snap = get_my_equipment()
-                    nick = snap.get("nick")
-                except Exception:
-                    nick = None
-
-            reward_summary = {
-                "coin_delta": coin.get("delta"),
-                "coin_total": coin.get("total"),
-                "exp_delta": exp.get("delta"),
-                "exp_total": exp.get("total"),
-                "level": level,
-                "nickname": nick,
-            }
-            return {
-                "ok": True,
-                "reward": res,
-                "reward_summary": reward_summary,
-                "account": {"nickname": nick, "level": level},
-                "ingame_id": ingame_id,
-            }
-        print("   not finalized yet, retrying in 3s ...")
-        time.sleep(3)
+            nick = my.get("nick") if isinstance(my, dict) else None
+            return _reward_summary_from_claim(res, ingame_id, nick_fallback=nick)
+        details = res.get("details", "")
+        print("   not finalized yet, retrying in 2s ...", details[:120] if details else "")
+        time.sleep(2)
     print("!! could not claim (match may still be finishing) — run again to retry")
     return {"ok": False, "error": "claim_timeout", "ingame_id": ingame_id}
 
 
-def run_farm(email, password, score=800000, coin=1, exp=1, log_cb=None,
-             playtime_seconds=None, quit_after_seconds=None):
-    """Public API for the desktop shell. Sets config, redirects print, runs farm."""
-    global EMAIL, PASSWORD, SCORE, COIN, EXP, PLAYTIME_SECONDS, QUIT_AFTER_SECONDS
+def _run_single_round(my, round_idx=1, round_total=1):
+    prefix = f"[round {round_idx}/{round_total}] " if round_total > 1 else ""
+    print(prefix + "[1/4] clearing pending rewards ...")
+    status = clear_pending(my)
+    if isinstance(status, dict) and status.get("corrupt"):
+        print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
+        print("     ingame_id =", status["corrupt"])
+        return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
+
+    print(prefix + "[2/4] matchmaking ...")
+    session = matchmake(my, is_debug=USE_DEBUG_MATCH)
+    if session and session.get("__error__") and USE_DEBUG_MATCH:
+        print("      debug queue failed — retrying live queue ...")
+        session = matchmake(my, is_debug=False)
+    if not session or session.get("__error__"):
+        print("!! matchmaking failed")
+        return {"ok": False, "error": "matchmaking_failed"}
+    print("      ingame_id =", session["ingame_id"], "debug=" + str(USE_DEBUG_MATCH))
+
+    print(prefix + "[3/4] playing + submitting result ...")
+    ingame_id, ok_submit = play_and_submit(session, my)
+    if not ok_submit:
+        print("!! run_end was not submitted — reconnecting to finalize empty match, then retry")
+        finalize_session(session, my)
+        clear_pending(my)
+        return {"ok": False, "error": "no_run_end", "ingame_id": ingame_id}
+
+    print(prefix + "[4/4] claiming reward ...")
+    return _claim_reward(ingame_id, my)
+
+
+def main():
+    _init_session()
+    my = get_my_equipment()
+    print(f"me: {my['nick']}  cookie={my['cookie']} pet={my['pet']} tier={my['tier']}")
+    return _run_single_round(my)
+
+
+def connect_devplay(email, password, log_cb=None):
+    """Login + account snapshot + Party Run tickets (no farming)."""
+    global EMAIL, PASSWORD
     EMAIL = email
     PASSWORD = password
+
+    import builtins
+    old_print = builtins.print
+
+    def _print(*args, **kwargs):
+        msg = " ".join(str(a) for a in args)
+        if log_cb is not None:
+            try:
+                log_cb(msg)
+            except Exception:
+                old_print(msg)
+        else:
+            old_print(*args, **kwargs)
+
+    builtins.print = _print
+    try:
+        _init_session()
+        summary = _fetch_member_summary_raw()
+        if summary.get("__error__"):
+            return {
+                "ok": False,
+                "error": "connect_failed",
+                "detail": summary.get("details") or summary.get("code"),
+            }
+        ms = summary.get("member_summary") or {}
+        profile = ms.get("profile") or {}
+        nickname = profile.get("nickname") or "player"
+        try:
+            level = int(ms["level"]) if ms.get("level") is not None else None
+        except (TypeError, ValueError):
+            level = ms.get("level")
+
+        balances = _fetch_balances_best_effort()
+        if balances.get("level") is not None:
+            level = balances["level"]
+
+        tickets = get_party_run_tickets()
+        equip = {}
+        try:
+            equip = get_my_equipment() or {}
+        except Exception:
+            equip = {}
+
+        return {
+            "ok": True,
+            "nickname": nickname or equip.get("nick") or "player",
+            "mid": MID,
+            "coin": balances.get("coin"),
+            "exp": balances.get("exp"),
+            "level": level,
+            "tier": equip.get("tier"),
+            "party_run_tickets": tickets,
+            "session": export_session(),
+        }
+    except FarmError as exc:
+        return {"ok": False, "error": exc.code, "detail": exc.detail}
+    finally:
+        builtins.print = old_print
+
+
+def _aggregate_reward_summaries(rounds):
+    agg = {
+        "coin_delta": 0,
+        "exp_delta": 0,
+        "coin_total": None,
+        "exp_total": None,
+        "level": None,
+        "nickname": None,
+    }
+    for r in rounds:
+        if not r.get("ok"):
+            continue
+        rs = r.get("reward_summary") or {}
+        for k in ("coin_delta", "exp_delta"):
+            try:
+                agg[k] += int(rs.get(k) or 0)
+            except (TypeError, ValueError):
+                pass
+        for k in ("coin_total", "exp_total", "level", "nickname"):
+            if rs.get(k) is not None:
+                agg[k] = rs.get(k)
+    return agg
+
+
+def run_farm_multi(
+    email=None,
+    password=None,
+    score=DEFAULT_SCORE,
+    coin=1,
+    exp=1,
+    ticket_count=1,
+    log_cb=None,
+    session_data=None,
+    playtime_seconds=None,
+    quit_after_seconds=None,
+):
+    """Run N sequential Party Runs on one DevPlay session (1 web token job)."""
+    global EMAIL, PASSWORD, SCORE, COIN, EXP, PLAYTIME_SECONDS, QUIT_AFTER_SECONDS
+    if email:
+        EMAIL = email
+    if password:
+        PASSWORD = password
     SCORE = int(score)
     COIN = int(coin)
     EXP = int(exp)
@@ -711,7 +966,46 @@ def run_farm(email, password, score=800000, coin=1, exp=1, log_cb=None,
 
     builtins.print = _print
     try:
-        return main()
+        if session_data:
+            restore_session(session_data)
+        else:
+            _init_session()
+        my = get_my_equipment()
+        print(f"me: {my['nick']}  cookie={my['cookie']} pet={my['pet']} tier={my['tier']}")
+
+        tickets_avail = get_party_run_tickets()
+        if tickets_avail is not None and ticket_count > tickets_avail:
+            return {
+                "ok": False,
+                "error": "not_enough_tickets",
+                "party_run_tickets": tickets_avail,
+            }
+
+        rounds = []
+        rounds_ok = 0
+        for i in range(int(ticket_count)):
+            r = _run_single_round(my, round_idx=i + 1, round_total=int(ticket_count))
+            rounds.append(r)
+            if r.get("ok"):
+                rounds_ok += 1
+            else:
+                break
+
+        agg = _aggregate_reward_summaries(rounds)
+        ok = rounds_ok > 0
+        out = {
+            "ok": ok,
+            "ticket_count": int(ticket_count),
+            "rounds_completed": rounds_ok,
+            "rounds": rounds,
+            "reward_summary": agg if ok else (rounds[-1].get("reward_summary") if rounds else {}),
+            "account": rounds[-1].get("account") if rounds else {},
+            "error": None if ok else (rounds[-1].get("error") if rounds else "farm_error"),
+        }
+        if ok and len(rounds) == 1:
+            out["reward"] = rounds[0].get("reward")
+            out["ingame_id"] = rounds[0].get("ingame_id")
+        return out
     except FarmError as exc:
         return {"ok": False, "error": exc.code, "detail": exc.detail}
     except SystemExit as exc:
@@ -721,6 +1015,22 @@ def run_farm(email, password, score=800000, coin=1, exp=1, log_cb=None,
         return {"ok": False, "error": "farm_error", "detail": msg}
     finally:
         builtins.print = old_print
+
+
+def run_farm(email, password, score=DEFAULT_SCORE, coin=1, exp=1, log_cb=None,
+             playtime_seconds=None, quit_after_seconds=None):
+    """Public API — single Party Run round."""
+    return run_farm_multi(
+        email=email,
+        password=password,
+        score=score,
+        coin=coin,
+        exp=exp,
+        ticket_count=1,
+        log_cb=log_cb,
+        playtime_seconds=playtime_seconds,
+        quit_after_seconds=quit_after_seconds,
+    )
 
 
 if __name__ == "__main__":

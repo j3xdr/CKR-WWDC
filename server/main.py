@@ -19,7 +19,7 @@ import httpx
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_DIR = Path(__file__).resolve().parent
@@ -73,6 +73,14 @@ _SIGNUP_WINDOW_SEC = 3600
 # Account peek rate limit per user (in-memory)
 _peek_last_ts: dict[str, float] = {}
 _PEEK_COOLDOWN_SEC = 180
+
+# DevPlay connect sessions (in-memory, TTL — never persist password)
+_devplay_sessions: dict[str, dict[str, Any]] = {}
+_DEVPLAY_SESSION_TTL_SEC = 900
+
+SAFE_COIN_MAX = 449_000
+SAFE_EXP_MAX = 52_000
+DEFAULT_FARM_SCORE = 800_000
 
 # Top-up redeem rate limits (in-memory)
 _topup_hits: dict[str, list[float]] = {}
@@ -158,12 +166,34 @@ class LoginBody(BaseModel):
 
 
 class FarmRunBody(BaseModel):
-    # DevPlay login id — keep as str (not EmailStr) so unusual accounts still reach the farm core
+    email: Optional[str] = Field(default=None, max_length=256)
+    password: Optional[str] = Field(default=None, min_length=1)
+    devplay_session_id: Optional[str] = Field(default=None, min_length=8, max_length=64)
+    ticket_count: int = Field(default=1, ge=1, le=99)
+    score: int = Field(default=DEFAULT_FARM_SCORE, ge=0)
+    coin: int = Field(default=0, ge=0, le=SAFE_COIN_MAX)
+    exp: int = Field(default=0, ge=0, le=SAFE_EXP_MAX)
+
+    @field_validator("email")
+    @classmethod
+    def _trim_email(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        s = (v or "").strip()
+        return s or None
+
+    @model_validator(mode="after")
+    def _auth_or_session(self) -> "FarmRunBody":
+        if self.devplay_session_id:
+            return self
+        if not self.email or not self.password:
+            raise ValueError("devplay_auth_required")
+        return self
+
+
+class DevPlayConnectBody(BaseModel):
     email: str = Field(min_length=3, max_length=256)
     password: str = Field(min_length=1)
-    score: int = Field(default=0, ge=0, le=2_147_483_647)
-    coin: int = Field(default=0, ge=0, le=2_147_483_647)
-    exp: int = Field(default=0, ge=0, le=2_147_483_647)
 
     @field_validator("email")
     @classmethod
@@ -695,6 +725,9 @@ async def health():
         "farm_maintenance": bool(flags.get("farm_maintenance")),
         "topup_maintenance": bool(flags.get("topup_maintenance")),
         "farm_value_max": INT32_MAX,
+        "farm_coin_max": SAFE_COIN_MAX,
+        "farm_exp_max": SAFE_EXP_MAX,
+        "farm_score_default": DEFAULT_FARM_SCORE,
         "ts": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -916,6 +949,51 @@ async def farm_queue_join(user: dict[str, Any] = Depends(verify_user)):
 
 
 # ---------------------------------------------------------------------------
+# DevPlay connect (short-lived session for tabs / multi-run)
+# ---------------------------------------------------------------------------
+@app.post("/api/farm/devplay/connect")
+async def farm_devplay_connect(
+    body: DevPlayConnectBody, user: dict[str, Any] = Depends(verify_user)
+):
+    await _require_farm_open()
+    uid = user["id"]
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    result = await asyncio.to_thread(
+        _run_connect_sync,
+        body.email,
+        body.password,
+        log_cb,
+    )
+    if not result or not result.get("ok"):
+        err = (result or {}).get("error") or "connect_failed"
+        code = 401 if err == "login_failed" else 400
+        raise HTTPException(status_code=code, detail=err)
+
+    session_blob = result.pop("session", None)
+    connect_payload = {
+        **result,
+        "email": body.email.strip(),
+        "session": session_blob,
+    }
+    session_id = _store_devplay_session(uid, connect_payload)
+    return {
+        "ok": True,
+        "devplay_session_id": session_id,
+        "nickname": result.get("nickname"),
+        "coin": result.get("coin"),
+        "exp": result.get("exp"),
+        "level": result.get("level"),
+        "party_run_tickets": result.get("party_run_tickets"),
+        "expires_in": _DEVPLAY_SESSION_TTL_SEC,
+        "logs": logs[-40:],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Farm run (JWT + consume 1 token + sequential execution)
 # ---------------------------------------------------------------------------
 @app.post("/api/farm/run")
@@ -948,6 +1026,26 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
             detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
         )
 
+    dp_email = body.email
+    dp_password = body.password
+    session_data = None
+    if body.devplay_session_id:
+        row = _get_devplay_session(uid, body.devplay_session_id)
+        if not row:
+            raise HTTPException(status_code=401, detail="devplay_session_expired")
+        dp_email = row.get("email") or dp_email
+        session_data = row.get("session")
+        tickets_cached = row.get("party_run_tickets")
+        if tickets_cached is not None and body.ticket_count > int(tickets_cached):
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "not_enough_tickets",
+                    "message": "not_enough_tickets",
+                    "party_run_tickets": tickets_cached,
+                },
+            )
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         cons = await client.post(
             f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
@@ -977,6 +1075,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                     "score": body.score,
                     "coin": body.coin,
                     "exp": body.exp,
+                    "ticket_count": body.ticket_count,
                 },
             )
             if jr.status_code < 300 and jr.json():
@@ -1013,15 +1112,18 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
 
         result = await asyncio.to_thread(
             _run_farm_sync,
-            body.email,
-            body.password,
+            dp_email,
+            dp_password,
             body.score,
             body.coin,
             body.exp,
+            body.ticket_count,
             log_cb,
+            session_data,
         )
 
-        ok = bool(result and result.get("ok"))
+        rounds_ok = int((result or {}).get("rounds_completed") or 0)
+        ok = bool(result and result.get("ok") and rounds_ok > 0)
         token_balance = cons_data.get("token_balance")
         refunded = False
         err_code = None if ok else (result or {}).get("error") or "farm_error"
@@ -1059,6 +1161,8 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
             "tokens_after": token_balance,
             "job_id": job_id,
             "result": result,
+            "ticket_count": body.ticket_count,
+            "rounds_completed": rounds_ok,
             "refunded": refunded,
             "error": err_code,
             "logs": logs[-80:],
@@ -1103,17 +1207,57 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 pass
 
 
-def _run_farm_sync(email, password, score, coin, exp, log_cb):
-    from partyrun_core import run_farm  # noqa: WPS433 — server-only
+def _purge_devplay_sessions() -> None:
+    now = time.time()
+    dead = [k for k, v in _devplay_sessions.items() if v.get("expires_at", 0) <= now]
+    for k in dead:
+        _devplay_sessions.pop(k, None)
 
-    return run_farm(
+
+def _store_devplay_session(user_id: str, connect_result: dict[str, Any]) -> str:
+    _purge_devplay_sessions()
+    sid = uuid.uuid4().hex
+    _devplay_sessions[sid] = {
+        "user_id": user_id,
+        "email": connect_result.get("email"),
+        "nickname": connect_result.get("nickname"),
+        "party_run_tickets": connect_result.get("party_run_tickets"),
+        "session": connect_result.get("session"),
+        "expires_at": time.time() + _DEVPLAY_SESSION_TTL_SEC,
+    }
+    return sid
+
+
+def _get_devplay_session(user_id: str, session_id: str) -> dict[str, Any] | None:
+    _purge_devplay_sessions()
+    row = _devplay_sessions.get(session_id)
+    if not row or row.get("user_id") != user_id:
+        return None
+    if row.get("expires_at", 0) <= time.time():
+        _devplay_sessions.pop(session_id, None)
+        return None
+    return row
+
+
+def _run_farm_sync(email, password, score, coin, exp, ticket_count, log_cb, session_data=None):
+    from partyrun_core import run_farm_multi  # noqa: WPS433 — server-only
+
+    return run_farm_multi(
         email=email,
         password=password,
         score=score,
         coin=coin,
         exp=exp,
+        ticket_count=ticket_count,
         log_cb=log_cb,
+        session_data=session_data,
     )
+
+
+def _run_connect_sync(email, password, log_cb):
+    from partyrun_core import connect_devplay  # noqa: WPS433 — server-only
+
+    return connect_devplay(email=email, password=password, log_cb=log_cb)
 
 
 def _peek_retry_after(user_id: str) -> int:

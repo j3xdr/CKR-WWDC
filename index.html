@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260722-capmsg1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -230,7 +230,7 @@
               <img class="oven-title-icon" src="assets/pirate_cookie_run.gif" alt="" width="56" height="56" />
               <div class="oven-title-copy">
                 <h2 class="panel-title">เริ่มวิ่งฟาร์ม</h2>
-                <p class="panel-hint">ยืนยันก่อนหัก 1 โทเค็น</p>
+                <p class="panel-hint">เชื่อม DevPlay แล้วเลือกจำนวนตั๋ว · ใช้ 1 โทเค็น</p>
               </div>
             </div>
             <span class="pill pill-devplay">DevPlay</span>
@@ -250,138 +250,190 @@
               <input type="password" name="password" tabindex="-1" autocomplete="current-password" />
             </div>
 
-            <div class="grid-2 farm-creds">
-              <label class="field">
-                <span>อีเมล DevPlay</span>
-                <input
-                  id="dp-acct-mail"
-                  name="ckr_dp_acct_mail"
-                  type="text"
-                  inputmode="email"
-                  required
-                  autocomplete="off"
-                  autocapitalize="off"
-                  autocorrect="off"
-                  spellcheck="false"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-form-type="other"
-                  placeholder="อีเมลเกม"
-                  readonly
-                />
-              </label>
-              <label class="field">
-                <span>รหัสผ่าน DevPlay</span>
-                <input
-                  id="dp-acct-secret"
-                  name="ckr_dp_acct_secret"
-                  type="password"
-                  required
-                  autocomplete="new-password"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-form-type="other"
-                  placeholder="รหัสเกม"
-                  readonly
-                />
-              </label>
-            </div>
+            <section class="devplay-connect" id="devplay-connect">
+              <div class="devplay-connect-head">
+                <h3 class="devplay-connect-title">เชื่อมต่อ DevPlay</h3>
+                <p class="devplay-connect-hint">ต้องเชื่อมก่อนเริ่ม Party Run</p>
+              </div>
+              <div class="grid-2 farm-creds">
+                <label class="field">
+                  <span>อีเมล DevPlay</span>
+                  <input
+                    id="dp-acct-mail"
+                    name="ckr_dp_acct_mail"
+                    type="text"
+                    inputmode="email"
+                    required
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
+                    placeholder="อีเมลเกม"
+                    readonly
+                  />
+                </label>
+                <label class="field">
+                  <span>รหัสผ่าน DevPlay</span>
+                  <input
+                    id="dp-acct-secret"
+                    name="ckr_dp_acct_secret"
+                    type="password"
+                    required
+                    autocomplete="new-password"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-form-type="other"
+                    placeholder="รหัสเกม"
+                    readonly
+                  />
+                </label>
+              </div>
+              <div class="devplay-connect-actions">
+                <button type="button" class="btn btn-connect" id="devplay-connect-btn" disabled>
+                  เชื่อมต่อ
+                </button>
+                <button type="button" class="btn btn-ghost btn-sm-inline hidden" id="devplay-reconnect-btn" hidden>
+                  เชื่อมใหม่
+                </button>
+              </div>
+              <div id="devplay-connect-status" class="devplay-connect-status muted" role="status" aria-live="polite">
+                ยังไม่ได้เชื่อมบัญชีเกม
+              </div>
+            </section>
 
-            <div class="peek-row">
-              <button type="button" class="btn btn-peek" id="peek-btn" disabled>
-                ดูสถานะบัญชีเกม
+            <div class="farm-tabs" role="tablist" aria-label="โหมดฟาร์ม">
+              <button type="button" class="farm-tab is-active" id="farm-tab-partyrun" role="tab" aria-selected="true" aria-controls="farm-panel-partyrun" data-tab="partyrun">
+                Party Run
               </button>
-              <p id="peek-cooldown" class="peek-cooldown" aria-live="polite"></p>
-            </div>
-
-            <div class="stat-grid">
-              <label class="field field-stat">
-                <span class="field-stat-label">
-                  <span class="field-stat-name">
-                    <img src="assets/score.png" alt="" width="22" height="22" />
-                    คะแนน
-                    <span class="field-stat-note">ใส่ 0 ได้ไม่สำคัญ</span>
-                  </span>
-                  <span class="field-stat-hint" id="farm-score-hint" aria-live="polite"></span>
-                </span>
-                <input
-                  id="farm-score"
-                  name="ckr_farm_score"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  data-farm-num="1"
-                  value="0"
-                />
-              </label>
-              <label class="field field-stat">
-                <span class="field-stat-label">
-                  <span class="field-stat-name">
-                    <img src="assets/coin.png" alt="" width="22" height="22" />
-                    เหรียญ
-                  </span>
-                  <span class="field-stat-hint" id="farm-coin-hint" aria-live="polite"></span>
-                </span>
-                <input
-                  id="farm-coin"
-                  name="ckr_farm_coin"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  data-farm-num="1"
-                  value="0"
-                />
-              </label>
-              <label class="field field-stat">
-                <span class="field-stat-label">
-                  <span class="field-stat-name">
-                    <img src="assets/level.png" alt="" width="22" height="22" />
-                    XP
-                  </span>
-                  <span class="field-stat-hint" id="farm-exp-hint" aria-live="polite"></span>
-                </span>
-                <input
-                  id="farm-exp"
-                  name="ckr_farm_exp"
-                  type="text"
-                  inputmode="numeric"
-                  autocomplete="off"
-                  data-farm-num="1"
-                  value="0"
-                />
-              </label>
-            </div>
-
-            <div class="xp-tools">
-              <button type="button" class="btn btn-ghost btn-sm-inline" id="xp-calc-open">
-                คำนวณ XP จากเลเวล
+              <button type="button" class="farm-tab is-disabled" id="farm-tab-heart" role="tab" aria-selected="false" aria-disabled="true" data-tab="heart" disabled>
+                Heart <span class="farm-tab-soon">เร็วๆ นี้</span>
+              </button>
+              <button type="button" class="farm-tab is-disabled" id="farm-tab-powder" role="tab" aria-selected="false" aria-disabled="true" data-tab="powder" disabled>
+                Powder <span class="farm-tab-soon">เร็วๆ นี้</span>
               </button>
             </div>
 
-            <div id="xp-calc-card" class="xp-calc-card hidden" hidden>
-              <div class="xp-calc-head">
-                <h3>คำนวณ XP ตามเลเวล</h3>
-                <button type="button" class="xp-calc-close" id="xp-calc-close" aria-label="ปิด">×</button>
+            <div class="farm-tab-panels">
+              <div class="farm-tab-panel" id="farm-panel-partyrun" role="tabpanel" aria-labelledby="farm-tab-partyrun">
+                <div class="ticket-stepper">
+                  <span class="ticket-stepper-label">จำนวนตั๋ว Party Run</span>
+                  <div class="ticket-stepper-controls">
+                    <button type="button" class="ticket-step-btn" id="ticket-minus" aria-label="ลดตั๋ว" disabled>−</button>
+                    <output id="ticket-count-display" class="ticket-count-display" for="ticket-count">1</output>
+                    <input type="hidden" id="ticket-count" name="ticket_count" value="1" />
+                    <button type="button" class="ticket-step-btn" id="ticket-plus" aria-label="เพิ่มตั๋ว" disabled>+</button>
+                  </div>
+                  <p class="ticket-stepper-hint" id="ticket-max-hint">เชื่อม DevPlay เพื่อดูตั๋วที่มี</p>
+                </div>
+
+                <div class="stat-grid">
+                  <label class="field field-stat">
+                    <span class="field-stat-label">
+                      <span class="field-stat-name">
+                        <img src="assets/score.png" alt="" width="22" height="22" />
+                        คะแนน
+                        <span class="field-stat-note">แนะนำ &gt; 0</span>
+                      </span>
+                      <span class="field-stat-hint" id="farm-score-hint" aria-live="polite"></span>
+                    </span>
+                    <input
+                      id="farm-score"
+                      name="ckr_farm_score"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      data-farm-num="1"
+                      value="800000"
+                    />
+                  </label>
+                  <label class="field field-stat">
+                    <span class="field-stat-label">
+                      <span class="field-stat-name">
+                        <img src="assets/coin.png" alt="" width="22" height="22" />
+                        เหรียญ
+                        <span class="field-stat-note">สูงสุด 449,000</span>
+                      </span>
+                      <span class="field-stat-hint" id="farm-coin-hint" aria-live="polite"></span>
+                    </span>
+                    <input
+                      id="farm-coin"
+                      name="ckr_farm_coin"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      data-farm-num="1"
+                      data-farm-cap="449000"
+                      value="0"
+                    />
+                  </label>
+                  <label class="field field-stat">
+                    <span class="field-stat-label">
+                      <span class="field-stat-name">
+                        <img src="assets/level.png" alt="" width="22" height="22" />
+                        XP
+                        <span class="field-stat-note">สูงสุด 52,000</span>
+                      </span>
+                      <span class="field-stat-hint" id="farm-exp-hint" aria-live="polite"></span>
+                    </span>
+                    <input
+                      id="farm-exp"
+                      name="ckr_farm_exp"
+                      type="text"
+                      inputmode="numeric"
+                      autocomplete="off"
+                      data-farm-num="1"
+                      data-farm-cap="52000"
+                      value="0"
+                    />
+                  </label>
+                </div>
+
+                <div class="xp-tools">
+                  <button type="button" class="btn btn-ghost btn-sm-inline" id="xp-calc-open">
+                    คำนวณ XP จากเลเวล
+                  </button>
+                </div>
+
+                <div id="xp-calc-card" class="xp-calc-card hidden" hidden>
+                  <div class="xp-calc-head">
+                    <h3>คำนวณ XP ตามเลเวล</h3>
+                    <button type="button" class="xp-calc-close" id="xp-calc-close" aria-label="ปิด">×</button>
+                  </div>
+                  <p class="xp-calc-lead">ใส่เลเวลปัจจุบันกับเลเวลเป้าหมาย</p>
+                  <div class="xp-calc-grid">
+                    <label class="field">
+                      <span>Lv ปัจจุบัน</span>
+                      <input id="xp-cur" type="number" min="1" max="110" value="25" />
+                    </label>
+                    <label class="field">
+                      <span>Lv เป้าหมาย</span>
+                      <input id="xp-tgt" type="number" min="1" max="110" value="75" />
+                    </label>
+                  </div>
+                  <p class="xp-calc-result" id="xp-calc-result">ต้องใช้ <strong>0</strong> XP</p>
+                  <button type="button" class="btn btn-candy" id="xp-calc-apply">ยืนยัน · ใส่ในช่อง XP</button>
+                </div>
+
+                <button class="btn btn-run" type="submit" id="farm-btn" disabled>
+                  <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
+                  <span class="btn-run-copy">
+                    <span class="btn-run-title">เริ่ม Party Run · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-sub" id="farm-btn-sub">เชื่อม DevPlay ก่อน</span>
+                  </span>
+                </button>
               </div>
-              <p class="xp-calc-lead">ใส่เลเวลปัจจุบันกับเลเวลเป้าหมาย</p>
-              <div class="xp-calc-grid">
-                <label class="field">
-                  <span>Lv ปัจจุบัน</span>
-                  <input id="xp-cur" type="number" min="1" max="110" value="25" />
-                </label>
-                <label class="field">
-                  <span>Lv เป้าหมาย</span>
-                  <input id="xp-tgt" type="number" min="1" max="110" value="75" />
-                </label>
+
+              <div class="farm-tab-panel farm-tab-panel-stub hidden" id="farm-panel-heart" role="tabpanel" hidden>
+                <p class="farm-stub-copy">Heart farm กำลังพัฒนา — เร็วๆ นี้</p>
               </div>
-              <p class="xp-calc-result" id="xp-calc-result">ต้องใช้ <strong>0</strong> XP</p>
-              <button type="button" class="btn btn-candy" id="xp-calc-apply">ยืนยัน · ใส่ในช่อง XP</button>
+              <div class="farm-tab-panel farm-tab-panel-stub hidden" id="farm-panel-powder" role="tabpanel" hidden>
+                <p class="farm-stub-copy">Powder farm กำลังพัฒนา — เร็วๆ นี้</p>
+              </div>
             </div>
 
-            <button class="btn btn-run" type="submit" id="farm-btn">
-              <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
-              เริ่มฟาร์ม · ใช้ 1 โทเค็น
-            </button>
             <p id="farm-status" class="status" role="status"></p>
             <div class="farm-history">
               <p class="farm-history-title">ประวัติฟาร์มล่าสุด</p>
@@ -594,8 +646,8 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260722-capmsg1"></script>
-  <script src="js/level_xp.js?v=20260722-capmsg1"></script>
-  <script src="js/app.js?v=20260722-capmsg1"></script>
+  <script src="js/config.js?v=20260725-partyrun1"></script>
+  <script src="js/level_xp.js?v=20260725-partyrun1"></script>
+  <script src="js/app.js?v=20260725-partyrun1"></script>
 </body>
 </html>

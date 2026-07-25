@@ -5,19 +5,19 @@ from typing import Any
 
 # tokens -> price in baht (exact voucher amount required)
 TOPUP_PACKAGES: dict[int, int] = {
-    1: 100,
-    2: 200,
-    3: 270,
-    4: 340,
-    5: 400,
-    6: 450,
-    7: 490,
-    8: 520,
-    9: 560,
-    10: 600,
+    1: 50,
+    2: 100,
+    3: 135,
+    4: 170,
+    5: 200,
+    6: 225,
+    7: 245,
+    8: 260,
+    9: 280,
+    10: 300,
 }
 
-FULL_PRICE_PER_TOKEN = 100
+FULL_PRICE_PER_TOKEN = 50
 
 
 def package_list() -> list[dict[str, Any]]:

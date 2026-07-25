@@ -14,6 +14,11 @@
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
   const INT32_MAX = 2147483647;
+  const SAFE_COIN_MAX = 449000;
+  const SAFE_EXP_MAX = 52000;
+  const DEFAULT_FARM_SCORE = 800000;
+  let farmCoinMax = SAFE_COIN_MAX;
+  let farmExpMax = SAFE_EXP_MAX;
 
   const DIGIT_TH = [
     "ศูนย์",
@@ -76,11 +81,17 @@
     return (DIGIT_TH[first] || "") + place;
   }
 
+  function farmFieldCap(input) {
+    if (!input) return INT32_MAX;
+    const cap = Number(input.dataset.farmCap);
+    return Number.isFinite(cap) && cap > 0 ? cap : INT32_MAX;
+  }
+
   function syncFarmNumField(input, opts = {}) {
     const hint = $(input.id + "-hint");
     let digits = digitsOnly(input.value);
+    const cap = farmFieldCap(input);
     if (!digits) {
-      // ค่าว่างหลังโฟกัสเคลียร์ — อย่าใส่ 0 กลับทันที
       if (!opts.keepEmpty) {
         input.value = "0";
         if (hint) hint.textContent = "";
@@ -90,21 +101,32 @@
       }
       return 0;
     }
-    // คง "0" ไว้เป็นค่าเริ่มต้น (อย่าตัดเป็นว่าง)
     if (digits === "0") {
       input.value = "0";
       if (hint) hint.textContent = "";
       return 0;
     }
-    // ตัดศูนย์นำหน้า ยกเว้นค่า 0 ล้วน
     digits = digits.replace(/^0+(?=\d)/, "");
-    const n = Number(digits);
-    if (!Number.isFinite(n) || n > INT32_MAX) {
+    let n = Number(digits);
+    if (!Number.isFinite(n) || n > cap) {
+      if (n > cap && cap < INT32_MAX) {
+        n = cap;
+        digits = String(cap);
+        input.value = formatCommas(digits);
+        if (hint) hint.textContent = thaiMagnitude(n);
+        if (!opts.silent) {
+          showErrorModal(
+            "ใส่ได้สูงสุด " + formatNumTh(cap) + " ต่อช่อง",
+            "ตัวเลขเกินกำหนด"
+          );
+        }
+        return n;
+      }
       input.value = "0";
       if (hint) hint.textContent = "";
       if (!opts.silent) {
         showErrorModal(
-          "ใส่ได้สูงสุด 2,147,483,647 เท่านั้น — ล้างช่องนี้แล้ว",
+          "ใส่ได้สูงสุด " + formatNumTh(cap) + " ต่อช่อง",
           "ตัวเลขเกินกำหนด"
         );
       }
@@ -352,6 +374,10 @@
   let emptyModalDismissed = false; // user closed empty modal; don't auto-reopen
   let farmRunning = false;
   let peekRunning = false;
+  let devplayConnecting = false;
+  let devplaySession = null; // { id, nickname, tickets, expiresAt }
+  let ticketCount = 1;
+  let ticketMax = 1;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 1;
@@ -424,8 +450,10 @@
     session_replaced: "มีการเข้าสู่ระบบจากที่อื่น — กรุณาเข้าสู่ระบบใหม่",
     account_banned: "บัญชีถูกระงับ กรุณาติดต่อแอดมิน",
     maintenance: "ระบบปิดปรับปรุงชั่วคราว ลองใหม่ภายหลัง",
-    value_capped:
-      "ใส่ได้สูงสุด " + INT32_MAX.toLocaleString("th-TH") + " ต่อช่อง",
+    value_capped: "เหรียญสูงสุด 449,000 · XP สูงสุด 52,000",
+    devplay_session_expired: "เชื่อม DevPlay หมดอายุ — กดเชื่อมต่อใหม่",
+    not_enough_tickets: "ตั๋ว Party Run ไม่พอ — ลดจำนวนตั๋วหรือรอรีเซ็ต",
+    connect_failed: "เชื่อม DevPlay ไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -556,6 +584,12 @@
           paintApiStatus("ready", "API พร้อม");
           try {
             const data = await res.json();
+            if (Number.isFinite(data.farm_coin_max)) farmCoinMax = data.farm_coin_max;
+            if (Number.isFinite(data.farm_exp_max)) farmExpMax = data.farm_exp_max;
+            const coinEl = $("farm-coin");
+            const expEl = $("farm-exp");
+            if (coinEl) coinEl.dataset.farmCap = String(farmCoinMax);
+            if (expEl) expEl.dataset.farmCap = String(farmExpMax);
             paintMaintenanceBanner(data);
           } catch (_) {
             paintMaintenanceBanner(null);
@@ -753,6 +787,14 @@
   function showResultModal(summary) {
     const rows = [
       ["บัญชีเกม", escapeHtml(summary.account || "—")],
+    ];
+    if (summary.roundsCompleted > 1) {
+      rows.push([
+        "รอบ",
+        `${escapeHtml(summary.roundsCompleted)} / ${escapeHtml(summary.ticketCount || summary.roundsCompleted)} สำเร็จ`,
+      ]);
+    }
+    rows.push(
       [
         "เหรียญ",
         `<span class="result-delta">+${escapeHtml(summary.coinDelta)}</span> → ยอดรวม ${escapeHtml(summary.coinTotal)}`,
@@ -764,8 +806,8 @@
       [
         "โทเค็นเว็บ",
         `${escapeHtml(summary.tokensBefore)} → ${escapeHtml(summary.tokensAfter)} <span class="result-delta">(หัก 1)</span>`,
-      ],
-    ];
+      ]
+    );
     const html =
       '<table class="result-table"><tbody>' +
       rows
@@ -1004,13 +1046,17 @@
     });
   }
 
-  function showConfirmModal() {
+  function showConfirmModal(ticketN) {
+    const n = Math.max(1, Number(ticketN) || 1);
     return new Promise((resolve) => {
       clearModalActions();
       openModal({
         mode: "confirm",
-        title: "ยืนยันการวิ่งฟาร์ม?",
-        body: "เมื่อกดยืนยัน จะหัก 1 โทเค็นทันที แม้ฟาร์มไม่สำเร็จ",
+        title: "ยืนยัน Party Run?",
+        body:
+          "หัก 1 โทเค็น · รัน " +
+          n +
+          " ตั๋วต่อเนื่อง\nคืนโทเค็นเฉพาะเมื่อไม่สำเร็จเลยสักรอบ",
         icon: "assets/tr_event_116.png",
         locked: false,
       });
@@ -1059,23 +1105,147 @@
     return !!(mail && secret);
   }
 
+  function isDevPlayConnected() {
+    if (!devplaySession?.id) return false;
+    if (devplaySession.expiresAt && Date.now() > devplaySession.expiresAt) {
+      devplaySession = null;
+      return false;
+    }
+    return true;
+  }
+
+  function paintDevPlayConnectStatus(text, kind) {
+    const el = $("devplay-connect-status");
+    if (!el) return;
+    el.textContent = text || "";
+    el.classList.remove("is-ok", "is-err", "muted");
+    if (kind === "ok") el.classList.add("is-ok");
+    else if (kind === "err") el.classList.add("is-err");
+    else el.classList.add("muted");
+  }
+
+  function paintTicketStepper() {
+    const display = $("ticket-count-display");
+    const hidden = $("ticket-count");
+    const hint = $("ticket-max-hint");
+    const minus = $("ticket-minus");
+    const plus = $("ticket-plus");
+    const max = Math.max(1, ticketMax || 1);
+    ticketCount = Math.max(1, Math.min(ticketCount, max));
+    if (display) display.textContent = String(ticketCount);
+    if (hidden) hidden.value = String(ticketCount);
+    if (hint) {
+      hint.textContent = isDevPlayConnected()
+        ? "มีตั๋วสูงสุด " + formatNumTh(max) + " ใบ · ใช้ 1 โทเค็นเว็บ"
+        : "เชื่อม DevPlay เพื่อดูตั๋วที่มี";
+    }
+    const canStep = isDevPlayConnected() && !farmRunning && !devplayConnecting;
+    if (minus) minus.disabled = !canStep || ticketCount <= 1;
+    if (plus) plus.disabled = !canStep || ticketCount >= max;
+  }
+
+  function resetDevPlaySession() {
+    devplaySession = null;
+    ticketMax = 1;
+    ticketCount = 1;
+    const reconnect = $("devplay-reconnect-btn");
+    if (reconnect) {
+      reconnect.hidden = true;
+      reconnect.classList.add("hidden");
+    }
+    paintDevPlayConnectStatus("ยังไม่ได้เชื่อมบัญชีเกม", "muted");
+    paintTicketStepper();
+  }
+
+  function applyDevPlayConnect(data) {
+    const ttlMs = (Number(data.expires_in) || 900) * 1000;
+    devplaySession = {
+      id: data.devplay_session_id,
+      nickname: data.nickname || "player",
+      tickets:
+        data.party_run_tickets == null ? null : Number(data.party_run_tickets),
+      expiresAt: Date.now() + ttlMs,
+    };
+    ticketMax = Math.max(1, Number(devplaySession.tickets) || 1);
+    ticketCount = ticketMax;
+    const nick = devplaySession.nickname;
+    const tickets =
+      devplaySession.tickets == null ? "?" : formatNumTh(devplaySession.tickets);
+    const coin =
+      data.coin == null ? "—" : formatNumTh(data.coin);
+    const exp =
+      data.exp == null ? "—" : formatNumTh(data.exp);
+    const lvl = data.level == null ? "—" : String(data.level);
+    paintDevPlayConnectStatus(
+      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + tickets,
+      "ok"
+    );
+    const reconnect = $("devplay-reconnect-btn");
+    if (reconnect) {
+      reconnect.hidden = false;
+      reconnect.classList.remove("hidden");
+    }
+    paintTicketStepper();
+  }
+
+  async function connectDevPlay() {
+    if (devplayConnecting || farmRunning) return;
+    if (!hasDevPlayCreds()) {
+      showErrorModal("กรอกอีเมลและรหัสผ่าน DevPlay ให้ครบ", "ข้อมูลไม่ครบ");
+      return;
+    }
+    devplayConnecting = true;
+    paintDevPlayConnectStatus("กำลังเชื่อมต่อ…", "muted");
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/devplay/connect", {
+        method: "POST",
+        body: {
+          email: $("dp-acct-mail").value.trim(),
+          password: $("dp-acct-secret").value,
+        },
+      });
+      applyDevPlayConnect(data);
+      setStatus($("farm-status"), "เชื่อม DevPlay แล้ว · พร้อม Party Run", "ok");
+    } catch (e) {
+      resetDevPlaySession();
+      paintDevPlayConnectStatus(
+        thError(e.message) || ERR_TH.connect_failed,
+        "err"
+      );
+      if (String(e.message || "").includes("login_failed")) {
+        showErrorModal(ERR_TH.login_failed, "เชื่อมไม่สำเร็จ");
+      } else {
+        showErrorModal(thError(e.message) || ERR_TH.connect_failed, "เชื่อมไม่สำเร็จ");
+      }
+    } finally {
+      devplayConnecting = false;
+      updateFarmAvailability();
+    }
+  }
+
   function updateFarmAvailability() {
     const btn = $("farm-btn");
-    const peekBtn = $("peek-btn");
+    const connectBtn = $("devplay-connect-btn");
+    const sub = $("farm-btn-sub");
     const empty = !hasTokens();
-    const peekCdLeft = peekCooldownRemaining();
     const credsReady = hasDevPlayCreds();
-    const peekWaiting = farmRunning || peekRunning || peekCdLeft > 0;
+    const connected = isDevPlayConnected();
+    const busy = farmRunning || devplayConnecting;
 
+    if (connectBtn) {
+      connectBtn.disabled = busy || !credsReady;
+    }
     if (btn && !farmRunning) {
-      // Keep clickable when empty so user can reopen the fill-tokens modal
-      btn.disabled = peekRunning;
+      btn.disabled = empty || !connected || busy;
     }
-    if (peekBtn) {
-      peekBtn.disabled = peekWaiting || !credsReady;
+    if (sub) {
+      if (!connected) sub.textContent = "เชื่อม DevPlay ก่อน";
+      else sub.textContent = "รัน " + ticketCount + " ตั๋ว · หัก 1 โทเค็น";
     }
-    setFarmInputsLocked(empty);
-    paintPeekCooldown();
+    setFarmInputsLocked(empty || !connected || busy);
+    paintTicketStepper();
     syncTopupPanel();
     if (empty && userView && !userView.classList.contains("hidden")) {
       if (modalMode !== "empty" && !emptyModalDismissed) showEmptyCoinsModal();
@@ -1401,16 +1571,16 @@
 
   function fallbackTopupPackages() {
     return [
-      { tokens: 1, price_baht: 100, save_baht: 0, promo: false },
-      { tokens: 2, price_baht: 200, save_baht: 0, promo: false },
-      { tokens: 3, price_baht: 270, save_baht: 30, promo: true },
-      { tokens: 4, price_baht: 340, save_baht: 60, promo: true },
-      { tokens: 5, price_baht: 400, save_baht: 100, promo: true },
-      { tokens: 6, price_baht: 450, save_baht: 150, promo: true },
-      { tokens: 7, price_baht: 490, save_baht: 210, promo: true },
-      { tokens: 8, price_baht: 520, save_baht: 280, promo: true },
-      { tokens: 9, price_baht: 560, save_baht: 340, promo: true },
-      { tokens: 10, price_baht: 600, save_baht: 400, promo: true },
+      { tokens: 1, price_baht: 50, save_baht: 0, promo: false },
+      { tokens: 2, price_baht: 100, save_baht: 0, promo: false },
+      { tokens: 3, price_baht: 135, save_baht: 15, promo: true },
+      { tokens: 4, price_baht: 170, save_baht: 30, promo: true },
+      { tokens: 5, price_baht: 200, save_baht: 50, promo: true },
+      { tokens: 6, price_baht: 225, save_baht: 75, promo: true },
+      { tokens: 7, price_baht: 245, save_baht: 105, promo: true },
+      { tokens: 8, price_baht: 260, save_baht: 140, promo: true },
+      { tokens: 9, price_baht: 280, save_baht: 170, promo: true },
+      { tokens: 10, price_baht: 300, save_baht: 200, promo: true },
     ];
   }
 
@@ -1895,7 +2065,7 @@
         break;
       }
       if (/LOGIN OK|login ok/i.test(s)) idx = Math.max(idx, 1);
-      if (/\[1\/4\]|clearing pending|cleared pending/i.test(s)) idx = Math.max(idx, 2);
+      if (/\[round \d+\/\d+\]|\[1\/4\]|clearing pending|cleared pending/i.test(s)) idx = Math.max(idx, 2);
       if (/BLOCKED|CORRUPT|corrupt_pending/i.test(s)) {
         hardErr = { id: "clear", msg: ERR_TH.corrupt_pending };
         break;
@@ -2142,20 +2312,29 @@
       showEmptyCoinsModal();
       return;
     }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
 
     const score = parseFarmNum($("farm-score").value);
     const coin = parseFarmNum($("farm-coin").value);
     const exp = parseFarmNum($("farm-exp").value);
-    if (score > INT32_MAX || coin > INT32_MAX || exp > INT32_MAX) {
+    if (coin > farmCoinMax || exp > farmExpMax) {
       showErrorModal(ERR_TH.value_capped, "ตัวเลขเกินกำหนด");
       return;
     }
 
+    const tickets = ticketCount;
     const btn = $("farm-btn");
     const tokensBefore = tokenBalance();
     farmRunning = true;
     btn.disabled = true;
-    setStatus($("farm-status"), "กำลังฟาร์ม… อาจใช้เวลาสักครู่", "muted");
+    setStatus(
+      $("farm-status"),
+      "กำลัง Party Run " + tickets + " ตั๋ว… อาจใช้เวลาสักครู่",
+      "muted"
+    );
     startLiveStages();
 
     try {
@@ -2163,8 +2342,8 @@
       const data = await api("/api/farm/run", {
         method: "POST",
         body: {
-          email: $("dp-acct-mail").value.trim(),
-          password: $("dp-acct-secret").value,
+          devplay_session_id: devplaySession.id,
+          ticket_count: tickets,
           score,
           coin,
           exp,
@@ -2179,15 +2358,20 @@
       }
 
       const result = data.result || data;
+      const roundsCompleted = Number(data.rounds_completed || result?.rounds_completed || 0);
 
       if (data.ok) {
-        setStatus($("farm-status"), "ฟาร์มสำเร็จ · หัก 1 โทเค็น", "ok");
+        setStatus(
+          $("farm-status"),
+          "Party Run สำเร็จ " + roundsCompleted + "/" + tickets + " · หัก 1 โทเค็น",
+          "ok"
+        );
         const summary = result?.reward_summary || {};
         const reward = result?.reward || {};
         pendingAfterRunStatus = () =>
           showResultModal({
             account:
-              (summary.nickname || result?.account?.nickname || "—") +
+              (summary.nickname || result?.account?.nickname || devplaySession?.nickname || "—") +
               " · level " +
               (summary.level ?? reward.level ?? "—"),
             coinDelta: formatNumTh(summary.coin_delta ?? reward.coin?.delta ?? 0),
@@ -2198,6 +2382,8 @@
             tokensAfter: formatNumTh(
               data.tokens_after ?? data.token_balance ?? tokenBalance()
             ),
+            roundsCompleted,
+            ticketCount: tickets,
           });
         buildFinalPipeline(data.logs || data.steps || [], result, true);
         stopQueuePoll();
@@ -2223,6 +2409,15 @@
         forceCloseRunStatusPopup();
         showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
         setStatus($("farm-status"), ERR_TH.maintenance, "err");
+      } else if (e.status === 401 || /devplay_session_expired/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        resetDevPlaySession();
+        showErrorModal(ERR_TH.devplay_session_expired, "เชื่อมใหม่");
+        setStatus($("farm-status"), ERR_TH.devplay_session_expired, "err");
+      } else if (/not_enough_tickets/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.not_enough_tickets, "ตั๋วไม่พอ");
+        setStatus($("farm-status"), ERR_TH.not_enough_tickets, "err");
       } else if (e.status === 400 && /value_capped/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
         showErrorModal(ERR_TH.value_capped, "ตัวเลขเกินกำหนด");
@@ -2269,6 +2464,7 @@
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
     setupXpCalculator();
+    paintTicketStepper();
     loadTopupPackages();
     pingApiHealth(2).catch(() => {});
 
@@ -2597,93 +2793,51 @@
     }
   });
 
-  $("peek-btn")?.addEventListener("click", async () => {
-    if (peekRunning || farmRunning) return;
-    if (!hasTokens()) {
-      showEmptyCoinsModal();
-      return;
-    }
-    if (peekCooldownRemaining() > 0) {
-      showErrorModal(ERR_TH.peek_rate_limited, "รออีกสักครู่");
-      return;
-    }
-    const dpEmail = ($("dp-acct-mail").value || "").trim();
-    const dpPass = $("dp-acct-secret").value || "";
-    if (!dpEmail || !dpPass) {
-      showErrorModal(
-        "กรอกอีเมลและรหัสผ่าน DevPlay ของเกมให้ครบก่อนดูสถานะ",
-        "ข้อมูลไม่ครบ"
-      );
-      return;
-    }
+  $("devplay-connect-btn")?.addEventListener("click", () => {
+    connectDevPlay();
+  });
 
-    peekRunning = true;
-    updateFarmAvailability();
-    setStatus($("farm-status"), "กำลังดูสถานะบัญชีเกม…", "muted");
-    try {
-      await ensureApiReady();
-      const data = await api("/api/farm/peek", {
-        method: "POST",
-        body: { email: dpEmail, password: dpPass },
-      });
-      const retry = Number(data.retry_after ?? PEEK_COOLDOWN_SEC);
-      startPeekCooldown(retry);
-      showPeekResultModal(data);
-      setStatus($("farm-status"), "ดูสถานะสำเร็จ · ไม่หักโทเค็น", "ok");
-    } catch (e) {
-      const raw = String(e.message || "");
-      const detail = e.data?.detail;
-      if (e.status === 429 || /peek_rate_limited/i.test(raw)) {
-        const retry =
-          (detail && typeof detail === "object" && Number(detail.retry_after)) ||
-          PEEK_COOLDOWN_SEC;
-        startPeekCooldown(retry);
-        showErrorModal(ERR_TH.peek_rate_limited, "รออีกสักครู่");
-      } else if (e.status === 402 || /insufficient_tokens_for_peek/i.test(raw)) {
-        showErrorModal(ERR_TH.insufficient_tokens_for_peek, "ต้องมีโทเค็น");
-      } else if (e.status === 409 || /farm_busy/i.test(raw)) {
-        showErrorModal(
-          "ระบบกำลังฟาร์มหรือไม่ว่าง — ลองใหม่เมื่อว่าง (ไม่ต้องเข้าคิวเพื่อดูสถานะ)",
-          "ระบบไม่ว่าง"
-        );
-      } else if (/login_failed/i.test(raw)) {
-        showErrorModal(ERR_TH.login_failed, "เข้าสู่ระบบเกมไม่สำเร็จ");
-      } else {
-        showErrorModal(thError(e.message) || ERR_TH.peek_failed, "ดูสถานะไม่สำเร็จ");
-      }
-      setStatus($("farm-status"), thError(e.message) || "ดูสถานะไม่สำเร็จ", "err");
-    } finally {
-      peekRunning = false;
+  $("devplay-reconnect-btn")?.addEventListener("click", () => {
+    resetDevPlaySession();
+    connectDevPlay();
+  });
+
+  $("ticket-minus")?.addEventListener("click", () => {
+    if (ticketCount > 1) {
+      ticketCount -= 1;
+      paintTicketStepper();
+      updateFarmAvailability();
+    }
+  });
+
+  $("ticket-plus")?.addEventListener("click", () => {
+    if (ticketCount < ticketMax) {
+      ticketCount += 1;
+      paintTicketStepper();
       updateFarmAvailability();
     }
   });
 
   $("farm-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
-    if (farmRunning || peekRunning) return;
+    if (farmRunning || devplayConnecting) return;
 
     if (!hasTokens()) {
       showEmptyCoinsModal();
       return;
     }
 
-    const dpEmail = ($("dp-acct-mail").value || "").trim();
-    const dpPass = $("dp-acct-secret").value || "";
-    if (!dpEmail || !dpPass) {
-      showErrorModal(
-        "กรอกอีเมลและรหัสผ่าน DevPlay ของเกมให้ครบก่อนเริ่มฟาร์ม",
-        "ข้อมูลไม่ครบ"
-      );
+    if (!isDevPlayConnected()) {
+      showErrorModal("เชื่อม DevPlay ก่อนเริ่ม Party Run", "ยังไม่ได้เชื่อม");
       return;
     }
 
-    const confirmed = await showConfirmModal();
+    const confirmed = await showConfirmModal(ticketCount);
     if (!confirmed) {
       setStatus($("farm-status"), "ยกเลิกแล้ว — ยังไม่หักโทเค็น", "muted");
       return;
     }
 
-    // Double-check balance after confirm (in case it changed)
     try {
       await refreshMe();
     } catch (_) {}
