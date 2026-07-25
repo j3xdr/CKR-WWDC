@@ -917,17 +917,16 @@ def _claim_reward(ingame_id, my, max_attempts=12):
     return {"ok": False, "error": "claim_timeout", "ingame_id": ingame_id}
 
 
-def _run_single_round(my, round_idx=1, round_total=1, skip_clear=False):
+def _run_single_round(my, round_idx=1, round_total=1):
     prefix = f"[round {round_idx}/{round_total}] " if round_total > 1 else ""
-    if skip_clear:
-        print(prefix + "[1/4] skip clear (previous round claimed clean)")
-    else:
-        print(prefix + "[1/4] clearing pending rewards ...")
-        status = clear_pending(my)
-        if isinstance(status, dict) and status.get("corrupt"):
-            print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
-            print("     ingame_id =", status["corrupt"])
-            return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
+    # Always clear — claim success can still leave PartyRunInit pending briefly,
+    # and matchmaking then fails with have_pending_reward / INIT_AGAIN.
+    print(prefix + "[1/4] clearing pending rewards ...")
+    status = clear_pending(my)
+    if isinstance(status, dict) and status.get("corrupt"):
+        print("\n!! BLOCKED: a previous run left a CORRUPT pending reward:")
+        print("     ingame_id =", status["corrupt"])
+        return {"ok": False, "error": "corrupt_pending", "ingame_id": status["corrupt"]}
 
     print(prefix + "[2/4] matchmaking ...")
     session = matchmake(my, is_debug=USE_DEBUG_MATCH)
@@ -1152,14 +1151,7 @@ def run_farm_multi(
         rounds_ok = 0
         tickets_left = get_party_run_tickets()
         for i in range(int(ticket_count)):
-            # After a clean claim, next round has nothing pending — skip clear RPC.
-            skip_clear = bool(rounds) and bool(rounds[-1].get("ok"))
-            r = _run_single_round(
-                my,
-                round_idx=i + 1,
-                round_total=int(ticket_count),
-                skip_clear=skip_clear,
-            )
+            r = _run_single_round(my, round_idx=i + 1, round_total=int(ticket_count))
             rounds.append(r)
             if r.get("party_run_tickets") is not None:
                 tickets_left = r.get("party_run_tickets")
