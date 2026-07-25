@@ -39,7 +39,8 @@ PLAYTIME_SECONDS = 2               # fake play time before submitting the run
 QUIT_AFTER_SECONDS = 1             # wait after run_end, then quit to finalize
 IGNORE_SAVING_REPLAY = True        # skip replay upload (anti-cheat replay gate)
 USE_DEBUG_MATCH = True             # try debug bots first; fallback to live queue
-QUIT_ON_RESULT = True              # wait for RESULT before quit (safer for claim)
+QUIT_ON_RESULT = False             # quit right after run_end (RESULT never arrives in debug matches)
+RESULT_WAIT_SECONDS = 6            # safety net only, used when QUIT_ON_RESULT is True
 # ===========================================================================
 
 import os, sys, json, copy, time, queue, threading, base64, zlib
@@ -210,8 +211,13 @@ def list_episode_season():
     )
 
 
-def get_party_run_tickets():
-    """Read Party Run ticket balance via ListEpisodeSeason."""
+def get_party_run_ticket_cost():
+    """Tickets required per Party Run (ListEpisodeSeason.ticketCount).
+
+    NOTE: This is the *cost per match* (usually 1), NOT the owned balance.
+    Purchased ticket balance is not exposed on ListEpisodeSeason / CashInfo in
+    our descriptor set — it only appears as party_run_ticket.total on claim.
+    """
     r = list_episode_season()
     if r.get("__error__"):
         return None
@@ -224,10 +230,45 @@ def get_party_run_tickets():
         is_party_ticket = tt in (4, "EPISODE_TICKET_TYPE_PARTY_RUN_TICKET")
         if is_party or is_party_ticket:
             try:
-                return int(ep.get("ticketCount") or ep.get("ticket_count") or 0)
+                return int(ep.get("ticketCount") or ep.get("ticket_count") or 1)
             except (TypeError, ValueError):
-                return 0
-    return 0
+                return 1
+    return 1
+
+
+def get_party_run_tickets():
+    """Owned Party Run ticket balance if known.
+
+    ListEpisodeSeason.ticketCount is cost-per-run, not balance — so this returns
+    None unless a prior claim cached the total on the module (see
+    _extract_ticket_total_from_claim). Callers must not treat None as 0.
+    """
+    cached = globals().get("_PARTY_RUN_TICKETS_CACHED")
+    if cached is not None:
+        try:
+            return int(cached)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _extract_ticket_total_from_claim(res):
+    """Pull party_run_ticket.total from a ClaimPartyRunReward payload and cache it."""
+    global _PARTY_RUN_TICKETS_CACHED
+    prt = res.get("party_run_ticket") if isinstance(res, dict) else None
+    if not isinstance(prt, dict):
+        return None
+    total = prt.get("total")
+    if total is None:
+        return None
+    try:
+        _PARTY_RUN_TICKETS_CACHED = int(total)
+        return _PARTY_RUN_TICKETS_CACHED
+    except (TypeError, ValueError):
+        return None
+
+
+_PARTY_RUN_TICKETS_CACHED = None
 
 
 def export_session():
@@ -378,6 +419,7 @@ def peek_account(email, password, log_cb=None):
             equip = {}
 
         tickets = get_party_run_tickets()
+        ticket_cost = get_party_run_ticket_cost()
 
         return {
             "ok": True,
@@ -392,6 +434,7 @@ def peek_account(email, password, log_cb=None):
             "pic": equip.get("pic"),
             "treas": equip.get("treas") or [],
             "party_run_tickets": tickets,
+            "party_run_ticket_cost": ticket_cost,
         }
     except FarmError as exc:
         return {"ok": False, "error": exc.code, "detail": exc.detail}
@@ -644,7 +687,7 @@ def play_and_submit(session, my):
         if s == "LOBBY" and session.get("is_debug") and not debug_start_sent[0]:
             debug_start_sent[0] = True
             def _dbg():
-                time.sleep(0.5)
+                time.sleep(0.2)
                 send(debug_start_request={"do_not_eliminate": True})
             threading.Thread(target=_dbg, daemon=True).start()
         if s == "LOADING":
@@ -689,6 +732,12 @@ def play_and_submit(session, my):
                 debug_start_sent[0] = True
                 print("   stuck after load_finished — sending debug_start_request")
                 send(debug_start_request={"do_not_eliminate": True})
+            # Evaluate deadlines before filtering (ping/sync would otherwise skip them)
+            if run_ended[0] and quit_sent[0] and quit_deadline is None:
+                quit_deadline = time.time() + 20
+            if run_ended[0] and not quit_sent[0] and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + RESULT_WAIT_SECONDS:
+                print("   RESULT slow — forcing quit")
+                ensure_quit()
             out = json_format.MessageToDict(resp, preserving_proto_field_name=True)
             if any(k in out for k in ("char_minimum_sync", "char_full_sync",
                                       "ping_response", "join", "left", "temporary_round_result")):
@@ -712,11 +761,6 @@ def play_and_submit(session, my):
                 code = (out["error"] or {}).get("code", "")
                 if code == "ERROR_CODE_GAME_NOT_STARTED" and not run_ended[0]:
                     break
-            if run_ended[0] and quit_sent[0] and quit_deadline is None:
-                quit_deadline = time.time() + 20
-            if run_ended[0] and not quit_sent[0] and now > (load_at[0] or start_deadline) + PLAYTIME_SECONDS + 45:
-                print("   RESULT slow — forcing quit")
-                ensure_quit()
         if run_ended[0] and not quit_acked[0]:
             ensure_quit()
             t_end = time.time() + 8
@@ -769,16 +813,20 @@ def _reward_summary_from_claim(res, ingame_id, nick_fallback=None):
     }
 
 
+_CLAIM_BACKOFF = (0.4, 0.8, 1.2, 2.0)   # then 2.0s for remaining attempts
+
+
 def _claim_reward(ingame_id, my, max_attempts=12):
     tried_finalize = False
-    for _ in range(max_attempts):
+    for attempt in range(max_attempts):
         res = claim(ingame_id)
+        delay = _CLAIM_BACKOFF[attempt] if attempt < len(_CLAIM_BACKOFF) else 2.0
         if not res.get("__error__"):
             coin = res.get("coin") if isinstance(res.get("coin"), dict) else {}
             exp = res.get("exp") if isinstance(res.get("exp"), dict) else {}
             if not coin and not exp and not res.get("level") and not res.get("members"):
                 print("   claim returned empty reward payload, retrying ...")
-                time.sleep(2)
+                time.sleep(delay)
                 continue
             print("\n=================  REWARD CLAIMED  =================")
             def amt(x):
@@ -789,11 +837,16 @@ def _claim_reward(ingame_id, my, max_attempts=12):
             print("  ticket:", amt(res.get("party_run_ticket", {}) if isinstance(res.get("party_run_ticket"), dict) else {}))
             print("  level:", res.get("level"), " rank:", res.get("final_rank"))
             print("===================================================")
+            tickets_left = _extract_ticket_total_from_claim(res)
             nick = my.get("nick") if isinstance(my, dict) else None
-            return _reward_summary_from_claim(res, ingame_id, nick_fallback=nick)
+            out = _reward_summary_from_claim(res, ingame_id, nick_fallback=nick)
+            if tickets_left is not None:
+                out["party_run_tickets"] = tickets_left
+                out["reward_summary"]["party_run_tickets"] = tickets_left
+            return out
         details = res.get("details", "")
-        print("   not finalized yet, retrying in 2s ...", details[:120] if details else "")
-        time.sleep(2)
+        print(f"   not finalized yet, retrying in {delay}s ...", details[:120] if details else "")
+        time.sleep(delay)
     print("!! could not claim (match may still be finishing) — run again to retry")
     return {"ok": False, "error": "claim_timeout", "ingame_id": ingame_id}
 
@@ -813,6 +866,11 @@ def _run_single_round(my, round_idx=1, round_total=1):
         print("      debug queue failed — retrying live queue ...")
         session = matchmake(my, is_debug=False)
     if not session or session.get("__error__"):
+        err = (session or {}).get("__error__") or {}
+        code = err.get("code") if isinstance(err, dict) else None
+        if code == "ERROR_CODE_NOT_ENOUGH_TICKET":
+            print("!! not enough Party Run tickets")
+            return {"ok": False, "error": "not_enough_tickets"}
         print("!! matchmaking failed")
         return {"ok": False, "error": "matchmaking_failed"}
     print("      ingame_id =", session["ingame_id"], "debug=" + str(USE_DEBUG_MATCH))
@@ -877,7 +935,8 @@ def connect_devplay(email, password, log_cb=None):
         if balances.get("level") is not None:
             level = balances["level"]
 
-        tickets = get_party_run_tickets()
+        ticket_cost = get_party_run_ticket_cost()
+        tickets = get_party_run_tickets()  # usually None until a claim caches total
         equip = {}
         try:
             equip = get_my_equipment() or {}
@@ -893,6 +952,7 @@ def connect_devplay(email, password, log_cb=None):
             "level": level,
             "tier": equip.get("tier"),
             "party_run_tickets": tickets,
+            "party_run_ticket_cost": ticket_cost,
             "session": export_session(),
         }
     except FarmError as exc:
@@ -973,22 +1033,23 @@ def run_farm_multi(
         my = get_my_equipment()
         print(f"me: {my['nick']}  cookie={my['cookie']} pet={my['pet']} tier={my['tier']}")
 
-        tickets_avail = get_party_run_tickets()
-        if tickets_avail is not None and ticket_count > tickets_avail:
-            return {
-                "ok": False,
-                "error": "not_enough_tickets",
-                "party_run_tickets": tickets_avail,
-            }
-
+        # Do NOT gate on ListEpisodeSeason.ticketCount — that field is cost/run, not balance.
+        # Owned balance is only known after a claim (party_run_ticket.total) or when cached.
         rounds = []
         rounds_ok = 0
+        tickets_left = get_party_run_tickets()
         for i in range(int(ticket_count)):
             r = _run_single_round(my, round_idx=i + 1, round_total=int(ticket_count))
             rounds.append(r)
+            if r.get("party_run_tickets") is not None:
+                tickets_left = r.get("party_run_tickets")
             if r.get("ok"):
                 rounds_ok += 1
             else:
+                # Map matchmaking ticket errors
+                err = str(r.get("error") or "")
+                if "NOT_ENOUGH_TICKET" in err or err == "not_enough_tickets":
+                    r["error"] = "not_enough_tickets"
                 break
 
         agg = _aggregate_reward_summaries(rounds)
@@ -1000,6 +1061,7 @@ def run_farm_multi(
             "rounds": rounds,
             "reward_summary": agg if ok else (rounds[-1].get("reward_summary") if rounds else {}),
             "account": rounds[-1].get("account") if rounds else {},
+            "party_run_tickets": tickets_left,
             "error": None if ok else (rounds[-1].get("error") if rounds else "farm_error"),
         }
         if ok and len(rounds) == 1:

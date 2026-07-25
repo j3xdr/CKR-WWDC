@@ -1135,9 +1135,19 @@
     if (display) display.textContent = String(ticketCount);
     if (hidden) hidden.value = String(ticketCount);
     if (hint) {
-      hint.textContent = isDevPlayConnected()
-        ? "มีตั๋วสูงสุด " + formatNumTh(max) + " ใบ · ใช้ 1 โทเค็นเว็บ"
-        : "เชื่อม DevPlay เพื่อดูตั๋วที่มี";
+      if (!isDevPlayConnected()) {
+        hint.textContent = "เชื่อม DevPlay เพื่อเริ่มเลือกจำนวนตั๋ว";
+      } else if (devplaySession?.tickets == null) {
+        hint.textContent =
+          "ยอดตั๋วในเกมไม่โชว์ตอนเชื่อม — เลือกจำนวนได้ (สูงสุด " +
+          formatNumTh(max) +
+          ") · ใช้ 1 โทเค็นเว็บ";
+      } else {
+        hint.textContent =
+          "เหลือ " +
+          formatNumTh(devplaySession.tickets) +
+          " ใบ · ใช้ 1 โทเค็นเว็บ";
+      }
     }
     const canStep = isDevPlayConnected() && !farmRunning && !devplayConnecting;
     if (minus) minus.disabled = !canStep || ticketCount <= 1;
@@ -1146,7 +1156,7 @@
 
   function resetDevPlaySession() {
     devplaySession = null;
-    ticketMax = 1;
+    ticketMax = 99;
     ticketCount = 1;
     const reconnect = $("devplay-reconnect-btn");
     if (reconnect) {
@@ -1159,25 +1169,28 @@
 
   function applyDevPlayConnect(data) {
     const ttlMs = (Number(data.expires_in) || 900) * 1000;
+    const ticketsKnown =
+      data.party_run_tickets != null && Number.isFinite(Number(data.party_run_tickets));
     devplaySession = {
       id: data.devplay_session_id,
       nickname: data.nickname || "player",
-      tickets:
-        data.party_run_tickets == null ? null : Number(data.party_run_tickets),
+      tickets: ticketsKnown ? Number(data.party_run_tickets) : null,
       expiresAt: Date.now() + ttlMs,
     };
-    ticketMax = Math.max(1, Number(devplaySession.tickets) || 1);
-    ticketCount = ticketMax;
+    // Owned balance is often unknown at connect (API quirk). Allow up to 99.
+    ticketMax = ticketsKnown
+      ? Math.max(1, Number(devplaySession.tickets) || 1)
+      : 99;
+    ticketCount = ticketsKnown ? ticketMax : Math.min(5, ticketMax);
     const nick = devplaySession.nickname;
-    const tickets =
-      devplaySession.tickets == null ? "?" : formatNumTh(devplaySession.tickets);
-    const coin =
-      data.coin == null ? "—" : formatNumTh(data.coin);
-    const exp =
-      data.exp == null ? "—" : formatNumTh(data.exp);
+    const ticketsLabel = ticketsKnown
+      ? formatNumTh(devplaySession.tickets)
+      : "จะอัปเดตหลังรัน";
+    const coin = data.coin == null ? "—" : formatNumTh(data.coin);
+    const exp = data.exp == null ? "—" : formatNumTh(data.exp);
     const lvl = data.level == null ? "—" : String(data.level);
     paintDevPlayConnectStatus(
-      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + tickets,
+      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + ticketsLabel,
       "ok"
     );
     const reconnect = $("devplay-reconnect-btn");
@@ -2359,6 +2372,14 @@
 
       const result = data.result || data;
       const roundsCompleted = Number(data.rounds_completed || result?.rounds_completed || 0);
+      const ticketsLeft =
+        data.party_run_tickets ?? result?.party_run_tickets ?? null;
+      if (devplaySession && ticketsLeft != null && Number.isFinite(Number(ticketsLeft))) {
+        devplaySession.tickets = Number(ticketsLeft);
+        ticketMax = Math.max(1, Number(ticketsLeft));
+        ticketCount = Math.min(ticketCount, ticketMax);
+        paintTicketStepper();
+      }
 
       if (data.ok) {
         setStatus(

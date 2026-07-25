@@ -988,6 +988,7 @@ async def farm_devplay_connect(
         "exp": result.get("exp"),
         "level": result.get("level"),
         "party_run_tickets": result.get("party_run_tickets"),
+        "party_run_ticket_cost": result.get("party_run_ticket_cost"),
         "expires_in": _DEVPLAY_SESSION_TTL_SEC,
         "logs": logs[-40:],
     }
@@ -1036,6 +1037,8 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         dp_email = row.get("email") or dp_email
         session_data = row.get("session")
         tickets_cached = row.get("party_run_tickets")
+        # Only enforce when we have a *real* owned balance (from prior claim cache).
+        # ListEpisodeSeason.ticketCount is cost/run and must never gate here.
         if tickets_cached is not None and body.ticket_count > int(tickets_cached):
             raise HTTPException(
                 status_code=400,
@@ -1128,6 +1131,12 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         refunded = False
         err_code = None if ok else (result or {}).get("error") or "farm_error"
 
+        # Refresh in-memory DevPlay session ticket balance after claim(s)
+        if body.devplay_session_id and (result or {}).get("party_run_tickets") is not None:
+            row = _devplay_sessions.get(body.devplay_session_id)
+            if row and row.get("user_id") == uid:
+                row["party_run_tickets"] = (result or {}).get("party_run_tickets")
+
         if not ok:
             bal = await _refund_token(uid, "farm_fail_refund")
             refunded = True
@@ -1163,6 +1172,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
             "result": result,
             "ticket_count": body.ticket_count,
             "rounds_completed": rounds_ok,
+            "party_run_tickets": (result or {}).get("party_run_tickets"),
             "refunded": refunded,
             "error": err_code,
             "logs": logs[-80:],
