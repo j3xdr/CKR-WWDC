@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun8" />
+  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun9" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -311,8 +311,8 @@
               <button type="button" class="farm-tab is-disabled" id="farm-tab-heart" role="tab" aria-selected="false" aria-disabled="true" data-tab="heart" disabled>
                 Heart <span class="farm-tab-soon">เร็วๆ นี้</span>
               </button>
-              <button type="button" class="farm-tab is-disabled" id="farm-tab-powder" role="tab" aria-selected="false" aria-disabled="true" data-tab="powder" disabled>
-                Powder <span class="farm-tab-soon">เร็วๆ นี้</span>
+              <button type="button" class="farm-tab" id="farm-tab-powder" role="tab" aria-selected="false" aria-controls="farm-panel-powder" data-tab="powder">
+                Powder
               </button>
             </div>
 
@@ -414,7 +414,53 @@
                 <p class="farm-stub-copy">Heart farm กำลังพัฒนา — เร็วๆ นี้</p>
               </div>
               <div class="farm-tab-panel farm-tab-panel-stub hidden" id="farm-panel-powder" role="tabpanel" hidden>
-                <p class="farm-stub-copy">Powder farm กำลังพัฒนา — เร็วๆ นี้</p>
+                <div class="powder-picker">
+                  <label class="field powder-treasure-field">
+                    <span>สมบัติที่จะซื้อแล้วย่อย</span>
+                    <input
+                      type="search"
+                      id="powder-treasure-search"
+                      class="powder-treasure-search"
+                      placeholder="ค้นหาชื่อสมบัติ…"
+                      autocomplete="off"
+                      disabled
+                    />
+                    <select id="powder-treasure-select" class="powder-treasure-select" size="6" disabled>
+                      <option value="Revival Boots">Revival Boots</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="powder-estimate" id="powder-estimate" aria-live="polite">
+                  <p class="powder-estimate-target muted" id="powder-estimate-target">เชื่อม DevPlay เพื่อดูเป้าหมาย</p>
+                  <dl class="powder-estimate-stats">
+                    <div>
+                      <dt>ราคา/รอบ</dt>
+                      <dd id="powder-stat-price">—</dd>
+                    </div>
+                    <div>
+                      <dt>ผง/รอบ</dt>
+                      <dd id="powder-stat-yield">—</dd>
+                    </div>
+                    <div>
+                      <dt>ประมาณรอบ</dt>
+                      <dd id="powder-stat-rounds">—</dd>
+                    </div>
+                    <div>
+                      <dt>เหรียญที่ใช้</dt>
+                      <dd id="powder-stat-coin">—</dd>
+                    </div>
+                  </dl>
+                  <p class="powder-estimate-note muted" id="powder-estimate-note"></p>
+                </div>
+
+                <button class="btn btn-run btn-run-powder hidden" type="submit" id="powder-btn" disabled hidden>
+                  <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
+                  <span class="btn-run-copy">
+                    <span class="btn-run-title">เริ่มฟาร์มผง · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-sub" id="powder-btn-sub">เชื่อม DevPlay ก่อน</span>
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -634,7 +680,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260725-partyrun8"></script>
-  <script src="js/app.js?v=20260725-partyrun8"></script>
+  <script src="js/config.js?v=20260725-partyrun9"></script>
+  <script src="js/app.js?v=20260725-partyrun9"></script>
 </body>
 </html>

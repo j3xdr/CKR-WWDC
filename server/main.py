@@ -204,6 +204,16 @@ class DevPlayConnectBody(BaseModel):
         return s
 
 
+class PowderEstimateBody(BaseModel):
+    devplay_session_id: str = Field(min_length=8, max_length=128)
+    treasure_name: str = Field(default="Revival Boots", min_length=1, max_length=128)
+
+
+class PowderRunBody(BaseModel):
+    devplay_session_id: str = Field(min_length=8, max_length=128)
+    treasure_name: str = Field(default="Revival Boots", min_length=1, max_length=128)
+
+
 INT32_MAX = 2_147_483_647
 BKK = ZoneInfo("Asia/Bangkok")
 
@@ -987,6 +997,7 @@ async def farm_devplay_connect(
         "coin": result.get("coin"),
         "exp": result.get("exp"),
         "level": result.get("level"),
+        "powder": result.get("powder"),
         "party_run_tickets": result.get("party_run_tickets"),
         "party_run_ticket_cost": result.get("party_run_ticket_cost"),
         "expires_in": _DEVPLAY_SESSION_TTL_SEC,
@@ -1035,6 +1046,301 @@ async def farm_devplay_tickets(
         "party_run_ticket_cost": result.get("party_run_ticket_cost"),
         "logs": logs[-40:],
     }
+
+
+# ---------------------------------------------------------------------------
+# Powder farm (JWT + consume 1 token + shared farm lock)
+# ---------------------------------------------------------------------------
+def _run_powder_estimate_sync(powder_session, treasure_name, log_cb):
+    from powder_core import (  # noqa: WPS433 — server-only
+        PowderError,
+        estimate_job,
+        owned_instance,
+        refresh_balances,
+        resolve_treasure,
+    )
+
+    treasure = resolve_treasure(treasure_name)
+    if not powder_session:
+        raise PowderError("session_expired")
+    ref = refresh_balances(powder_session, log_cb=log_cb)
+    init = ref.get("init") or {}
+    owned = owned_instance(init, int(treasure["group_seq"])) is not None
+    est = estimate_job(ref["coin"], treasure, owned=owned)
+    return {
+        "ok": True,
+        "coin": ref["coin"],
+        "powder": ref["powder"],
+        "owned_lv8": owned,
+        "powder_session": ref["powder_session"],
+        **est,
+    }
+
+
+def _run_powder_sync(treasure_name, email, powder_session, log_cb):
+    from powder_core import run_powder_job  # noqa: WPS433 — server-only
+
+    return run_powder_job(
+        treasure_name=treasure_name,
+        email=email,
+        powder_session=powder_session,
+        log_cb=log_cb,
+    )
+
+
+@app.get("/api/farm/powder/treasures")
+async def farm_powder_treasures(user: dict[str, Any] = Depends(verify_user)):
+    from powder_core import DEFAULT_TREASURE, POWDER_PER_TOKEN, list_treasures  # noqa: WPS433
+
+    return {
+        "ok": True,
+        "treasures": list_treasures(),
+        "default": DEFAULT_TREASURE,
+        "powder_per_token": POWDER_PER_TOKEN,
+    }
+
+
+@app.post("/api/farm/powder/estimate")
+async def farm_powder_estimate(
+    body: PowderEstimateBody, user: dict[str, Any] = Depends(verify_user)
+):
+    await _require_farm_open()
+    uid = user["id"]
+    row = _get_devplay_session(uid, body.devplay_session_id)
+    if not row:
+        raise HTTPException(status_code=401, detail="devplay_session_expired")
+    if not row.get("powder_session"):
+        raise HTTPException(status_code=400, detail="powder_session_missing")
+
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    try:
+        result = await asyncio.to_thread(
+            _run_powder_estimate_sync,
+            row.get("powder_session"),
+            body.treasure_name,
+            log_cb,
+        )
+    except Exception as exc:
+        from powder_core import PowderError  # noqa: WPS433 — server-only
+
+        if isinstance(exc, PowderError):
+            raise HTTPException(status_code=400, detail=exc.code) from exc
+        raise HTTPException(status_code=400, detail="estimate_failed") from exc
+
+    if result.get("powder_session"):
+        row["powder_session"] = result["powder_session"]
+    if result.get("coin") is not None:
+        row["coin"] = result["coin"]
+    if result.get("powder") is not None:
+        row["powder"] = result["powder"]
+
+    return {**result, "logs": logs[-20:]}
+
+
+@app.post("/api/farm/powder/run")
+async def farm_powder_run(body: PowderRunBody, user: dict[str, Any] = Depends(verify_user)):
+    global _farm_busy
+    await _require_farm_open()
+    profile = await load_profile(user)
+    token = user["_access_token"]
+    uid = user["id"]
+    tokens_before = int(profile.get("token_balance") or 0)
+
+    if tokens_before < 1:
+        raise HTTPException(status_code=402, detail="insufficient_tokens")
+
+    gate = await _gate_for(uid)
+    if _farm_busy or not gate.get("can_run"):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "farm_busy",
+                "message": "farm_busy",
+                "gate": gate,
+            },
+        )
+    if gate.get("active") and not gate["active"].get("is_me") and gate.get("me", {}).get("status") != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
+        )
+
+    row = _get_devplay_session(uid, body.devplay_session_id)
+    if not row:
+        raise HTTPException(status_code=401, detail="devplay_session_expired")
+    if not row.get("powder_session"):
+        raise HTTPException(status_code=400, detail="powder_session_missing")
+
+    dp_email = row.get("email")
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        cons = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
+            headers=_sb_headers(SUPABASE_ANON_KEY, token),
+            json={"p_reason": "powder_run"},
+        )
+    if cons.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"consume_failed:{cons.text}")
+    cons_data = cons.json()
+    if not cons_data.get("ok"):
+        reason = cons_data.get("reason", "consume_failed")
+        code = 402 if reason == "insufficient_tokens" else 400
+        raise HTTPException(status_code=code, detail=reason)
+
+    job_id = None
+    if _has_service_role():
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            jr = await client.post(
+                f"{SUPABASE_URL}/rest/v1/run_jobs",
+                headers={
+                    **_service_headers(),
+                    "Prefer": "return=representation",
+                },
+                json={
+                    "user_id": uid,
+                    "status": "queued",
+                    "score": 0,
+                    "coin": 0,
+                    "exp": 0,
+                    "ticket_count": 0,
+                },
+            )
+            if jr.status_code < 300 and jr.json():
+                job_id = jr.json()[0]["id"]
+
+    if not _farm_lock.acquire(blocking=False):
+        bal = await _refund_token(uid, "farm_busy_refund")
+        gate2 = await _gate_for(uid)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "farm_busy",
+                "message": "farm_busy",
+                "gate": gate2,
+                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
+                "refunded": True,
+            },
+        )
+
+    _farm_busy = True
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    try:
+        if _has_service_role():
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                await fq.mark_queue_done(client, SUPABASE_URL, _svc(), uid)
+                await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, job_id)
+
+        if job_id and _has_service_role():
+            await _patch_job(job_id, {"status": "running", "started_at": _now()})
+
+        result = await asyncio.to_thread(
+            _run_powder_sync,
+            body.treasure_name,
+            dp_email,
+            row.get("powder_session"),
+            log_cb,
+        )
+
+        if result and result.get("powder_session"):
+            row["powder_session"] = result["powder_session"]
+        if result and result.get("coin_after") is not None:
+            row["coin"] = result["coin_after"]
+        if result and result.get("powder_after") is not None:
+            row["powder"] = result["powder_after"]
+
+        rounds_ok = int((result or {}).get("rounds") or 0)
+        powder_gained = int((result or {}).get("powder_gained") or 0)
+        ok = bool(result and result.get("ok") and powder_gained > 0)
+        token_balance = cons_data.get("token_balance")
+        refunded = False
+        err_code = None if ok else (result or {}).get("error") or "farm_error"
+
+        if not ok:
+            bal = await _refund_token(uid, "farm_fail_refund")
+            refunded = True
+            if bal is not None:
+                token_balance = bal
+            if job_id and _has_service_role():
+                await _patch_job(
+                    job_id,
+                    {
+                        "status": "failed",
+                        "result": result,
+                        "error": f"{err_code};refunded",
+                        "finished_at": _now(),
+                    },
+                )
+        elif job_id and _has_service_role():
+            await _patch_job(
+                job_id,
+                {
+                    "status": "succeeded",
+                    "result": result,
+                    "error": None,
+                    "finished_at": _now(),
+                },
+            )
+
+        return {
+            "ok": ok,
+            "mode": "powder",
+            "token_balance": token_balance,
+            "tokens_before": tokens_before,
+            "tokens_after": token_balance,
+            "job_id": job_id,
+            "result": result,
+            "powder_gained": powder_gained,
+            "rounds_completed": rounds_ok,
+            "refunded": refunded,
+            "error": err_code,
+            "logs": logs[-80:],
+        }
+    except Exception as exc:
+        bal = await _refund_token(uid, "farm_fail_refund")
+        if job_id and _has_service_role():
+            await _patch_job(
+                job_id,
+                {
+                    "status": "failed",
+                    "error": f"{exc};refunded",
+                    "finished_at": _now(),
+                },
+            )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "detail": "farm_error",
+                "error": str(exc),
+                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
+                "tokens_before": tokens_before,
+                "refunded": True,
+                "logs": logs[-80:],
+                "trace": traceback.format_exc()[-2000:],
+            },
+        )
+    finally:
+        _farm_busy = False
+        try:
+            _farm_lock.release()
+        except RuntimeError:
+            pass
+        if _has_service_role():
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
+                    await fq.expire_stale_turns(client, SUPABASE_URL, _svc())
+                    await fq.promote_next(client, SUPABASE_URL, _svc())
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -1274,8 +1580,11 @@ def _store_devplay_session(user_id: str, connect_result: dict[str, Any]) -> str:
         "user_id": user_id,
         "email": connect_result.get("email"),
         "nickname": connect_result.get("nickname"),
+        "coin": connect_result.get("coin"),
+        "powder": connect_result.get("powder"),
         "party_run_tickets": connect_result.get("party_run_tickets"),
         "session": connect_result.get("session"),
+        "powder_session": connect_result.get("powder_session"),
         "expires_at": time.time() + _DEVPLAY_SESSION_TTL_SEC,
     }
     return sid
@@ -1309,8 +1618,26 @@ def _run_farm_sync(email, password, score, coin, exp, ticket_count, log_cb, sess
 
 def _run_connect_sync(email, password, log_cb):
     from partyrun_core import connect_devplay  # noqa: WPS433 — server-only
+    from powder_core import connect_powder_snapshot  # noqa: WPS433 — server-only
 
-    return connect_devplay(email=email, password=password, log_cb=log_cb)
+    result = connect_devplay(email=email, password=password, log_cb=log_cb)
+    if not result or not result.get("ok"):
+        return result
+    try:
+        pw = connect_powder_snapshot(email=email, password=password, log_cb=log_cb)
+        if pw.get("ok"):
+            result["powder"] = pw.get("powder")
+            result["powder_session"] = pw.get("powder_session")
+            if pw.get("coin") is not None:
+                result["coin"] = pw.get("coin")
+            if pw.get("nickname"):
+                result["nickname"] = pw.get("nickname")
+            if pw.get("level") is not None:
+                result["level"] = pw.get("level")
+    except Exception as exc:
+        if log_cb:
+            log_cb("powder snapshot skipped: %s" % exc)
+    return result
 
 
 def _run_ticket_refresh_sync(session_data, email, log_cb):
@@ -1451,7 +1778,7 @@ async def farm_history(
             },
             params={
                 "user_id": f"eq.{uid}",
-                "select": "id,status,score,coin,exp,error,created_at,finished_at",
+                "select": "id,status,score,coin,exp,ticket_count,error,result,created_at,finished_at",
                 "order": "created_at.desc",
                 "limit": str(lim),
             },

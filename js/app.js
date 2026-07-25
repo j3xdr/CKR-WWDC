@@ -378,6 +378,11 @@
   let devplaySession = null; // { id, nickname, tickets, expiresAt }
   let ticketCount = 1;
   let ticketMax = 1;
+  let farmTab = "partyrun";
+  let powderTreasures = [];
+  let powderTreasureName = "Revival Boots";
+  let powderEstimate = null;
+  let powderEstimateLoading = false;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 1;
@@ -454,6 +459,10 @@
     devplay_session_expired: "เชื่อม DevPlay หมดอายุ — กดเชื่อมต่อใหม่",
     not_enough_tickets: "ตั๋ว Party Run ไม่พอ — ลดจำนวนตั๋วหรือรอรีเซ็ต",
     connect_failed: "เชื่อม DevPlay ไม่สำเร็จ — ตรวจอีเมล/รหัสผ่าน",
+    owner_not_lv8: "ต้องมีเจ้าของสมบัติ Lv.8 ก่อน",
+    insufficient_coin: "เหรียญไม่พอแม้ 1 รอบ",
+    powder_session_missing: "เชื่อม DevPlay ใหม่ (ไม่มี session ผง)",
+    treasure_not_found: "ไม่พบสมบัติที่เลือก",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
     consume_failed: "หักโทเค็นไม่สำเร็จ ลองใหม่อีกครั้ง",
@@ -843,6 +852,46 @@
     );
   }
 
+  function showPowderResultModal(summary) {
+    const rows = [
+      ["บัญชีเกม", escapeHtml(summary.account || "—")],
+      ["สมบัติ", escapeHtml(summary.treasure || "—")],
+      [
+        "ผง",
+        `<span class="result-delta">+${escapeHtml(summary.powderGained)}</span> → ยอดรวม ${escapeHtml(summary.powderAfter)}`,
+      ],
+      ["เหรียญเหลือ", escapeHtml(summary.coinAfter)],
+      ["รอบ", escapeHtml(summary.rounds)],
+      [
+        "โทเค็นเว็บ",
+        `${escapeHtml(summary.tokensBefore)} → ${escapeHtml(summary.tokensAfter)} <span class="result-delta">(หัก 1)</span>`,
+      ],
+    ];
+    if (summary.capped) {
+      rows.push(["หมายเหตุ", "เป้าถูกจำกัดจากเหรียญในไอดี"]);
+    }
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows
+        .map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`)
+        .join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ถ้าในเกมยังไม่เห็นยอด ให้ปิดเกมแล้วเข้าใหม่</p>';
+
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: "สรุปผลฟาร์มผง",
+      bodyHtml: html,
+      icon: "assets/crc_cookie_stone_box.png",
+      locked: false,
+    });
+    spawnPixelConfetti();
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
   function clearPixelConfetti() {
     const layer = $("modal-confetti");
     if (!layer) return;
@@ -1041,6 +1090,36 @@
     });
   }
 
+  function showPowderConfirmModal(targetPowder) {
+    const n = formatNumTh(targetPowder || 0);
+    return new Promise((resolve) => {
+      clearModalActions();
+      openModal({
+        mode: "confirm",
+        title: "ยืนยันฟาร์มผง?",
+        body:
+          "หัก 1 โทเค็น · เป้าผง " +
+          n +
+          "\nคืนโทเค็นเฉพาะเมื่อไม่ได้ผงเลยสักรอบ",
+        icon: "assets/crc_cookie_stone_box.png",
+        locked: false,
+      });
+      modalActions.classList.add("row");
+      modalActions.appendChild(
+        makeBtn("ยกเลิก", "btn-ghost", () => {
+          forceCloseModal();
+          resolve(false);
+        })
+      );
+      modalActions.appendChild(
+        makeBtn("ยืนยัน", "btn-candy", () => {
+          forceCloseModal();
+          resolve(true);
+        })
+      );
+    });
+  }
+
   function startBalancePoll() {
     stopBalancePoll();
     balancePollTimer = setInterval(async () => {
@@ -1158,13 +1237,25 @@
     const nick = devplaySession.nickname || "player";
     const coin = devplaySession.coin == null ? "—" : formatNumTh(devplaySession.coin);
     const exp = devplaySession.exp == null ? "—" : formatNumTh(devplaySession.exp);
+    const powder =
+      devplaySession.powder == null ? "—" : formatNumTh(devplaySession.powder);
     const lvl = devplaySession.level == null ? "—" : String(devplaySession.level);
     let ticketsLabel = "—";
     if (devplaySession.ticketsLoading) ticketsLabel = "กำลังนับ…";
     else if (devplaySession.tickets != null)
       ticketsLabel = formatNumTh(devplaySession.tickets) + " ใบ";
     paintDevPlayConnectStatus(
-      nick + " · Lv " + lvl + " · เหรียญ " + coin + " · XP " + exp + " · ตั๋ว " + ticketsLabel,
+      nick +
+        " · Lv " +
+        lvl +
+        " · เหรียญ " +
+        coin +
+        " · ผง " +
+        powder +
+        " · XP " +
+        exp +
+        " · ตั๋ว " +
+        ticketsLabel,
       "ok"
     );
   }
@@ -1182,6 +1273,7 @@
       coin: data.coin,
       exp: data.exp,
       level: data.level,
+      powder: data.powder,
       expiresAt: Date.now() + ttlMs,
     };
     ticketMax = ticketsKnown ? Math.max(1, ticketsN || 1) : 99;
@@ -1197,6 +1289,9 @@
     paintTicketStepper();
     if (!ticketsKnown && data.devplay_session_id) {
       refreshDevPlayTickets(data.devplay_session_id);
+    }
+    if (farmTab === "powder") {
+      refreshPowderEstimate().catch(() => {});
     }
   }
 
@@ -1258,7 +1353,13 @@
         },
       });
       applyDevPlayConnect(data);
-      setStatus($("farm-status"), "เชื่อม DevPlay แล้ว · พร้อม Party Run", "ok");
+      setStatus(
+        $("farm-status"),
+        farmTab === "powder"
+          ? "เชื่อม DevPlay แล้ว · พร้อมฟาร์มผง"
+          : "เชื่อม DevPlay แล้ว · พร้อม Party Run",
+        "ok"
+      );
     } catch (e) {
       resetDevPlaySession();
       paintDevPlayConnectStatus(
@@ -1276,14 +1377,172 @@
     }
   }
 
+  function switchFarmTab(tab) {
+    farmTab = tab === "powder" ? "powder" : "partyrun";
+    ["partyrun", "heart", "powder"].forEach((t) => {
+      const btn = $("farm-tab-" + t);
+      const panel = $("farm-panel-" + t);
+      const active = t === farmTab;
+      if (btn) {
+        btn.classList.toggle("is-active", active);
+        btn.setAttribute("aria-selected", active ? "true" : "false");
+      }
+      if (panel) {
+        panel.classList.toggle("hidden", !active);
+        panel.hidden = !active;
+      }
+    });
+    const partyBtn = $("farm-btn");
+    const powderBtn = $("powder-btn");
+    const ticketStepper = document.querySelector(".ticket-stepper");
+    if (partyBtn) {
+      partyBtn.hidden = farmTab !== "partyrun";
+      partyBtn.classList.toggle("hidden", farmTab !== "partyrun");
+    }
+    if (powderBtn) {
+      powderBtn.hidden = farmTab !== "powder";
+      powderBtn.classList.toggle("hidden", farmTab !== "powder");
+    }
+    if (ticketStepper) ticketStepper.hidden = farmTab !== "partyrun";
+    updateFarmAvailability();
+    if (farmTab === "powder") {
+      loadPowderTreasures().catch(() => {});
+      refreshPowderEstimate().catch(() => {});
+    }
+  }
+
+  async function loadPowderTreasures() {
+    if (powderTreasures.length) {
+      paintPowderTreasureSelect();
+      return;
+    }
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/powder/treasures");
+      powderTreasures = Array.isArray(data.treasures) ? data.treasures : [];
+      if (data.default) powderTreasureName = data.default;
+      paintPowderTreasureSelect();
+    } catch (_) {
+      paintPowderTreasureSelect();
+    }
+  }
+
+  function getPowderTreasureFilter() {
+    return ($("powder-treasure-search")?.value || "").trim().toLowerCase();
+  }
+
+  function paintPowderTreasureSelect() {
+    const sel = $("powder-treasure-select");
+    if (!sel) return;
+    const q = getPowderTreasureFilter();
+    const list = powderTreasures.length
+      ? powderTreasures.filter(
+          (t) => !q || (t.name || "").toLowerCase().includes(q)
+        )
+      : [{ name: powderTreasureName, price: 8900, powder_yield_lv1: 160 }];
+    const prev = sel.value || powderTreasureName;
+    sel.innerHTML = "";
+    list.slice(0, 200).forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t.name;
+      opt.textContent =
+        t.name + " · " + formatNumTh(t.price) + " · +" + t.powder_yield_lv1;
+      sel.appendChild(opt);
+    });
+    if (list.some((t) => t.name === prev)) {
+      sel.value = prev;
+      powderTreasureName = prev;
+    } else if (list.length) {
+      sel.value = list[0].name;
+      powderTreasureName = list[0].name;
+    }
+    paintPowderEstimateStatic();
+  }
+
+  function paintPowderEstimateStatic() {
+    const t = powderTreasures.find((x) => x.name === powderTreasureName);
+    const priceEl = $("powder-stat-price");
+    const yieldEl = $("powder-stat-yield");
+    if (priceEl) priceEl.textContent = t ? formatNumTh(t.price) : "—";
+    if (yieldEl) yieldEl.textContent = t ? formatNumTh(t.powder_yield_lv1) : "—";
+  }
+
+  function paintPowderEstimateFromApi(est) {
+    powderEstimate = est;
+    const targetEl = $("powder-estimate-target");
+    const roundsEl = $("powder-stat-rounds");
+    const coinEl = $("powder-stat-coin");
+    const noteEl = $("powder-estimate-note");
+    paintPowderEstimateStatic();
+    if (!est) {
+      if (targetEl) targetEl.textContent = "เชื่อม DevPlay เพื่อดูเป้าหมาย";
+      if (roundsEl) roundsEl.textContent = "—";
+      if (coinEl) coinEl.textContent = "—";
+      if (noteEl) noteEl.textContent = "";
+      return;
+    }
+    const target = est.target_powder || 0;
+    if (targetEl) {
+      targetEl.textContent = est.capped
+        ? "สูงสุดจากเหรียญที่มี ≈ " + formatNumTh(target) + " ผง"
+        : "เป้าหมาย " + formatNumTh(target) + " ผง";
+    }
+    if (roundsEl) {
+      roundsEl.textContent = formatNumTh(est.rounds_planned || est.rounds || 0);
+    }
+    const price = est.price || powderTreasures.find((x) => x.name === powderTreasureName)?.price || 0;
+    const rounds = est.rounds_planned || 0;
+    const coinUse = est.coin_needed != null ? est.coin_needed : rounds * price;
+    if (coinEl) coinEl.textContent = formatNumTh(coinUse || "—");
+    if (noteEl) {
+      const parts = [];
+      if (rounds >= 100) parts.push("อาจใช้เวลาหลายนาที");
+      if (!est.can_run) parts.push("เหรียญไม่พอแม้ 1 รอบ");
+      noteEl.textContent = parts.join(" · ");
+    }
+    if (est.coin != null && devplaySession) devplaySession.coin = est.coin;
+    if (est.powder != null && devplaySession) devplaySession.powder = est.powder;
+    paintDevPlaySessionLine();
+  }
+
+  async function refreshPowderEstimate() {
+    if (farmTab !== "powder" || !isDevPlayConnected()) {
+      paintPowderEstimateFromApi(null);
+      return;
+    }
+    powderEstimateLoading = true;
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/powder/estimate", {
+        method: "POST",
+        body: {
+          devplay_session_id: devplaySession.id,
+          treasure_name: powderTreasureName,
+        },
+      });
+      paintPowderEstimateFromApi(data);
+    } catch (e) {
+      paintPowderEstimateFromApi(null);
+      const msg = thError(e.message);
+      if (msg) setStatus($("farm-status"), msg, "err");
+    } finally {
+      powderEstimateLoading = false;
+      updateFarmAvailability();
+    }
+  }
+
   function updateFarmAvailability() {
     const btn = $("farm-btn");
+    const powderBtn = $("powder-btn");
     const connectBtn = $("devplay-connect-btn");
     const sub = $("farm-btn-sub");
+    const powderSub = $("powder-btn-sub");
     const empty = !hasTokens();
     const credsReady = hasDevPlayCreds();
     const connected = isDevPlayConnected();
     const busy = farmRunning || devplayConnecting;
+    const isPowder = farmTab === "powder";
 
     if (connectBtn) {
       connectBtn.disabled = busy || !credsReady || connected;
@@ -1291,17 +1550,44 @@
       connectBtn.classList.toggle("hidden", connected);
     }
     const noTickets =
+      !isPowder &&
       connected &&
       devplaySession?.tickets != null &&
       Number(devplaySession.tickets) <= 0;
-    if (btn && !farmRunning) {
-      btn.disabled = empty || !connected || busy || noTickets;
+
+    if (isPowder) {
+      const powderBlocked =
+        !connected || powderEstimateLoading || !powderEstimate?.can_run;
+      if (powderBtn && !farmRunning) {
+        powderBtn.disabled = empty || !connected || busy || powderBlocked;
+      }
+      if (btn && !farmRunning) btn.disabled = true;
+      if (powderSub) {
+        if (!connected) powderSub.textContent = "เชื่อม DevPlay ก่อน";
+        else if (powderEstimateLoading) powderSub.textContent = "กำลังคำนวณ…";
+        else if (!powderEstimate?.can_run) powderSub.textContent = "เหรียญไม่พอ";
+        else if (powderEstimate?.capped) {
+          powderSub.textContent =
+            "เป้า " + formatNumTh(powderEstimate.target_powder) + " ผง (จำกัดเหรียญ)";
+        } else powderSub.textContent = "เป้า 100,000 ผง · หัก 1 โทเค็น";
+      }
+      const search = $("powder-treasure-search");
+      const sel = $("powder-treasure-select");
+      const canPick = connected && !farmRunning && !devplayConnecting;
+      if (search) search.disabled = !canPick;
+      if (sel) sel.disabled = !canPick;
+    } else {
+      if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (btn && !farmRunning) {
+        btn.disabled = empty || !connected || busy || noTickets;
+      }
+      if (sub) {
+        if (!connected) sub.textContent = "เชื่อม DevPlay ก่อน";
+        else if (noTickets) sub.textContent = "ไม่มีตั๋ว Party Run";
+        else sub.textContent = "รัน " + ticketCount + " ตั๋ว · หัก 1 โทเค็น";
+      }
     }
-    if (sub) {
-      if (!connected) sub.textContent = "เชื่อม DevPlay ก่อน";
-      else if (noTickets) sub.textContent = "ไม่มีตั๋ว Party Run";
-      else sub.textContent = "รัน " + ticketCount + " ตั๋ว · หัก 1 โทเค็น";
-    }
+
     setFarmInputsLocked(empty || !connected || busy);
     paintTicketStepper();
     syncTopupPanel();
@@ -1595,14 +1881,26 @@
                 : st;
         const stClass =
           st === "succeeded" ? "hist-ok" : st === "failed" ? "hist-warn" : "";
+        const res = row.result || {};
+        const isPowder = res.mode === "powder";
+        const summary = isPowder
+          ? "ผง +" +
+            escapeHtml(formatNumTh(res.powder_gained || 0)) +
+            " · " +
+            escapeHtml(res.treasure || "Powder") +
+            " · " +
+            escapeHtml(formatNumTh(res.rounds || 0)) +
+            " รอบ"
+          : "S " +
+            escapeHtml(formatNumTh(row.score)) +
+            " · C " +
+            escapeHtml(formatNumTh(row.coin)) +
+            " · XP " +
+            escapeHtml(formatNumTh(row.exp));
         return (
           "<li>" +
-          "<span>S " +
-          escapeHtml(formatNumTh(row.score)) +
-          " · C " +
-          escapeHtml(formatNumTh(row.coin)) +
-          " · XP " +
-          escapeHtml(formatNumTh(row.exp)) +
+          "<span>" +
+          summary +
           "</span>" +
           '<span class="' +
           stClass +
@@ -2550,6 +2848,147 @@
     }
   }
 
+  async function runPowder() {
+    if (!hasTokens()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    if (!powderEstimate?.can_run) {
+      showErrorModal(ERR_TH.insufficient_coin, "เหรียญไม่พอ");
+      return;
+    }
+
+    const btn = $("powder-btn");
+    const tokensBefore = tokenBalance();
+    const target = powderEstimate.target_powder || 0;
+    farmRunning = true;
+    if (btn) btn.disabled = true;
+    setStatus(
+      $("farm-status"),
+      "กำลังฟาร์มผง " + formatNumTh(target) + " … อาจใช้เวลาหลายนาที",
+      "muted"
+    );
+    startLiveStages();
+
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/powder/run", {
+        method: "POST",
+        body: {
+          devplay_session_id: devplaySession.id,
+          treasure_name: powderTreasureName,
+        },
+      });
+      clearStageTimer();
+      if (typeof data.token_balance === "number") {
+        profile.token_balance = data.token_balance;
+        paintProfile();
+      } else {
+        await refreshMe().catch(() => {});
+      }
+
+      const result = data.result || data;
+      if (devplaySession) {
+        if (result.coin_after != null) devplaySession.coin = result.coin_after;
+        if (result.powder_after != null) devplaySession.powder = result.powder_after;
+        paintDevPlaySessionLine();
+      }
+
+      const powderGained = Number(data.powder_gained || result.powder_gained || 0);
+      const roundsCompleted = Number(data.rounds_completed || result.rounds || 0);
+
+      if (data.ok) {
+        setStatus(
+          $("farm-status"),
+          "ฟาร์มผงสำเร็จ +" + formatNumTh(powderGained) + " · หัก 1 โทเค็น",
+          "ok"
+        );
+        pendingAfterRunStatus = () =>
+          showPowderResultModal({
+            account: devplaySession?.nickname || "—",
+            treasure: result.treasure || powderTreasureName,
+            powderGained: formatNumTh(powderGained),
+            powderAfter: formatNumTh(result.powder_after ?? "—"),
+            coinAfter: formatNumTh(result.coin_after ?? devplaySession?.coin ?? "—"),
+            rounds: formatNumTh(roundsCompleted),
+            capped: !!result.capped,
+            tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
+            tokensAfter: formatNumTh(
+              data.tokens_after ?? data.token_balance ?? tokenBalance()
+            ),
+          });
+        buildFinalPipeline(data.logs || data.steps || [], result, true);
+        stopQueuePoll();
+        refreshGateAndQueueUi().catch(() => {});
+        refreshPowderEstimate().catch(() => {});
+        loadFarmHistory().catch(() => {});
+      } else {
+        buildFinalPipeline(data.logs || data.steps || [], result, false);
+        let msg = farmErrorMessage(result, "ฟาร์มผงไม่สำเร็จ");
+        if (/owner_not_lv8/i.test(String(result?.error || data.error || ""))) {
+          msg = ERR_TH.owner_not_lv8;
+        } else if (/insufficient_coin/i.test(String(result?.error || data.error || ""))) {
+          msg = ERR_TH.insufficient_coin;
+        }
+        msg += data.refunded ? " · คืนโทเค็นแล้ว" : " · โทเค็นถูกหักแล้ว";
+        setStatus($("farm-status"), msg, "err");
+        loadFarmHistory().catch(() => {});
+      }
+    } catch (e) {
+      clearStageTimer();
+      if (/account_banned/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
+        setStatus($("farm-status"), ERR_TH.account_banned, "err");
+      } else if (/maintenance/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
+        setStatus($("farm-status"), ERR_TH.maintenance, "err");
+      } else if (e.status === 401 || /devplay_session_expired/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        resetDevPlaySession();
+        showErrorModal(ERR_TH.devplay_session_expired, "เชื่อมใหม่");
+        setStatus($("farm-status"), ERR_TH.devplay_session_expired, "err");
+      } else if (/owner_not_lv8/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.owner_not_lv8, "ต้องมี Lv.8");
+        setStatus($("farm-status"), ERR_TH.owner_not_lv8, "err");
+      } else if (/insufficient_coin|powder_session_missing/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(thError(e.message), "รันไม่ได้");
+        setStatus($("farm-status"), thError(e.message), "err");
+      } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        const gate = e.gate || e.data?.detail?.gate;
+        if (gate) renderQueueModal(gate);
+        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
+        startQueuePoll();
+        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
+      } else {
+        const msg = thError(e.message) || "ฟาร์มผงไม่สำเร็จ";
+        setStatus($("farm-status"), msg, "err");
+        buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
+
+        if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
+          forceCloseRunStatusPopup();
+          profile.token_balance = 0;
+          paintProfile();
+          showEmptyCoinsModal();
+        } else if (typeof e.data?.token_balance === "number") {
+          profile.token_balance = e.data.token_balance;
+          paintProfile();
+        }
+      }
+    } finally {
+      farmRunning = false;
+      updateFarmAvailability();
+    }
+  }
+
   /* ---------- Auth bootstrap ---------- */
   async function bootstrap() {
     initBgFloaters();
@@ -2564,6 +3003,7 @@
     setupDevPlayAutofillGuards();
     setupFarmNumberInputs();
     paintTicketStepper();
+    switchFarmTab("partyrun");
     loadTopupPackages();
     pingApiHealth(2).catch(() => {});
 
@@ -2943,11 +3383,22 @@
     }
   });
 
+  $("farm-tab-partyrun")?.addEventListener("click", () => switchFarmTab("partyrun"));
+  $("farm-tab-powder")?.addEventListener("click", () => switchFarmTab("powder"));
+
+  $("powder-treasure-select")?.addEventListener("change", (ev) => {
+    powderTreasureName = ev.target.value || powderTreasureName;
+    paintPowderEstimateStatic();
+    refreshPowderEstimate().catch(() => {});
+  });
+
+  $("powder-treasure-search")?.addEventListener("input", () => {
+    paintPowderTreasureSelect();
+  });
+
   $("farm-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
     if (farmRunning || devplayConnecting) return;
-
-    commitTicketCountFromInput();
 
     if (!hasTokens()) {
       showEmptyCoinsModal();
@@ -2955,9 +3406,37 @@
     }
 
     if (!isDevPlayConnected()) {
-      showErrorModal("เชื่อม DevPlay ก่อนเริ่ม Party Run", "ยังไม่ได้เชื่อม");
+      showErrorModal(
+        farmTab === "powder"
+          ? "เชื่อม DevPlay ก่อนเริ่มฟาร์มผง"
+          : "เชื่อม DevPlay ก่อนเริ่ม Party Run",
+        "ยังไม่ได้เชื่อม"
+      );
       return;
     }
+
+    if (farmTab === "powder") {
+      if (!powderEstimate?.can_run) {
+        showErrorModal(ERR_TH.insufficient_coin, "เหรียญไม่พอ");
+        return;
+      }
+      const confirmed = await showPowderConfirmModal(powderEstimate.target_powder);
+      if (!confirmed) {
+        setStatus($("farm-status"), "ยกเลิกแล้ว — ยังไม่หักโทเค็น", "muted");
+        return;
+      }
+      try {
+        await refreshMe();
+      } catch (_) {}
+      if (!hasTokens()) {
+        showEmptyCoinsModal();
+        return;
+      }
+      await runPowder();
+      return;
+    }
+
+    commitTicketCountFromInput();
 
     const confirmed = await showConfirmModal(ticketCount);
     if (!confirmed) {

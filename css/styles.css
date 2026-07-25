@@ -1324,6 +1324,80 @@ input {
   color: var(--muted);
 }
 
+.powder-picker {
+  margin-bottom: 16px;
+}
+
+.powder-treasure-field {
+  gap: 8px;
+}
+
+.powder-treasure-search {
+  width: 100%;
+}
+
+.powder-treasure-select {
+  width: 100%;
+  min-height: 9.5rem;
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  color: inherit;
+  font: inherit;
+  padding: 6px;
+}
+
+.powder-estimate {
+  margin-bottom: 18px;
+}
+
+.powder-estimate-target {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.powder-estimate-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0 0 10px;
+}
+
+.powder-estimate-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.powder-estimate-stats dt {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.powder-estimate-stats dd {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.powder-estimate-note {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.btn-run-powder {
+  width: 100%;
+}
+
+@media (min-width: 720px) {
+  .powder-estimate-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
 .btn-run-copy {
   display: flex;
   flex-direction: column;
