@@ -35,12 +35,14 @@ SAFE_EXP_MAX = 52_000
 DEFAULT_SCORE = 800_000
 
 # advanced (usually leave as-is)
-PLAYTIME_SECONDS = 2               # fake play time before submitting the run
-QUIT_AFTER_SECONDS = 1             # wait after run_end, then quit to finalize
+# NOTE: USE_DEBUG_MATCH=True often yields INVALID PLAY (claim ok but +0 / ignored).
+# Live queue + wait-for-RESULT is the proven path from PartyRun_Share_main.
+PLAYTIME_SECONDS = 12              # fake play time before submitting the run
+QUIT_AFTER_SECONDS = 2             # wait after run_end before considering quit
 IGNORE_SAVING_REPLAY = True        # skip replay upload (anti-cheat replay gate)
-USE_DEBUG_MATCH = True             # try debug bots first; fallback to live queue
-QUIT_ON_RESULT = False             # quit right after run_end (RESULT never arrives in debug matches)
-RESULT_WAIT_SECONDS = 6            # safety net only, used when QUIT_ON_RESULT is True
+USE_DEBUG_MATCH = False            # live queue — debug bots often INVALID PLAY for real rewards
+QUIT_ON_RESULT = True              # wait for RESULT before quit (safer for claim)
+RESULT_WAIT_SECONDS = 45           # force-quit fallback if RESULT never arrives
 # ===========================================================================
 
 import os, sys, json, copy, time, queue, threading, base64, zlib
