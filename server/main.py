@@ -1798,14 +1798,17 @@ async def _patch_job(job_id: str, patch: dict[str, Any]) -> None:
         )
 
 
-async def _refund_token(user_id: str, reason: str) -> Optional[int]:
+async def _refund_tokens(user_id: str, amount: int, reason: str) -> Optional[int]:
+    amt = max(0, int(amount or 0))
+    if amt <= 0:
+        return None
     if not _has_service_role():
         return None
     async with httpx.AsyncClient(timeout=20.0) as client:
         credit = await client.post(
             f"{SUPABASE_URL}/rest/v1/rpc/admin_credit_tokens",
             headers=_service_headers(),
-            json={"p_user_id": user_id, "p_amount": 1, "p_reason": reason},
+            json={"p_user_id": user_id, "p_amount": amt, "p_reason": reason},
         )
     if credit.status_code != 200:
         print(f"[refund] failed uid={user_id} reason={reason} {credit.text[:120]}")
@@ -1818,6 +1821,90 @@ async def _refund_token(user_id: str, reason: str) -> Optional[int]:
         return int(out.get("token_balance"))
     except (TypeError, ValueError):
         return None
+
+
+async def _refund_token(user_id: str, reason: str) -> Optional[int]:
+    return await _refund_tokens(user_id, 1, reason)
+
+
+async def _consume_tokens(access_token: str, count: int, reason: str) -> tuple[dict[str, Any], int]:
+    n = max(1, int(count or 1))
+    last: dict[str, Any] = {}
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for _ in range(n):
+            cons = await client.post(
+                f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
+                headers=_sb_headers(SUPABASE_ANON_KEY, access_token),
+                json={"p_reason": reason},
+            )
+            if cons.status_code != 200:
+                raise HTTPException(status_code=500, detail=f"consume_failed:{cons.text}")
+            last = cons.json()
+            if not last.get("ok"):
+                detail = last.get("reason", "consume_failed")
+                code = 402 if detail == "insufficient_tokens" else 400
+                raise HTTPException(status_code=code, detail=detail)
+    return last, n
+
+
+# ---------------------------------------------------------------------------
+# Desktop billing + gated core delivery
+# ---------------------------------------------------------------------------
+class DesktopTokensBody(BaseModel):
+    amount: int = Field(default=1, ge=1, le=500)
+    reason: str = Field(default="desktop_run", min_length=1, max_length=64)
+
+
+_DESKTOP_CORE_NAMES = frozenset({"partyrun", "powder", "heart"})
+_DESKTOP_CORES_DIR = SERVER_DIR / "desktop_cores"
+
+
+@app.post("/api/desktop/consume_tokens")
+async def desktop_consume_tokens(
+    body: DesktopTokensBody,
+    user: dict[str, Any] = Depends(verify_user),
+):
+    await load_profile(user)
+    last, n = await _consume_tokens(user["_access_token"], body.amount, body.reason)
+    bal = last.get("token_balance")
+    try:
+        bal_i = int(bal) if bal is not None else None
+    except (TypeError, ValueError):
+        bal_i = None
+    return {"ok": True, "amount": n, "reason": body.reason, "token_balance": bal_i}
+
+
+@app.post("/api/desktop/refund_tokens")
+async def desktop_refund_tokens(
+    body: DesktopTokensBody,
+    user: dict[str, Any] = Depends(verify_user),
+):
+    profile = await load_profile(user)
+    uid = str(profile["id"])
+    bal = await _refund_tokens(uid, body.amount, body.reason or "farm_fail_refund")
+    if bal is None:
+        raise HTTPException(status_code=503, detail="refund_unavailable")
+    return {"ok": True, "amount": int(body.amount), "reason": body.reason, "token_balance": bal}
+
+
+@app.post("/api/desktop/cores/{name}")
+async def desktop_get_core(name: str, user: dict[str, Any] = Depends(verify_user)):
+    """Return encrypted core blob (CKRCORE1) for post-login desktop decrypt."""
+    await load_profile(user)
+    key = (name or "").strip().lower()
+    if key not in _DESKTOP_CORE_NAMES:
+        raise HTTPException(status_code=404, detail="unknown_core")
+    b64_path = _DESKTOP_CORES_DIR / f"{key}.enc.b64"
+    bin_path = _DESKTOP_CORES_DIR / f"{key}.enc"
+    if b64_path.is_file():
+        blob_b64 = b64_path.read_text(encoding="utf-8").strip()
+    elif bin_path.is_file():
+        import base64
+
+        blob_b64 = base64.b64encode(bin_path.read_bytes()).decode("ascii")
+    else:
+        raise HTTPException(status_code=404, detail="core_not_published")
+    return {"ok": True, "name": key, "blob_b64": blob_b64}
 
 
 # ---------------------------------------------------------------------------
