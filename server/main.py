@@ -129,7 +129,12 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:8765",
     "http://localhost:8080",
     "http://127.0.0.1:8080",
+    # WebView file:// sometimes sends this Origin
+    "null",
 ]
+
+# Desktop pywebview serves UI from http://127.0.0.1:<dynamic-port>/
+ALLOWED_ORIGIN_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 
 def _require_env() -> None:
@@ -151,6 +156,7 @@ app = FastAPI(title="CKR WWDC API", version="1.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
