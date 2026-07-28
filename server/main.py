@@ -64,6 +64,9 @@ TRUEWALLET_PHONE = os.environ.get("TRUEWALLET_PHONE", "").strip()
 # Sequential farm queue (Render Free = single instance)
 _farm_lock = threading.Lock()
 _farm_busy = False
+# Which mode currently holds the lock, so waiting users see what they wait for.
+# In-memory like _farm_busy — same single-instance assumption, no migration.
+_farm_busy_kind: Optional[str] = None
 
 # Public signup rate limit (in-memory; fine on Render Free single instance)
 _signup_hits: dict[str, list[float]] = {}
@@ -994,11 +997,21 @@ def _svc():
     return _service_headers()
 
 
+# Job reasons -> what a waiting user should be told is running.
+_JOB_KIND_LABEL = {
+    "farm_run": "partyrun",
+    "powder_run": "powder",
+    "giftdraw_run": "giftdraw",
+}
+
+
 async def _gate_for(user_id: str) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=20.0) as client:
-        return await fq.queue_snapshot(
+        snap = await fq.queue_snapshot(
             client, SUPABASE_URL, _svc(), user_id, _farm_busy
         )
+    snap["job_kind"] = _JOB_KIND_LABEL.get(_farm_busy_kind or "")
+    return snap
 
 
 # ---------------------------------------------------------------------------
@@ -1103,7 +1116,7 @@ async def _farm_job(
     Raises 402/409 before spending anything, and refunds if the lock turns out
     to be taken. The lock and the queue turn are always released on the way out.
     """
-    global _farm_busy
+    global _farm_busy, _farm_busy_kind
 
     await _require_farm_open()
     profile = await load_profile(user)
@@ -1165,6 +1178,7 @@ async def _farm_job(
         )
 
     _farm_busy = True
+    _farm_busy_kind = reason
     job = FarmJob(uid, tokens_before, cons_data.get("token_balance"), job_id)
     try:
         if _has_service_role():
@@ -1182,6 +1196,7 @@ async def _farm_job(
             except Exception:
                 pass
         _farm_busy = False
+        _farm_busy_kind = None
         try:
             _farm_lock.release()
         except RuntimeError:

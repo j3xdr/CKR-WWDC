@@ -426,6 +426,9 @@
     },
   ];
   let lastGate = null;
+  // Run held back by farm_busy, replayed automatically once our turn comes up.
+  let queuedRun = null;
+  let queueResumeAttempts = 0;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
   let apiReady = false;
@@ -1017,6 +1020,25 @@
     }, 2500);
   }
 
+  const JOB_KIND_TH = {
+    partyrun: "Party Run",
+    powder: "ฟาร์มผง",
+    giftdraw: "เปิดกล่องขวัญ",
+    heart: "ฟาร์มหัวใจ",
+  };
+
+  // Rough wait: everyone ahead of you gets up to one full turn. It is an upper
+  // bound, not a promise — runs usually finish well before the turn expires.
+  function queueWaitText(gate) {
+    const g = gate || {};
+    const ahead = Number(g.me?.position);
+    const turn = Number(g.turn_seconds) || 120;
+    if (!Number.isFinite(ahead) || ahead <= 0) return "";
+    const sec = ahead * turn;
+    if (sec < 90) return "ไม่เกิน " + sec + " วินาที";
+    return "ไม่เกิน " + Math.ceil(sec / 60) + " นาที";
+  }
+
   function turnCountdownText(iso) {
     if (!iso) return "";
     const end = Date.parse(iso);
@@ -1046,8 +1068,9 @@
         '<div class="queue-stat"><span>เหลือเวลาเริ่มฟาร์ม</span><strong>' +
         escapeHtml(left || "2:00") +
         "</strong></div>";
-      bodyHtml +=
-        '<p class="queue-note warn">ต้องกดเริ่มฟาร์มภายใน 2 นาที ไม่งั้นคิวจะข้ามไปคนถัดไป</p>';
+      bodyHtml += queuedRun
+        ? '<p class="queue-note">ถึงคิวแล้ว — กำลังเริ่มให้อัตโนมัติ…</p>'
+        : '<p class="queue-note warn">ต้องกดเริ่มฟาร์มภายใน 2 นาที ไม่งั้นคิวจะข้ามไปคนถัดไป</p>';
     } else if (me.status === "waiting") {
       bodyHtml +=
         '<div class="queue-stat"><span>คิวของคุณ</span><strong>อันดับ ' +
@@ -1057,11 +1080,27 @@
         '<div class="queue-stat"><span>ในคิวทั้งหมด</span><strong>' +
         escapeHtml(g.queue_length ?? 0) +
         "</strong></div>";
-      bodyHtml +=
-        '<p class="queue-note">รอคิวอยู่ — ปิดหน้าต่างไม่ได้ จนกว่าจะถึงคิวของคุณ</p>';
+      const wait = queueWaitText(g);
+      if (wait) {
+        bodyHtml +=
+          '<div class="queue-stat"><span>รออีกประมาณ</span><strong>' +
+          escapeHtml(wait) +
+          "</strong></div>";
+      }
+      if (g.job_kind) {
+        bodyHtml +=
+          '<div class="queue-stat"><span>ตอนนี้กำลังรัน</span><strong>' +
+          escapeHtml(JOB_KIND_TH[g.job_kind] || g.job_kind) +
+          "</strong></div>";
+      }
+      bodyHtml += queuedRun
+        ? '<p class="queue-note">จองคิวไว้แล้ว — ถึงคิวเมื่อไหร่ระบบจะเริ่มให้อัตโนมัติ</p>'
+        : '<p class="queue-note">รอคิวอยู่ — ปิดหน้าต่างไม่ได้ จนกว่าจะถึงคิวของคุณ</p>';
     } else if (g.farm_busy) {
       bodyHtml +=
-        '<div class="queue-stat"><span>สถานะ</span><strong>มีคนกำลังฟาร์ม</strong></div>';
+        '<div class="queue-stat"><span>สถานะ</span><strong>มีคนกำลังฟาร์ม' +
+        (g.job_kind ? " (" + escapeHtml(JOB_KIND_TH[g.job_kind] || g.job_kind) + ")" : "") +
+        "</strong></div>";
       bodyHtml +=
         '<div class="queue-stat"><span>ในคิว</span><strong>' +
         escapeHtml(g.queue_length ?? 0) +
@@ -1085,17 +1124,17 @@
 
     if (!waking && !me.status && g.farm_busy) {
       modalActions.appendChild(
-        makeBtn("เข้าคิว", "btn-candy", async () => {
-          try {
-            const data = await api("/api/farm/queue/join", { method: "POST", body: {} });
-            renderQueueModal(data);
-            startQueuePoll();
-          } catch (e) {
-            showErrorModal(thError(e.message) || "เข้าคิวไม่สำเร็จ", "คิว");
-          }
+        makeBtn("เข้าคิว", "btn-candy", () => {
+          joinQueue().catch(() => {});
         })
       );
     } else if (me.status === "active" || g.is_my_turn) {
+      if (queuedRun) {
+        // The run was already confirmed before we hit farm_busy, and the turn
+        // only lasts two minutes — waiting for a second click loses the slot.
+        resumeQueuedRun();
+        return;
+      }
       modalActions.appendChild(
         makeBtn("เริ่มฟาร์มเลย", "btn-run", () => {
           forceCloseModal();
@@ -1105,6 +1144,64 @@
         })
       );
     }
+    if (queuedRun && (me.status === "waiting" || (!me.status && g.farm_busy))) {
+      modalActions.appendChild(
+        makeBtn("ยกเลิกคิว", "btn-ghost", () => {
+          clearQueuedRun();
+          stopQueuePoll();
+          forceCloseModal();
+          setStatus($("farm-status"), "ยกเลิกคิวแล้ว — ยังไม่หักโทเค็น", "muted");
+        })
+      );
+    }
+  }
+
+  async function joinQueue() {
+    try {
+      const data = await api("/api/farm/queue/join", { method: "POST", body: {} });
+      renderQueueModal(data);
+      startQueuePoll();
+      return data;
+    } catch (e) {
+      clearQueuedRun();
+      showErrorModal(thError(e.message) || "เข้าคิวไม่สำเร็จ", "คิว");
+      throw e;
+    }
+  }
+
+  /** Hit farm_busy: hold the run, take a queue slot, and resume when it is ours. */
+  async function enterQueueFor(gate, runFn) {
+    // A resumed run can lose the race for the lock again. Retry a couple of
+    // times, then hand control back so we cannot ping-pong forever.
+    if (queueResumeAttempts >= 3) {
+      queuedRun = null;
+      queueResumeAttempts = 0;
+      renderQueueModal(gate || { farm_busy: true, queue_length: 0, me: {} });
+      startQueuePoll();
+      return;
+    }
+    queuedRun = runFn || null;
+    renderQueueModal(gate || { farm_busy: true, queue_length: 0, me: {} });
+    startQueuePoll();
+    if (!gate?.me?.status) {
+      await joinQueue().catch(() => {});
+    }
+  }
+
+  function resumeQueuedRun() {
+    const run = queuedRun;
+    if (!run || farmRunning) return;
+    queuedRun = null;
+    queueResumeAttempts += 1;
+    stopQueuePoll();
+    forceCloseModal();
+    setStatus($("farm-status"), "ถึงคิวแล้ว — กำลังเริ่มให้อัตโนมัติ", "ok");
+    run();
+  }
+
+  function clearQueuedRun() {
+    queuedRun = null;
+    queueResumeAttempts = 0;
   }
 
   async function refreshGateAndQueueUi() {
@@ -1115,6 +1212,10 @@
       if (data.is_my_turn || data.me?.status === "waiting" || data.me?.status === "active") {
         renderQueueModal(data);
         startQueuePoll();
+      } else if (queuedRun && data.can_run && !data.farm_busy) {
+        // Everyone ahead finished and the queue emptied out before our row was
+        // promoted — the slot is free, so take it rather than sit in the modal.
+        resumeQueuedRun();
       } else if (modalMode === "queue" && !data.farm_busy && !data.me?.status) {
         forceCloseModal();
         stopQueuePoll();
@@ -2537,6 +2638,7 @@
   function showLogin() {
     stopBalancePoll();
     stopQueuePoll();
+    clearQueuedRun();
     forceCloseModal();
     forceCloseRunStatusPopup();
     loginView.classList.remove("hidden");
@@ -3045,6 +3147,7 @@
             ticketCount: tickets,
           });
         buildFinalPipeline(data.logs || data.steps || [], result, true);
+        clearQueuedRun();
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
         loadFarmHistory().catch(() => {});
@@ -3083,11 +3186,8 @@
         setStatus($("farm-status"), ERR_TH.value_capped, "err");
       } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
-        const gate = e.gate || e.data?.detail?.gate;
-        if (gate) renderQueueModal(gate);
-        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
-        startQueuePoll();
-        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
+        await enterQueueFor(e.gate || e.data?.detail?.gate, runFarm);
+        setStatus($("farm-status"), "ระบบไม่ว่าง — จองคิวให้แล้ว รอสักครู่", "muted");
       } else {
         const msg = thError(e.message) || "ฟาร์มไม่สำเร็จ";
         setStatus($("farm-status"), msg, "err");
@@ -3183,6 +3283,7 @@
             ),
           });
         buildFinalPipeline(data.logs || data.steps || [], result, true);
+        clearQueuedRun();
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
         refreshPowderEstimate().catch(() => {});
@@ -3224,11 +3325,8 @@
         setStatus($("farm-status"), thError(e.message), "err");
       } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
-        const gate = e.gate || e.data?.detail?.gate;
-        if (gate) renderQueueModal(gate);
-        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
-        startQueuePoll();
-        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
+        await enterQueueFor(e.gate || e.data?.detail?.gate, runPowder);
+        setStatus($("farm-status"), "ระบบไม่ว่าง — จองคิวให้แล้ว รอสักครู่", "muted");
       } else {
         const msg = thError(e.message) || "ฟาร์มผงไม่สำเร็จ";
         setStatus($("farm-status"), msg, "err");
@@ -3314,6 +3412,7 @@
             ),
           });
         buildFinalPipeline(data.logs || data.steps || [], result, true);
+        clearQueuedRun();
         stopQueuePoll();
         refreshGateAndQueueUi().catch(() => {});
         refreshGiftDrawEstimate().catch(() => {});
@@ -3350,11 +3449,8 @@
         setStatus($("farm-status"), thError(e.message), "err");
       } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
         forceCloseRunStatusPopup();
-        const gate = e.gate || e.data?.detail?.gate;
-        if (gate) renderQueueModal(gate);
-        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
-        startQueuePoll();
-        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
+        await enterQueueFor(e.gate || e.data?.detail?.gate, runGiftDraw);
+        setStatus($("farm-status"), "ระบบไม่ว่าง — จองคิวให้แล้ว รอสักครู่", "muted");
       } else {
         const msg = thError(e.message) || "เปิดกล่องขวัญไม่สำเร็จ";
         setStatus($("farm-status"), msg, "err");
