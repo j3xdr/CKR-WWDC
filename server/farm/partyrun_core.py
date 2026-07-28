@@ -182,11 +182,40 @@ def _init_session():
 
 
 # ----------------------------- gRPC helpers --------------------------------
+# One long-lived channel per endpoint instead of a fresh TLS handshake on every
+# unary call — a round makes ~6-8 of these. The auth token travels in per-call
+# metadata, not in the channel, so reuse is safe; _close_unary_channels() still
+# runs at the end of every job so nothing leaks across users on the server.
+_UNARY_CHANNELS = {}
+_UNARY_CHANNELS_LOCK = threading.Lock()
+
+
+def _unary_channel(endpoint):
+    ch = _UNARY_CHANNELS.get(endpoint)
+    if ch is None:
+        with _UNARY_CHANNELS_LOCK:
+            ch = _UNARY_CHANNELS.get(endpoint)
+            if ch is None:
+                ch = grpc.secure_channel(endpoint, grpc.ssl_channel_credentials())
+                _UNARY_CHANNELS[endpoint] = ch
+    return ch
+
+
+def _close_unary_channels():
+    with _UNARY_CHANNELS_LOCK:
+        for ch in _UNARY_CHANNELS.values():
+            try:
+                ch.close()
+            except Exception:
+                pass
+        _UNARY_CHANNELS.clear()
+
+
 def unary(endpoint, service, method, req, md):
     svc = POOL.FindServiceByName(service); m = svc.FindMethodByName(method)
     InC = msgcls(m.input_type); OutC = msgcls(m.output_type)
     r = InC(); json_format.ParseDict(req, r, ignore_unknown_fields=True)
-    ch = grpc.secure_channel(endpoint, grpc.ssl_channel_credentials())
+    ch = _unary_channel(endpoint)
     stub = ch.unary_unary("/%s/%s" % (service, method),
                           request_serializer=lambda x: x.SerializeToString(),
                           response_deserializer=OutC.FromString)
@@ -195,8 +224,6 @@ def unary(endpoint, service, method, req, md):
         return json_format.MessageToDict(resp, preserving_proto_field_name=True)
     except grpc.RpcError as e:
         return {"__error__": True, "code": str(e.code()), "details": e.details()}
-    finally:
-        ch.close()
 
 
 def party_run_init():
@@ -506,6 +533,7 @@ def peek_account(email, password, log_cb=None):
         return {"ok": False, "error": "peek_failed", "detail": str(exc)}
     finally:
         builtins.print = old_print
+        _close_unary_channels()
 
 
 # --------------------------- clear pending ---------------------------------
@@ -881,8 +909,12 @@ def _reward_summary_from_claim(res, ingame_id, nick_fallback=None):
 
 _CLAIM_BACKOFF = (0.4, 0.8, 1.2, 2.0)   # then 2.0s for remaining attempts
 
+# Server errors that never become claimable by waiting. Once we have already
+# forced a finalize and still see one of these, stop burning the retry budget.
+_CLAIM_FATAL = ("INVALID PLAY", "REWARD EXCEPTION", "NOT FOUND", "CORRUPT")
 
-def _claim_reward(ingame_id, my, max_attempts=12):
+
+def _claim_reward(ingame_id, my, max_attempts=12, session=None):
     tried_finalize = False
     for attempt in range(max_attempts):
         res = claim(ingame_id)
@@ -910,8 +942,28 @@ def _claim_reward(ingame_id, my, max_attempts=12):
                 out["party_run_tickets"] = tickets_left
                 out["reward_summary"]["party_run_tickets"] = tickets_left
             return out
-        details = res.get("details", "")
-        print(f"   not finalized yet, retrying in {delay}s ...", details[:120] if details else "")
+        details = res.get("details", "") or res.get("code", "")
+        up = str(details).upper()
+        if tried_finalize and any(x in up for x in _CLAIM_FATAL):
+            print("!! claim rejected permanently:", details[:160])
+            return {
+                "ok": False,
+                "error": "claim_rejected",
+                "detail": str(details)[:200],
+                "ingame_id": ingame_id,
+            }
+        # The match can be stuck open on the ingame server; reconnecting and
+        # quitting once finalizes it so the very next claim succeeds, instead of
+        # sitting through the whole backoff ladder waiting for a timeout.
+        if not tried_finalize and isinstance(session, dict) and session.get("address"):
+            tried_finalize = True
+            print("   forcing finalize via reconnect + quit ...")
+            try:
+                finalize_session(session, my)
+            except Exception as exc:
+                print("   finalize failed:", exc)
+            continue
+        print(f"   not finalized yet, retrying in {delay}s ...", str(details)[:120] if details else "")
         time.sleep(delay)
     print("!! could not claim (match may still be finishing) — run again to retry")
     return {"ok": False, "error": "claim_timeout", "ingame_id": ingame_id}
@@ -952,7 +1004,7 @@ def _run_single_round(my, round_idx=1, round_total=1):
         return {"ok": False, "error": "no_run_end", "ingame_id": ingame_id}
 
     print(prefix + "[4/4] claiming reward ...")
-    return _claim_reward(ingame_id, my)
+    return _claim_reward(ingame_id, my, session=session)
 
 
 def main():
@@ -1030,6 +1082,7 @@ def connect_devplay(email, password, log_cb=None):
         return {"ok": False, "error": exc.code, "detail": exc.detail}
     finally:
         builtins.print = old_print
+        _close_unary_channels()
 
 
 def refresh_party_run_tickets(session_data=None, email=None, password=None, log_cb=None):
@@ -1071,6 +1124,7 @@ def refresh_party_run_tickets(session_data=None, email=None, password=None, log_
         return {"ok": False, "error": "ticket_peek_failed", "detail": str(exc)}
     finally:
         builtins.print = old_print
+        _close_unary_channels()
 
 
 def _aggregate_reward_summaries(rounds):
@@ -1189,6 +1243,7 @@ def run_farm_multi(
         return {"ok": False, "error": "farm_error", "detail": msg}
     finally:
         builtins.print = old_print
+        _close_unary_channels()
 
 
 def run_farm(email, password, score=DEFAULT_SCORE, coin=1, exp=1, log_cb=None,

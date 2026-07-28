@@ -484,6 +484,8 @@
     BLOCKED: "บัญชีติดรางวัลค้างจากรอบก่อน รอรีเซ็ตประจำวันแล้วลองใหม่",
     matchmaking_failed: "จับคู่ไม่สำเร็จ ลองใหม่อีกครั้ง",
     claim_timeout: "รับรางวัลไม่ทัน ลองใหม่อีกครั้ง (แมตช์อาจจบแล้ว)",
+    claim_rejected:
+      "เซิร์ฟเวอร์ปฏิเสธรางวัลรอบนี้ — ลองลดค่า Coin/EXP แล้วรันใหม่",
     could_not_claim: "รับรางวัลไม่ทัน ลองใหม่อีกครั้ง",
   };
 
@@ -2470,6 +2472,10 @@
       }
       if (/\[4\/4\]|claiming reward|not finalized|REWARD CLAIMED/i.test(s)) {
         idx = Math.max(idx, 5);
+      }
+      if (/claim rejected permanently|claim_rejected/i.test(s)) {
+        hardErr = { id: "claim", msg: ERR_TH.claim_rejected };
+        break;
       }
       if (/claim_timeout|could not claim/i.test(s)) {
         hardErr = { id: "claim", msg: ERR_TH.claim_timeout };
