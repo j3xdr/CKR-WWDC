@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260725-partyrun9" />
+  <link rel="stylesheet" href="css/styles.css?v=20260728-giftdraw1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -314,6 +314,9 @@
               <button type="button" class="farm-tab" id="farm-tab-powder" role="tab" aria-selected="false" aria-controls="farm-panel-powder" data-tab="powder">
                 Powder
               </button>
+              <button type="button" class="farm-tab" id="farm-tab-giftdraw" role="tab" aria-selected="false" aria-controls="farm-panel-giftdraw" data-tab="giftdraw">
+                Gift Draw
+              </button>
             </div>
 
             <div class="farm-tab-panels">
@@ -459,6 +462,62 @@
                   <span class="btn-run-copy">
                     <span class="btn-run-title">เริ่มฟาร์มผง · ใช้ 1 โทเค็น</span>
                     <span class="btn-run-sub" id="powder-btn-sub">เชื่อม DevPlay ก่อน</span>
+                  </span>
+                </button>
+              </div>
+
+              <div class="farm-tab-panel hidden" id="farm-panel-giftdraw" role="tabpanel" hidden>
+                <div class="ticket-stepper">
+                  <span class="ticket-stepper-label">จำนวนกล่องที่จะเปิด</span>
+                  <div class="ticket-stepper-controls">
+                    <button type="button" class="ticket-step-btn" id="giftdraw-minus" aria-label="ลดกล่อง" disabled>−</button>
+                    <input
+                      id="giftdraw-count"
+                      class="ticket-count-display"
+                      name="giftdraw_count"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      autocomplete="off"
+                      value="1"
+                      aria-label="จำนวนกล่อง"
+                      disabled
+                    />
+                    <button type="button" class="ticket-step-btn" id="giftdraw-plus" aria-label="เพิ่มกล่อง" disabled>+</button>
+                  </div>
+                  <p class="ticket-stepper-hint" id="giftdraw-max-hint">เชื่อม DevPlay เพื่อดูกล่องที่มี</p>
+                </div>
+
+                <div class="powder-estimate" id="giftdraw-estimate" aria-live="polite">
+                  <p class="powder-estimate-target muted" id="giftdraw-estimate-target">
+                    เปิดกล่องขวัญด้วย Gift Point — ไม่ใช้เพชร
+                  </p>
+                  <dl class="powder-estimate-stats">
+                    <div>
+                      <dt>กล่องคงเหลือ</dt>
+                      <dd id="giftdraw-stat-boxes">—</dd>
+                    </div>
+                    <div>
+                      <dt>เปิดได้สูงสุด/รอบ</dt>
+                      <dd id="giftdraw-stat-max">—</dd>
+                    </div>
+                    <div>
+                      <dt>ราคา</dt>
+                      <dd id="giftdraw-stat-price">0 เพชร</dd>
+                    </div>
+                    <div>
+                      <dt>ต่อกล่อง</dt>
+                      <dd id="giftdraw-stat-cost">100 Gift Point</dd>
+                    </div>
+                  </dl>
+                  <p class="powder-estimate-note muted" id="giftdraw-estimate-note"></p>
+                </div>
+
+                <button class="btn btn-run btn-run-giftdraw hidden" type="submit" id="giftdraw-btn" disabled hidden>
+                  <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
+                  <span class="btn-run-copy">
+                    <span class="btn-run-title">เปิดกล่องขวัญ · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-sub" id="giftdraw-btn-sub">เชื่อม DevPlay ก่อน</span>
                   </span>
                 </button>
               </div>
@@ -680,7 +739,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260725-partyrun9"></script>
-  <script src="js/app.js?v=20260725-partyrun9"></script>
+  <script src="js/config.js?v=20260728-giftdraw1"></script>
+  <script src="js/app.js?v=20260728-giftdraw1"></script>
 </body>
 </html>

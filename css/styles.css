@@ -1388,7 +1388,8 @@ input {
   font-size: 0.78rem;
 }
 
-.btn-run-powder {
+.btn-run-powder,
+.btn-run-giftdraw {
   width: 100%;
 }
 

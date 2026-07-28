@@ -231,6 +231,15 @@ class PowderRunBody(BaseModel):
     treasure_name: str = Field(default="Revival Boots", min_length=1, max_length=128)
 
 
+class GiftDrawEstimateBody(BaseModel):
+    devplay_session_id: str = Field(min_length=8, max_length=128)
+
+
+class GiftDrawRunBody(BaseModel):
+    devplay_session_id: str = Field(min_length=8, max_length=128)
+    count: int = Field(default=1, ge=1, le=200)
+
+
 INT32_MAX = 2_147_483_647
 BKK = ZoneInfo("Asia/Bangkok")
 
@@ -1393,6 +1402,93 @@ async def farm_powder_estimate(
         row["powder"] = result["powder"]
 
     return {**result, "logs": logs[-20:]}
+
+
+# ---------------------------------------------------------------------------
+# Gift Draw (JWT + consume 1 token + shared farm lock)
+# ---------------------------------------------------------------------------
+def _run_giftdraw_estimate_sync(powder_session, log_cb):
+    from giftdraw_core import estimate_gift_draw  # noqa: WPS433 — server-only
+
+    return estimate_gift_draw(powder_session, log_cb=log_cb)
+
+
+def _run_giftdraw_sync(powder_session, count, log_cb):
+    from giftdraw_core import run_gift_draw  # noqa: WPS433 — server-only
+
+    return run_gift_draw(powder_session, count=count, log_cb=log_cb)
+
+
+@app.post("/api/farm/giftdraw/estimate")
+async def farm_giftdraw_estimate(
+    body: GiftDrawEstimateBody, user: dict[str, Any] = Depends(verify_user)
+):
+    await _require_farm_open()
+    uid = str(user["id"])
+    row = _get_devplay_session(uid, body.devplay_session_id)
+    if not row:
+        raise HTTPException(status_code=401, detail="devplay_session_expired")
+    if not row.get("powder_session"):
+        raise HTTPException(status_code=400, detail="powder_session_missing")
+
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    try:
+        result = await asyncio.to_thread(
+            _run_giftdraw_estimate_sync, row.get("powder_session"), log_cb
+        )
+    except Exception as exc:
+        from giftdraw_core import GiftDrawError  # noqa: WPS433 — server-only
+
+        if isinstance(exc, GiftDrawError):
+            raise HTTPException(status_code=400, detail=exc.code) from exc
+        raise HTTPException(status_code=400, detail="estimate_failed") from exc
+
+    if result.get("powder_session"):
+        row["powder_session"] = result["powder_session"]
+
+    return {**result, "logs": logs[-20:]}
+
+
+@app.post("/api/farm/giftdraw/run")
+async def farm_giftdraw_run(body: GiftDrawRunBody, user: dict[str, Any] = Depends(verify_user)):
+    uid = str(user["id"])
+    row = _get_devplay_session(uid, body.devplay_session_id)
+    if not row:
+        raise HTTPException(status_code=401, detail="devplay_session_expired")
+    if not row.get("powder_session"):
+        raise HTTPException(status_code=400, detail="powder_session_missing")
+
+    async with _farm_job(user, "giftdraw_run") as job:
+        try:
+            result = await asyncio.to_thread(
+                _run_giftdraw_sync,
+                row.get("powder_session"),
+                body.count,
+                job.log_cb,
+            )
+
+            if result and result.get("powder_session"):
+                row["powder_session"] = result["powder_session"]
+
+            draws_ok = int((result or {}).get("draws_ok") or 0)
+            ok = bool(result and result.get("ok") and draws_ok > 0)
+            return await job.finish(
+                ok,
+                result,
+                extra={
+                    "mode": "giftdraw",
+                    "draws_ok": draws_ok,
+                    "requested": int((result or {}).get("requested") or body.count),
+                    "totals": (result or {}).get("totals") or {},
+                    "available_boxes": (result or {}).get("available_boxes"),
+                },
+            )
+        except Exception as exc:
+            return await job.fail_500(exc)
 
 
 @app.post("/api/farm/powder/run")

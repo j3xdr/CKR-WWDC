@@ -383,6 +383,10 @@
   let powderTreasureName = "Revival Boots";
   let powderEstimate = null;
   let powderEstimateLoading = false;
+  let giftdrawCount = 1;
+  let giftdrawMax = 1;
+  let giftdrawEstimate = null;
+  let giftdrawEstimateLoading = false;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 1;
@@ -462,6 +466,8 @@
     owner_not_lv8: "ต้องมีเจ้าของสมบัติ Lv.8 ก่อน",
     insufficient_coin: "เหรียญไม่พอแม้ 1 รอบ",
     powder_session_missing: "เชื่อม DevPlay ใหม่ (ไม่มี session ผง)",
+    no_gift_boxes: "ไม่มีกล่องขวัญในไอดีนี้ — ต้องมี Gift Point ครบ 100 ต่อ 1 กล่อง",
+    giftdraw_failed: "เปิดกล่องขวัญไม่สำเร็จ ลองใหม่อีกครั้ง",
     treasure_not_found: "ไม่พบสมบัติที่เลือก",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
     farm_error: "การฟาร์มล้มเหลว ลองใหม่อีกครั้ง",
@@ -894,6 +900,69 @@
     );
   }
 
+  // Currency deltas come back keyed (coin/life/key/gem); item rewards arrive as
+  // "item:<name>" so the server never has to guess at display text.
+  const GIFTDRAW_LABEL = {
+    coin: "💰 เหรียญ",
+    life: "❤️ หัวใจ",
+    key: "🔑 กุญแจ",
+    gem: "💎 คริสตัล",
+  };
+
+  function giftDrawRewardRows(totals) {
+    const entries = Object.entries(totals || {});
+    if (!entries.length) return [];
+    return entries
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, qty]) => {
+        const label = key.startsWith("item:")
+          ? "🎁 " + key.slice(5)
+          : GIFTDRAW_LABEL[key] || key;
+        return [
+          escapeHtml(label),
+          `<span class="result-delta">+${escapeHtml(formatNumTh(qty))}</span>`,
+        ];
+      });
+  }
+
+  function showGiftDrawResultModal(summary) {
+    const rewardRows = giftDrawRewardRows(summary.totals);
+    const rows = [
+      ["บัญชีเกม", escapeHtml(summary.account || "—")],
+      [
+        "เปิดกล่อง",
+        `<span class="result-delta">${escapeHtml(summary.drawsOk)}</span> / ${escapeHtml(summary.requested)} กล่อง`,
+      ],
+      ["กล่องคงเหลือ", escapeHtml(summary.boxesAfter)],
+      ...rewardRows,
+      [
+        "โทเค็นเว็บ",
+        `${escapeHtml(summary.tokensBefore)} → ${escapeHtml(summary.tokensAfter)} <span class="result-delta">(หัก 1)</span>`,
+      ],
+    ];
+    if (!rewardRows.length) {
+      rows.splice(3, 0, ["ของที่ได้", "ไม่มียอดเปลี่ยนแปลงที่ตรวจจับได้"]);
+    }
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ไม่ได้ใช้เพชรเลย · ถ้าในเกมยังไม่เห็นของ ให้ปิดเกมแล้วเข้าใหม่</p>';
+
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: "สรุปผลเปิดกล่องขวัญ",
+      bodyHtml: html,
+      icon: "assets/icon_giftpoint.png",
+      locked: false,
+    });
+    spawnPixelConfetti();
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
   function clearPixelConfetti() {
     const layer = $("modal-confetti");
     if (!layer) return;
@@ -1122,6 +1191,36 @@
     });
   }
 
+  function showGiftDrawConfirmModal(count) {
+    const n = formatNumTh(count || 1);
+    return new Promise((resolve) => {
+      clearModalActions();
+      openModal({
+        mode: "confirm",
+        title: "ยืนยันเปิดกล่องขวัญ?",
+        body:
+          "หัก 1 โทเค็น · เปิด " +
+          n +
+          " กล่อง (ไม่ใช้เพชร)\nคืนโทเค็นเฉพาะเมื่อเปิดไม่สำเร็จเลยสักกล่อง",
+        icon: "assets/icon_giftpoint.png",
+        locked: false,
+      });
+      modalActions.classList.add("row");
+      modalActions.appendChild(
+        makeBtn("ยกเลิก", "btn-ghost", () => {
+          forceCloseModal();
+          resolve(false);
+        })
+      );
+      modalActions.appendChild(
+        makeBtn("ยืนยัน", "btn-candy", () => {
+          forceCloseModal();
+          resolve(true);
+        })
+      );
+    });
+  }
+
   function startBalancePoll() {
     stopBalancePoll();
     balancePollTimer = setInterval(async () => {
@@ -1295,6 +1394,9 @@
     if (farmTab === "powder") {
       refreshPowderEstimate().catch(() => {});
     }
+    if (farmTab === "giftdraw") {
+      refreshGiftDrawEstimate().catch(() => {});
+    }
   }
 
   async function refreshDevPlayTickets(sessionId) {
@@ -1380,8 +1482,8 @@
   }
 
   function switchFarmTab(tab) {
-    farmTab = tab === "powder" ? "powder" : "partyrun";
-    ["partyrun", "heart", "powder"].forEach((t) => {
+    farmTab = ["powder", "giftdraw"].includes(tab) ? tab : "partyrun";
+    ["partyrun", "heart", "powder", "giftdraw"].forEach((t) => {
       const btn = $("farm-tab-" + t);
       const panel = $("farm-panel-" + t);
       const active = t === farmTab;
@@ -1396,7 +1498,8 @@
     });
     const partyBtn = $("farm-btn");
     const powderBtn = $("powder-btn");
-    const ticketStepper = document.querySelector(".ticket-stepper");
+    const giftdrawBtn = $("giftdraw-btn");
+    const ticketStepper = $("farm-panel-partyrun")?.querySelector(".ticket-stepper");
     if (partyBtn) {
       partyBtn.hidden = farmTab !== "partyrun";
       partyBtn.classList.toggle("hidden", farmTab !== "partyrun");
@@ -1405,11 +1508,18 @@
       powderBtn.hidden = farmTab !== "powder";
       powderBtn.classList.toggle("hidden", farmTab !== "powder");
     }
+    if (giftdrawBtn) {
+      giftdrawBtn.hidden = farmTab !== "giftdraw";
+      giftdrawBtn.classList.toggle("hidden", farmTab !== "giftdraw");
+    }
     if (ticketStepper) ticketStepper.hidden = farmTab !== "partyrun";
     updateFarmAvailability();
     if (farmTab === "powder") {
       loadPowderTreasures().catch(() => {});
       refreshPowderEstimate().catch(() => {});
+    }
+    if (farmTab === "giftdraw") {
+      refreshGiftDrawEstimate().catch(() => {});
     }
   }
 
@@ -1534,17 +1644,137 @@
     }
   }
 
+  /* ---------- Gift Draw ---------- */
+  function clampGiftDrawCount(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    return Math.min(Math.max(1, n || 1), Math.max(1, giftdrawMax || 1));
+  }
+
+  function paintGiftDrawStepper() {
+    const input = $("giftdraw-count");
+    const hint = $("giftdraw-max-hint");
+    const minus = $("giftdraw-minus");
+    const plus = $("giftdraw-plus");
+    const max = Math.max(1, giftdrawMax || 1);
+    giftdrawCount = clampGiftDrawCount(giftdrawCount);
+    const editing = input && document.activeElement === input;
+    if (input && !editing) input.value = String(giftdrawCount);
+    if (hint) {
+      if (!isDevPlayConnected()) {
+        hint.textContent = "เชื่อม DevPlay เพื่อดูกล่องที่มี";
+      } else if (giftdrawEstimateLoading) {
+        hint.textContent = "กำลังนับกล่องขวัญ…";
+      } else if (!giftdrawEstimate) {
+        hint.textContent = "ยังไม่ทราบจำนวนกล่อง";
+      } else if (Number(giftdrawEstimate.available_boxes) <= 0) {
+        hint.textContent = "ไม่มีกล่องขวัญในไอดีนี้ (ต้องมี Gift Point ครบ 100)";
+      } else {
+        hint.textContent =
+          "มี " +
+          formatNumTh(giftdrawEstimate.available_boxes) +
+          " กล่อง · พิมพ์ได้ 1–" +
+          formatNumTh(max) +
+          " · ใช้ 1 โทเค็นเว็บ";
+      }
+    }
+    const canStep =
+      isDevPlayConnected() &&
+      !farmRunning &&
+      !devplayConnecting &&
+      Number(giftdrawEstimate?.available_boxes || 0) > 0;
+    if (input) input.disabled = !canStep;
+    if (minus) minus.disabled = !canStep || giftdrawCount <= 1;
+    if (plus) plus.disabled = !canStep || giftdrawCount >= max;
+  }
+
+  function commitGiftDrawCountFromInput() {
+    const input = $("giftdraw-count");
+    if (!input) return;
+    giftdrawCount = clampGiftDrawCount(input.value);
+    input.value = String(giftdrawCount);
+    paintGiftDrawStepper();
+    updateFarmAvailability();
+  }
+
+  function paintGiftDrawEstimate(est) {
+    giftdrawEstimate = est;
+    const boxesEl = $("giftdraw-stat-boxes");
+    const maxEl = $("giftdraw-stat-max");
+    const noteEl = $("giftdraw-estimate-note");
+    const targetEl = $("giftdraw-estimate-target");
+
+    if (!est) {
+      giftdrawMax = 1;
+      if (boxesEl) boxesEl.textContent = "—";
+      if (maxEl) maxEl.textContent = "—";
+      if (noteEl) noteEl.textContent = "";
+      if (targetEl) {
+        targetEl.textContent = "เปิดกล่องขวัญด้วย Gift Point — ไม่ใช้เพชร";
+      }
+      paintGiftDrawStepper();
+      return;
+    }
+
+    const boxes = Math.max(0, Number(est.available_boxes) || 0);
+    const perJob = Math.max(1, Number(est.max_per_job) || 1);
+    giftdrawMax = Math.max(1, Math.min(boxes || 1, perJob));
+    giftdrawCount = clampGiftDrawCount(giftdrawCount);
+
+    if (boxesEl) boxesEl.textContent = formatNumTh(boxes);
+    if (maxEl) maxEl.textContent = formatNumTh(Math.min(boxes || 0, perJob));
+    if (targetEl) {
+      targetEl.textContent = boxes
+        ? "เปิดได้ " + formatNumTh(boxes) + " กล่อง — 1 โทเค็นเว็บต่อ 1 รอบ (เปิดหลายกล่องได้)"
+        : "ไม่มีกล่องขวัญ — สะสม Gift Point ให้ครบ 100 ต่อ 1 กล่อง";
+    }
+    if (noteEl) {
+      noteEl.textContent = boxes > perJob
+        ? "เปิดได้สูงสุด " + formatNumTh(perJob) + " กล่องต่อรอบ — ที่เหลือรันรอบถัดไป"
+        : "";
+    }
+    paintGiftDrawStepper();
+  }
+
+  async function refreshGiftDrawEstimate() {
+    if (farmTab !== "giftdraw" || !isDevPlayConnected()) {
+      paintGiftDrawEstimate(null);
+      return;
+    }
+    giftdrawEstimateLoading = true;
+    paintGiftDrawStepper();
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/giftdraw/estimate", {
+        method: "POST",
+        body: { devplay_session_id: devplaySession.id },
+      });
+      paintGiftDrawEstimate(data);
+    } catch (e) {
+      paintGiftDrawEstimate(null);
+      const msg = thError(e.message);
+      if (msg) setStatus($("farm-status"), msg, "err");
+    } finally {
+      giftdrawEstimateLoading = false;
+      paintGiftDrawStepper();
+      updateFarmAvailability();
+    }
+  }
+
   function updateFarmAvailability() {
     const btn = $("farm-btn");
     const powderBtn = $("powder-btn");
+    const giftdrawBtn = $("giftdraw-btn");
     const connectBtn = $("devplay-connect-btn");
     const sub = $("farm-btn-sub");
     const powderSub = $("powder-btn-sub");
+    const giftdrawSub = $("giftdraw-btn-sub");
     const empty = !hasTokens();
     const credsReady = hasDevPlayCreds();
     const connected = isDevPlayConnected();
     const busy = farmRunning || devplayConnecting;
     const isPowder = farmTab === "powder";
+    const isGiftDraw = farmTab === "giftdraw";
 
     if (connectBtn) {
       connectBtn.disabled = busy || !credsReady || connected;
@@ -1552,12 +1782,29 @@
       connectBtn.classList.toggle("hidden", connected);
     }
     const noTickets =
-      !isPowder &&
+      farmTab === "partyrun" &&
       connected &&
       devplaySession?.tickets != null &&
       Number(devplaySession.tickets) <= 0;
 
-    if (isPowder) {
+    if (isGiftDraw) {
+      const noBoxes = Number(giftdrawEstimate?.available_boxes || 0) <= 0;
+      if (giftdrawBtn && !farmRunning) {
+        giftdrawBtn.disabled =
+          empty || !connected || busy || giftdrawEstimateLoading || noBoxes;
+      }
+      if (btn && !farmRunning) btn.disabled = true;
+      if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (giftdrawSub) {
+        if (!connected) giftdrawSub.textContent = "เชื่อม DevPlay ก่อน";
+        else if (giftdrawEstimateLoading) giftdrawSub.textContent = "กำลังนับกล่อง…";
+        else if (noBoxes) giftdrawSub.textContent = "ไม่มีกล่องขวัญ";
+        else {
+          giftdrawSub.textContent =
+            "เปิด " + formatNumTh(giftdrawCount) + " กล่อง · หัก 1 โทเค็น";
+        }
+      }
+    } else if (isPowder) {
       const powderBlocked =
         !connected || powderEstimateLoading || !powderEstimate?.can_run;
       if (powderBtn && !farmRunning) {
@@ -1573,6 +1820,7 @@
             "เป้า " + formatNumTh(powderEstimate.target_powder) + " ผง (จำกัดเหรียญ)";
         } else powderSub.textContent = "เป้า 100,000 ผง · หัก 1 โทเค็น";
       }
+      if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
       const search = $("powder-treasure-search");
       const sel = $("powder-treasure-select");
       const canPick = connected && !farmRunning && !devplayConnecting;
@@ -1580,6 +1828,7 @@
       if (sel) sel.disabled = !canPick;
     } else {
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
       if (btn && !farmRunning) {
         btn.disabled = empty || !connected || busy || noTickets;
       }
@@ -1592,6 +1841,7 @@
 
     setFarmInputsLocked(empty || !connected || busy);
     paintTicketStepper();
+    if (isGiftDraw) paintGiftDrawStepper();
     syncTopupPanel();
     if (empty && userView && !userView.classList.contains("hidden")) {
       if (modalMode !== "empty" && !emptyModalDismissed) showEmptyCoinsModal();
@@ -1884,8 +2134,7 @@
         const stClass =
           st === "succeeded" ? "hist-ok" : st === "failed" ? "hist-warn" : "";
         const res = row.result || {};
-        const isPowder = res.mode === "powder";
-        const summary = isPowder
+        const summary = res.mode === "powder"
           ? "ผง +" +
             escapeHtml(formatNumTh(res.powder_gained || 0)) +
             " · " +
@@ -1893,6 +2142,12 @@
             " · " +
             escapeHtml(formatNumTh(res.rounds || 0)) +
             " รอบ"
+          : res.mode === "giftdraw"
+          ? "กล่องขวัญ " +
+            escapeHtml(formatNumTh(res.draws_ok || 0)) +
+            "/" +
+            escapeHtml(formatNumTh(res.requested || 0)) +
+            " กล่อง"
           : "S " +
             escapeHtml(formatNumTh(row.score)) +
             " · C " +
@@ -2995,6 +3250,132 @@
     }
   }
 
+  async function runGiftDraw() {
+    if (!hasTokens()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    if (Number(giftdrawEstimate?.available_boxes || 0) <= 0) {
+      showErrorModal(ERR_TH.no_gift_boxes, "ไม่มีกล่องขวัญ");
+      return;
+    }
+
+    const btn = $("giftdraw-btn");
+    const tokensBefore = tokenBalance();
+    const count = clampGiftDrawCount(giftdrawCount);
+    farmRunning = true;
+    if (btn) btn.disabled = true;
+    setStatus(
+      $("farm-status"),
+      "กำลังเปิดกล่องขวัญ " + formatNumTh(count) + " กล่อง…",
+      "muted"
+    );
+    startLiveStages();
+
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/giftdraw/run", {
+        method: "POST",
+        body: { devplay_session_id: devplaySession.id, count },
+      });
+      clearStageTimer();
+      if (typeof data.token_balance === "number") {
+        profile.token_balance = data.token_balance;
+        paintProfile();
+      } else {
+        await refreshMe().catch(() => {});
+      }
+
+      const result = data.result || data;
+      const drawsOk = Number(data.draws_ok || result.draws_ok || 0);
+      const totals = data.totals || result.totals || {};
+      const boxesAfter = data.available_boxes ?? result.available_boxes;
+
+      if (data.ok) {
+        setStatus(
+          $("farm-status"),
+          "เปิดกล่องสำเร็จ " + formatNumTh(drawsOk) + " กล่อง · หัก 1 โทเค็น",
+          "ok"
+        );
+        pendingAfterRunStatus = () =>
+          showGiftDrawResultModal({
+            account: devplaySession?.nickname || "—",
+            drawsOk: formatNumTh(drawsOk),
+            requested: formatNumTh(data.requested || result.requested || count),
+            boxesAfter: formatNumTh(boxesAfter ?? "—"),
+            totals,
+            tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
+            tokensAfter: formatNumTh(
+              data.tokens_after ?? data.token_balance ?? tokenBalance()
+            ),
+          });
+        buildFinalPipeline(data.logs || data.steps || [], result, true);
+        stopQueuePoll();
+        refreshGateAndQueueUi().catch(() => {});
+        refreshGiftDrawEstimate().catch(() => {});
+        loadFarmHistory().catch(() => {});
+      } else {
+        buildFinalPipeline(data.logs || data.steps || [], result, false);
+        let msg = farmErrorMessage(result, "เปิดกล่องขวัญไม่สำเร็จ");
+        if (/no_gift_boxes/i.test(String(result?.error || data.error || ""))) {
+          msg = ERR_TH.no_gift_boxes;
+        }
+        msg += data.refunded ? " · คืนโทเค็นแล้ว" : " · โทเค็นถูกหักแล้ว";
+        setStatus($("farm-status"), msg, "err");
+        refreshGiftDrawEstimate().catch(() => {});
+        loadFarmHistory().catch(() => {});
+      }
+    } catch (e) {
+      clearStageTimer();
+      if (/account_banned/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
+        setStatus($("farm-status"), ERR_TH.account_banned, "err");
+      } else if (/maintenance/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
+        setStatus($("farm-status"), ERR_TH.maintenance, "err");
+      } else if (e.status === 401 || /devplay_session_expired/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        resetDevPlaySession();
+        showErrorModal(ERR_TH.devplay_session_expired, "เชื่อมใหม่");
+        setStatus($("farm-status"), ERR_TH.devplay_session_expired, "err");
+      } else if (/powder_session_missing|no_gift_boxes/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(thError(e.message), "รันไม่ได้");
+        setStatus($("farm-status"), thError(e.message), "err");
+      } else if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        const gate = e.gate || e.data?.detail?.gate;
+        if (gate) renderQueueModal(gate);
+        else renderQueueModal({ farm_busy: true, queue_length: 0, me: {} });
+        startQueuePoll();
+        setStatus($("farm-status"), "ระบบไม่ว่าง — เข้าคิวหรือรอคิว", "muted");
+      } else {
+        const msg = thError(e.message) || "เปิดกล่องขวัญไม่สำเร็จ";
+        setStatus($("farm-status"), msg, "err");
+        buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: e.message }, false);
+
+        if (e.status === 402 || /insufficient_tokens/i.test(String(e.message))) {
+          forceCloseRunStatusPopup();
+          profile.token_balance = 0;
+          paintProfile();
+          showEmptyCoinsModal();
+        } else if (typeof e.data?.token_balance === "number") {
+          profile.token_balance = e.data.token_balance;
+          paintProfile();
+        }
+      }
+    } finally {
+      farmRunning = false;
+      updateFarmAvailability();
+    }
+  }
+
   /* ---------- Auth bootstrap ---------- */
   async function bootstrap() {
     initBgFloaters();
@@ -3389,8 +3770,47 @@
     }
   });
 
+  $("giftdraw-minus")?.addEventListener("click", () => {
+    if (giftdrawCount > 1) {
+      giftdrawCount -= 1;
+      paintGiftDrawStepper();
+      updateFarmAvailability();
+    }
+  });
+
+  $("giftdraw-plus")?.addEventListener("click", () => {
+    if (giftdrawCount < giftdrawMax) {
+      giftdrawCount += 1;
+      paintGiftDrawStepper();
+      updateFarmAvailability();
+    }
+  });
+
+  $("giftdraw-count")?.addEventListener("input", (ev) => {
+    const el = ev.target;
+    const cleaned = String(el.value || "").replace(/[^\d]/g, "");
+    if (el.value !== cleaned) el.value = cleaned;
+  });
+
+  $("giftdraw-count")?.addEventListener("change", () => {
+    commitGiftDrawCountFromInput();
+  });
+
+  $("giftdraw-count")?.addEventListener("blur", () => {
+    commitGiftDrawCountFromInput();
+  });
+
+  $("giftdraw-count")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      commitGiftDrawCountFromInput();
+      ev.target.blur();
+    }
+  });
+
   $("farm-tab-partyrun")?.addEventListener("click", () => switchFarmTab("partyrun"));
   $("farm-tab-powder")?.addEventListener("click", () => switchFarmTab("powder"));
+  $("farm-tab-giftdraw")?.addEventListener("click", () => switchFarmTab("giftdraw"));
 
   $("powder-treasure-select")?.addEventListener("change", (ev) => {
     powderTreasureName = ev.target.value || powderTreasureName;
@@ -3412,12 +3832,36 @@
     }
 
     if (!isDevPlayConnected()) {
+      const need = {
+        powder: "เชื่อม DevPlay ก่อนเริ่มฟาร์มผง",
+        giftdraw: "เชื่อม DevPlay ก่อนเปิดกล่องขวัญ",
+      };
       showErrorModal(
-        farmTab === "powder"
-          ? "เชื่อม DevPlay ก่อนเริ่มฟาร์มผง"
-          : "เชื่อม DevPlay ก่อนเริ่ม Party Run",
+        need[farmTab] || "เชื่อม DevPlay ก่อนเริ่ม Party Run",
         "ยังไม่ได้เชื่อม"
       );
+      return;
+    }
+
+    if (farmTab === "giftdraw") {
+      commitGiftDrawCountFromInput();
+      if (Number(giftdrawEstimate?.available_boxes || 0) <= 0) {
+        showErrorModal(ERR_TH.no_gift_boxes, "ไม่มีกล่องขวัญ");
+        return;
+      }
+      const confirmed = await showGiftDrawConfirmModal(giftdrawCount);
+      if (!confirmed) {
+        setStatus($("farm-status"), "ยกเลิกแล้ว — ยังไม่หักโทเค็น", "muted");
+        return;
+      }
+      try {
+        await refreshMe();
+      } catch (_) {}
+      if (!hasTokens()) {
+        showEmptyCoinsModal();
+        return;
+      }
+      await runGiftDraw();
       return;
     }
 
