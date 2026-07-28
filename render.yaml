@@ -15,3 +15,9 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      - key: TRUEWALLET_PHONE
+        sync: false
+      # Heart farm proxy. Must authenticate by username/password from any
+      # source IP — this plan has no static outbound IP to put on an allowlist.
+      - key: HEART_PROXY_URL
+        sync: false
