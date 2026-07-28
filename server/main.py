@@ -101,7 +101,18 @@ FARM_QUIT_AFTER_MAX = 10
 # without one the endpoints refuse rather than failing a run halfway through.
 HEART_PROXY_URL = os.environ.get("HEART_PROXY_URL", "").strip()
 HEART_MAX_TARGET = 300
-HEART_JOB_TIMEOUT_SEC = 1800
+# A heart run is one synchronous HTTP request, so the timeout has to fit inside
+# what browsers and load balancers will hold open — not inside how long the farm
+# could theoretically take. Overshooting means the client gives up while the
+# server keeps going, and the user sees an error for a run that charged them.
+def _env_int(name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(os.environ.get(name) or default)))
+    except (TypeError, ValueError):
+        return default
+
+
+HEART_JOB_TIMEOUT_SEC = _env_int("HEART_JOB_TIMEOUT_SEC", 600, 60, 1800)
 HEART_WORKERS_DEFAULT = 30
 HEART_WORKERS_MIN = 1
 HEART_WORKERS_MAX = 60
