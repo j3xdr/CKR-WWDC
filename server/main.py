@@ -96,6 +96,20 @@ FARM_QUIT_AFTER_DEFAULT = 1
 FARM_QUIT_AFTER_MIN = 0
 FARM_QUIT_AFTER_MAX = 10
 
+# Heart farm. Guest creation is rate-limited by the game at roughly six accounts
+# per source IP, so a single-IP server needs a rotating proxy to get anywhere —
+# without one the endpoints refuse rather than failing a run halfway through.
+HEART_PROXY_URL = os.environ.get("HEART_PROXY_URL", "").strip()
+HEART_MAX_TARGET = 300
+HEART_JOB_TIMEOUT_SEC = 1800
+HEART_WORKERS_DEFAULT = 30
+HEART_WORKERS_MIN = 1
+HEART_WORKERS_MAX = 60
+# Parallel writes to the user's own account: the ban-risk lever. 2 is safe.
+HEART_CONCURRENCY_DEFAULT = 2
+HEART_CONCURRENCY_MIN = 1
+HEART_CONCURRENCY_MAX = 6
+
 # Top-up redeem rate limits (in-memory)
 _topup_hits: dict[str, list[float]] = {}
 _topup_ip_hits: dict[str, list[float]] = {}
@@ -234,6 +248,23 @@ class PowderRunBody(BaseModel):
     treasure_name: str = Field(default="Revival Boots", min_length=1, max_length=128)
 
 
+class HeartEstimateBody(BaseModel):
+    email: str = Field(min_length=3, max_length=256)
+    password: str = Field(min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def _trim_email(cls, v: str) -> str:
+        s = (v or "").strip()
+        if not s:
+            raise ValueError("email_required")
+        return s
+
+
+class HeartRunBody(HeartEstimateBody):
+    target_hearts: int = Field(default=100, ge=1, le=HEART_MAX_TARGET)
+
+
 class GiftDrawEstimateBody(BaseModel):
     devplay_session_id: str = Field(min_length=8, max_length=128)
 
@@ -317,6 +348,13 @@ class AdminBanBody(BaseModel):
 class AdminSettingsBody(BaseModel):
     farm_maintenance: Optional[bool] = None
     topup_maintenance: Optional[bool] = None
+    heart_enabled: Optional[bool] = None
+    heart_workers: Optional[int] = Field(
+        default=None, ge=HEART_WORKERS_MIN, le=HEART_WORKERS_MAX
+    )
+    heart_stream_concurrency: Optional[int] = Field(
+        default=None, ge=HEART_CONCURRENCY_MIN, le=HEART_CONCURRENCY_MAX
+    )
     farm_playtime_seconds: Optional[int] = Field(
         default=None, ge=FARM_PLAYTIME_MIN, le=FARM_PLAYTIME_MAX
     )
@@ -540,6 +578,38 @@ def _as_int_setting(value: Any, default: int, lo: int, hi: int) -> int:
     except (TypeError, ValueError):
         return default
     return max(lo, min(hi, n))
+
+
+async def _heart_settings() -> dict[str, Any]:
+    """Heart farm knobs. Defaults stay conservative; admins can raise them."""
+    raw = await _read_app_settings_raw(
+        ["heart_enabled", "heart_workers", "heart_stream_concurrency"]
+    )
+    return {
+        "enabled": _as_bool_json(raw.get("heart_enabled")),
+        "workers": _as_int_setting(
+            raw.get("heart_workers"),
+            HEART_WORKERS_DEFAULT,
+            HEART_WORKERS_MIN,
+            HEART_WORKERS_MAX,
+        ),
+        "stream_concurrency": _as_int_setting(
+            raw.get("heart_stream_concurrency"),
+            HEART_CONCURRENCY_DEFAULT,
+            HEART_CONCURRENCY_MIN,
+            HEART_CONCURRENCY_MAX,
+        ),
+    }
+
+
+async def _require_heart_ready() -> dict[str, Any]:
+    """Heart needs both an admin opt-in and a proxy; say which one is missing."""
+    if not HEART_PROXY_URL:
+        raise HTTPException(status_code=503, detail="heart_proxy_not_configured")
+    cfg = await _heart_settings()
+    if not cfg["enabled"]:
+        raise HTTPException(status_code=503, detail="heart_disabled")
+    return cfg
 
 
 async def _farm_pacing() -> dict[str, int]:
@@ -1002,6 +1072,7 @@ _JOB_KIND_LABEL = {
     "farm_run": "partyrun",
     "powder_run": "powder",
     "giftdraw_run": "giftdraw",
+    "heart_run": "heart",
 }
 
 
@@ -1417,6 +1488,107 @@ async def farm_powder_estimate(
         row["powder"] = result["powder"]
 
     return {**result, "logs": logs[-20:]}
+
+
+# ---------------------------------------------------------------------------
+# Heart farm (JWT + consume 1 token + shared farm lock)
+# ---------------------------------------------------------------------------
+def _run_heart_peek_sync(email, password, log_cb):
+    from heart_core import peek_friend_room  # noqa: WPS433 — server-only
+
+    return peek_friend_room(email=email, password=password, log_cb=log_cb)
+
+
+def _run_heart_sync(email, password, target_hearts, workers, concurrency, log_cb):
+    from heart_core import run_heart_job  # noqa: WPS433 — server-only
+
+    return run_heart_job(
+        email=email,
+        password=password,
+        target_hearts=target_hearts,
+        proxy_url=HEART_PROXY_URL,
+        workers=workers,
+        stream_concurrency=concurrency,
+        log_cb=log_cb,
+    )
+
+
+@app.post("/api/farm/heart/estimate")
+async def farm_heart_estimate(
+    body: HeartEstimateBody, user: dict[str, Any] = Depends(verify_user)
+):
+    """Free-slot check before spending a token. Requires tokens >= 1, spends none."""
+    await _require_farm_open()
+    cfg = await _require_heart_ready()
+    profile = await load_profile(user)
+    uid = str(user["id"])
+    if int(profile.get("token_balance") or 0) < 1:
+        raise HTTPException(status_code=402, detail="insufficient_tokens")
+
+    # Reuse the peek cooldown: this logs into the game exactly like /farm/peek.
+    _check_peek_rate(uid)
+
+    logs: list[str] = []
+
+    def log_cb(msg: str) -> None:
+        logs.append(msg)
+
+    result = await asyncio.to_thread(
+        _run_heart_peek_sync, body.email, body.password, log_cb
+    )
+    if not result or not result.get("ok"):
+        err = (result or {}).get("error") or "peek_failed"
+        raise HTTPException(
+            status_code=401 if err == "login_failed" else 400,
+            detail={"code": err, "message": err, "logs": logs[-40:]},
+        )
+
+    _peek_last_ts[uid] = time.time()
+    return {
+        **result,
+        "max_target": min(HEART_MAX_TARGET, int(result.get("room") or 0)) or 0,
+        "workers": cfg["workers"],
+        "stream_concurrency": cfg["stream_concurrency"],
+        "logs": logs[-20:],
+    }
+
+
+@app.post("/api/farm/heart/run")
+async def farm_heart_run(body: HeartRunBody, user: dict[str, Any] = Depends(verify_user)):
+    cfg = await _require_heart_ready()
+    target = max(1, min(HEART_MAX_TARGET, int(body.target_hearts)))
+
+    async with _farm_job(user, "heart_run") as job:
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    _run_heart_sync,
+                    body.email,
+                    body.password,
+                    target,
+                    cfg["workers"],
+                    cfg["stream_concurrency"],
+                    job.log_cb,
+                ),
+                timeout=HEART_JOB_TIMEOUT_SEC,
+            )
+            hearts = int((result or {}).get("hearts") or 0)
+            ok = bool(result and result.get("ok") and hearts > 0)
+            return await job.finish(
+                ok,
+                result,
+                extra={"mode": "heart", "hearts": hearts, "target": target},
+            )
+        except asyncio.TimeoutError:
+            # The worker thread is detached at this point; the lock still gets
+            # released by the context manager so the queue keeps moving.
+            return await job.finish(
+                False,
+                {"mode": "heart", "ok": False, "error": "heart_timeout", "hearts": 0},
+                extra={"mode": "heart", "hearts": 0, "target": target},
+            )
+        except Exception as exc:
+            return await job.fail_500(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -2469,6 +2641,7 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
 async def admin_get_settings(admin: dict[str, Any] = Depends(require_admin)):
     flags = await _read_app_settings(["farm_maintenance", "topup_maintenance"])
     pacing = await _farm_pacing()
+    heart = await _heart_settings()
     return {
         "ok": True,
         "farm_maintenance": bool(flags.get("farm_maintenance")),
@@ -2477,6 +2650,11 @@ async def admin_get_settings(admin: dict[str, Any] = Depends(require_admin)):
         "farm_quit_after_seconds": pacing["quit_after_seconds"],
         "farm_playtime_range": [FARM_PLAYTIME_MIN, FARM_PLAYTIME_MAX],
         "farm_playtime_safe": FARM_PLAYTIME_DEFAULT,
+        "heart_enabled": heart["enabled"],
+        "heart_workers": heart["workers"],
+        "heart_stream_concurrency": heart["stream_concurrency"],
+        "heart_proxy_configured": bool(HEART_PROXY_URL),
+        "heart_concurrency_safe": HEART_CONCURRENCY_DEFAULT,
     }
 
 
@@ -2505,6 +2683,22 @@ async def admin_set_settings(
             FARM_QUIT_AFTER_DEFAULT,
             FARM_QUIT_AFTER_MIN,
             FARM_QUIT_AFTER_MAX,
+        )
+    if body.heart_enabled is not None:
+        updates["heart_enabled"] = bool(body.heart_enabled)
+    if body.heart_workers is not None:
+        updates["heart_workers"] = _as_int_setting(
+            body.heart_workers,
+            HEART_WORKERS_DEFAULT,
+            HEART_WORKERS_MIN,
+            HEART_WORKERS_MAX,
+        )
+    if body.heart_stream_concurrency is not None:
+        updates["heart_stream_concurrency"] = _as_int_setting(
+            body.heart_stream_concurrency,
+            HEART_CONCURRENCY_DEFAULT,
+            HEART_CONCURRENCY_MIN,
+            HEART_CONCURRENCY_MAX,
         )
     if not updates:
         return await admin_get_settings(admin)

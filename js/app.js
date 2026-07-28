@@ -387,6 +387,10 @@
   let giftdrawMax = 1;
   let giftdrawEstimate = null;
   let giftdrawEstimateLoading = false;
+  let heartTarget = 100;
+  let heartMax = 300;
+  let heartEstimate = null;
+  let heartEstimateLoading = false;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 1;
@@ -470,6 +474,11 @@
     insufficient_coin: "เหรียญไม่พอแม้ 1 รอบ",
     powder_session_missing: "เชื่อม DevPlay ใหม่ (ไม่มี session ผง)",
     no_gift_boxes: "ไม่มีกล่องขวัญในไอดีนี้ — ต้องมี Gift Point ครบ 100 ต่อ 1 กล่อง",
+    heart_disabled: "ฟาร์มหัวใจปิดใช้งานอยู่ — รอแอดมินเปิด",
+    heart_proxy_not_configured: "ฟาร์มหัวใจยังไม่พร้อม (ผู้ดูแลยังไม่ได้ตั้งค่า proxy)",
+    heart_timeout: "ฟาร์มหัวใจใช้เวลานานเกินกำหนด — ลองลดจำนวนหัวใจแล้วรันใหม่",
+    no_hearts_collected: "เก็บหัวใจไม่ได้เลย — ลองใหม่อีกครั้ง",
+    heart_error: "ฟาร์มหัวใจไม่สำเร็จ ลองใหม่อีกครั้ง",
     giftdraw_failed: "เปิดกล่องขวัญไม่สำเร็จ ลองใหม่อีกครั้ง",
     treasure_not_found: "ไม่พบสมบัติที่เลือก",
     farm_busy: "ระบบกำลังยุ่งอยู่ ลองใหม่อีกสักครู่",
@@ -1322,6 +1331,36 @@
     });
   }
 
+  function showHeartConfirmModal(target) {
+    const n = formatNumTh(target || 1);
+    return new Promise((resolve) => {
+      clearModalActions();
+      openModal({
+        mode: "confirm",
+        title: "ยืนยันฟาร์มหัวใจ?",
+        body:
+          "หัก 1 โทเค็น · ขอ " +
+          n +
+          " หัวใจ\nระบบจะสร้างเพื่อน guest ชั่วคราวแล้วลบทิ้งให้เอง (เพื่อนจริงไม่ถูกแตะ)\nอาจใช้เวลาหลายนาที — คืนโทเค็นเฉพาะเมื่อไม่ได้หัวใจเลย",
+        icon: "assets/pet81_jelly.png",
+        locked: false,
+      });
+      modalActions.classList.add("row");
+      modalActions.appendChild(
+        makeBtn("ยกเลิก", "btn-ghost", () => {
+          forceCloseModal();
+          resolve(false);
+        })
+      );
+      modalActions.appendChild(
+        makeBtn("ยืนยัน", "btn-candy", () => {
+          forceCloseModal();
+          resolve(true);
+        })
+      );
+    });
+  }
+
   function startBalancePoll() {
     stopBalancePoll();
     balancePollTimer = setInterval(async () => {
@@ -1498,6 +1537,11 @@
     if (farmTab === "giftdraw") {
       refreshGiftDrawEstimate().catch(() => {});
     }
+    if (farmTab === "heart") {
+      // Heart's check logs into the game, so it stays an explicit button press
+      // rather than firing on every tab switch.
+      paintHeartStepper();
+    }
   }
 
   async function refreshDevPlayTickets(sessionId) {
@@ -1583,7 +1627,7 @@
   }
 
   function switchFarmTab(tab) {
-    farmTab = ["powder", "giftdraw"].includes(tab) ? tab : "partyrun";
+    farmTab = ["powder", "giftdraw", "heart"].includes(tab) ? tab : "partyrun";
     ["partyrun", "heart", "powder", "giftdraw"].forEach((t) => {
       const btn = $("farm-tab-" + t);
       const panel = $("farm-panel-" + t);
@@ -1600,6 +1644,7 @@
     const partyBtn = $("farm-btn");
     const powderBtn = $("powder-btn");
     const giftdrawBtn = $("giftdraw-btn");
+    const heartBtn = $("heart-btn");
     const ticketStepper = $("farm-panel-partyrun")?.querySelector(".ticket-stepper");
     if (partyBtn) {
       partyBtn.hidden = farmTab !== "partyrun";
@@ -1612,6 +1657,10 @@
     if (giftdrawBtn) {
       giftdrawBtn.hidden = farmTab !== "giftdraw";
       giftdrawBtn.classList.toggle("hidden", farmTab !== "giftdraw");
+    }
+    if (heartBtn) {
+      heartBtn.hidden = farmTab !== "heart";
+      heartBtn.classList.toggle("hidden", farmTab !== "heart");
     }
     if (ticketStepper) ticketStepper.hidden = farmTab !== "partyrun";
     updateFarmAvailability();
@@ -1862,6 +1911,127 @@
     }
   }
 
+  /* ---------- Heart farm ---------- */
+  function clampHeartTarget(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    return Math.min(Math.max(1, n || 1), Math.max(1, heartMax || 1));
+  }
+
+  function paintHeartStepper() {
+    const input = $("heart-target");
+    const hint = $("heart-max-hint");
+    const minus = $("heart-minus");
+    const plus = $("heart-plus");
+    const max = Math.max(1, heartMax || 1);
+    heartTarget = clampHeartTarget(heartTarget);
+    const editing = input && document.activeElement === input;
+    if (input && !editing) input.value = String(heartTarget);
+    if (hint) {
+      if (!hasDevPlayCreds()) {
+        hint.textContent = "กรอกอีเมล/รหัสผ่านบัญชีเกมก่อน";
+      } else if (heartEstimateLoading) {
+        hint.textContent = "กำลังตรวจสอบช่องว่างเพื่อน…";
+      } else if (!heartEstimate) {
+        hint.textContent = "กดตรวจสอบช่องว่างเพื่อนก่อน (ไม่หักโทเค็น)";
+      } else if (Number(heartEstimate.room) <= 0) {
+        hint.textContent = "เพื่อนเต็ม 300 แล้ว — ต้องลบเพื่อนจริงออกก่อน";
+      } else {
+        hint.textContent =
+          "ว่าง " +
+          formatNumTh(heartEstimate.room) +
+          " ช่อง · พิมพ์ได้ 1–" +
+          formatNumTh(max) +
+          " · ใช้ 1 โทเค็นเว็บ";
+      }
+    }
+    const canStep =
+      !farmRunning && !devplayConnecting && Number(heartEstimate?.room || 0) > 0;
+    if (input) input.disabled = !canStep;
+    if (minus) minus.disabled = !canStep || heartTarget <= 1;
+    if (plus) plus.disabled = !canStep || heartTarget >= max;
+  }
+
+  function commitHeartTargetFromInput() {
+    const input = $("heart-target");
+    if (!input) return;
+    heartTarget = clampHeartTarget(input.value);
+    input.value = String(heartTarget);
+    paintHeartStepper();
+    updateFarmAvailability();
+  }
+
+  function paintHeartEstimate(est) {
+    heartEstimate = est;
+    const friendsEl = $("heart-stat-friends");
+    const roomEl = $("heart-stat-room");
+    const maxEl = $("heart-stat-max");
+    const capEl = $("heart-stat-cap");
+    const noteEl = $("heart-estimate-note");
+
+    if (!est) {
+      heartMax = 300;
+      if (friendsEl) friendsEl.textContent = "—";
+      if (roomEl) roomEl.textContent = "—";
+      if (maxEl) maxEl.textContent = "—";
+      if (noteEl) noteEl.textContent = "";
+      paintHeartStepper();
+      return;
+    }
+
+    const room = Math.max(0, Number(est.room) || 0);
+    heartMax = Math.max(1, Number(est.max_target) || room || 1);
+    heartTarget = clampHeartTarget(heartTarget);
+
+    if (friendsEl) friendsEl.textContent = formatNumTh(est.friends ?? "—");
+    if (roomEl) roomEl.textContent = formatNumTh(room);
+    if (maxEl) maxEl.textContent = formatNumTh(heartMax);
+    if (capEl) capEl.textContent = formatNumTh(est.friend_cap ?? 300);
+    if (noteEl) {
+      noteEl.textContent = room
+        ? "ยิ่งขอเยอะยิ่งใช้เวลานาน — เริ่มจากน้อย ๆ ก่อนได้"
+        : "ไม่มีช่องว่างให้เพิ่มเพื่อน guest";
+    }
+    paintHeartStepper();
+  }
+
+  async function refreshHeartEstimate() {
+    if (farmTab !== "heart") return;
+    if (!hasDevPlayCreds()) {
+      showErrorModal("กรอกอีเมลและรหัสผ่านบัญชีเกมให้ครบ", "ข้อมูลไม่ครบ");
+      return;
+    }
+    heartEstimateLoading = true;
+    paintHeartStepper();
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/heart/estimate", {
+        method: "POST",
+        body: {
+          email: $("dp-acct-mail").value.trim(),
+          password: $("dp-acct-secret").value,
+        },
+      });
+      paintHeartEstimate(data);
+      setStatus(
+        $("farm-status"),
+        "ว่าง " + formatNumTh(data.room) + " ช่อง · พร้อมฟาร์มหัวใจ",
+        "ok"
+      );
+    } catch (e) {
+      paintHeartEstimate(null);
+      const msg = thError(e.message) || "ตรวจสอบไม่สำเร็จ";
+      setStatus($("farm-status"), msg, "err");
+      if (/heart_disabled|heart_proxy_not_configured/i.test(String(e.message))) {
+        showErrorModal(msg, "ยังใช้ไม่ได้");
+      }
+    } finally {
+      heartEstimateLoading = false;
+      paintHeartStepper();
+      updateFarmAvailability();
+    }
+  }
+
   function updateFarmAvailability() {
     const btn = $("farm-btn");
     const powderBtn = $("powder-btn");
@@ -1870,12 +2040,16 @@
     const sub = $("farm-btn-sub");
     const powderSub = $("powder-btn-sub");
     const giftdrawSub = $("giftdraw-btn-sub");
+    const heartBtn = $("heart-btn");
+    const heartCheckBtn = $("heart-check-btn");
+    const heartSub = $("heart-btn-sub");
     const empty = !hasTokens();
     const credsReady = hasDevPlayCreds();
     const connected = isDevPlayConnected();
     const busy = farmRunning || devplayConnecting;
     const isPowder = farmTab === "powder";
     const isGiftDraw = farmTab === "giftdraw";
+    const isHeart = farmTab === "heart";
 
     if (connectBtn) {
       connectBtn.disabled = busy || !credsReady || connected;
@@ -1888,7 +2062,31 @@
       devplaySession?.tickets != null &&
       Number(devplaySession.tickets) <= 0;
 
-    if (isGiftDraw) {
+    if (heartCheckBtn) {
+      heartCheckBtn.disabled = !credsReady || busy || heartEstimateLoading;
+    }
+
+    if (isHeart) {
+      const noRoom = Number(heartEstimate?.room || 0) <= 0;
+      if (heartBtn && !farmRunning) {
+        heartBtn.disabled =
+          empty || !credsReady || busy || heartEstimateLoading || noRoom;
+      }
+      if (btn && !farmRunning) btn.disabled = true;
+      if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
+      if (heartSub) {
+        if (!credsReady) heartSub.textContent = "กรอกบัญชีเกมก่อน";
+        else if (heartEstimateLoading) heartSub.textContent = "กำลังตรวจสอบ…";
+        else if (!heartEstimate) heartSub.textContent = "กดตรวจสอบช่องว่างก่อน";
+        else if (noRoom) heartSub.textContent = "เพื่อนเต็ม 300 แล้ว";
+        else {
+          heartSub.textContent =
+            "ขอ " + formatNumTh(heartTarget) + " หัวใจ · หัก 1 โทเค็น";
+        }
+      }
+      paintHeartStepper();
+    } else if (isGiftDraw) {
       const noBoxes = Number(giftdrawEstimate?.available_boxes || 0) <= 0;
       if (giftdrawBtn && !farmRunning) {
         giftdrawBtn.disabled =
@@ -1896,6 +2094,7 @@
       }
       if (btn && !farmRunning) btn.disabled = true;
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (heartBtn && !farmRunning) heartBtn.disabled = true;
       if (giftdrawSub) {
         if (!connected) giftdrawSub.textContent = "เชื่อม DevPlay ก่อน";
         else if (giftdrawEstimateLoading) giftdrawSub.textContent = "กำลังนับกล่อง…";
@@ -1922,6 +2121,7 @@
         } else powderSub.textContent = "เป้า 100,000 ผง · หัก 1 โทเค็น";
       }
       if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
+      if (heartBtn && !farmRunning) heartBtn.disabled = true;
       const search = $("powder-treasure-search");
       const sel = $("powder-treasure-select");
       const canPick = connected && !farmRunning && !devplayConnecting;
@@ -1930,6 +2130,7 @@
     } else {
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
       if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
+      if (heartBtn && !farmRunning) heartBtn.disabled = true;
       if (btn && !farmRunning) {
         btn.disabled = empty || !connected || busy || noTickets;
       }
@@ -2249,6 +2450,11 @@
             "/" +
             escapeHtml(formatNumTh(res.requested || 0)) +
             " กล่อง"
+          : res.mode === "heart"
+          ? "หัวใจ +" +
+            escapeHtml(formatNumTh(res.hearts || 0)) +
+            " / ขอ " +
+            escapeHtml(formatNumTh(res.target || 0))
           : "S " +
             escapeHtml(formatNumTh(row.score)) +
             " · C " +
@@ -3472,6 +3678,158 @@
     }
   }
 
+  function showHeartResultModal(summary) {
+    const rows = [
+      ["บัญชีเกม", escapeHtml(summary.account || "—")],
+      [
+        "หัวใจที่ได้",
+        `<span class="result-delta">+${escapeHtml(summary.hearts)}</span> / ขอไว้ ${escapeHtml(summary.target)}`,
+      ],
+      [
+        "โทเค็นเว็บ",
+        `${escapeHtml(summary.tokensBefore)} → ${escapeHtml(summary.tokensAfter)} <span class="result-delta">(หัก 1)</span>`,
+      ],
+    ];
+    if (summary.partial) {
+      rows.push(["หมายเหตุ", "ได้ไม่ครบตามที่ขอ — รันซ้ำเพื่อเก็บส่วนที่เหลือได้"]);
+    }
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">เพื่อน guest ถูกลบทิ้งหมดแล้ว · เพื่อนจริงไม่ถูกแตะต้อง</p>';
+
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: "สรุปผลฟาร์มหัวใจ",
+      bodyHtml: html,
+      icon: "assets/pet81_jelly.png",
+      locked: false,
+    });
+    spawnPixelConfetti();
+    modalActions.appendChild(makeBtn("ตกลง", "btn-candy", () => forceCloseModal()));
+  }
+
+  async function runHeart() {
+    if (!hasTokens()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!hasDevPlayCreds()) {
+      showErrorModal("กรอกอีเมลและรหัสผ่านบัญชีเกมให้ครบ", "ข้อมูลไม่ครบ");
+      return;
+    }
+
+    const btn = $("heart-btn");
+    const tokensBefore = tokenBalance();
+    const target = clampHeartTarget(heartTarget);
+    farmRunning = true;
+    if (btn) btn.disabled = true;
+    setStatus(
+      $("farm-status"),
+      "กำลังฟาร์มหัวใจ " + formatNumTh(target) + " ดวง… อาจใช้เวลาหลายนาที",
+      "muted"
+    );
+    startLiveStages();
+
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/heart/run", {
+        method: "POST",
+        body: {
+          email: $("dp-acct-mail").value.trim(),
+          password: $("dp-acct-secret").value,
+          target_hearts: target,
+        },
+      });
+      clearStageTimer();
+      if (typeof data.token_balance === "number") {
+        profile.token_balance = data.token_balance;
+        paintProfile();
+      } else {
+        await refreshMe().catch(() => {});
+      }
+
+      const result = data.result || data;
+      const hearts = Number(data.hearts || result.hearts || 0);
+
+      if (data.ok) {
+        setStatus(
+          $("farm-status"),
+          "ฟาร์มหัวใจสำเร็จ +" + formatNumTh(hearts) + " · หัก 1 โทเค็น",
+          "ok"
+        );
+        pendingAfterRunStatus = () =>
+          showHeartResultModal({
+            account: devplaySession?.nickname || $("dp-acct-mail").value.trim() || "—",
+            hearts: formatNumTh(hearts),
+            target: formatNumTh(target),
+            partial: hearts < target,
+            tokensBefore: formatNumTh(data.tokens_before ?? tokensBefore),
+            tokensAfter: formatNumTh(
+              data.tokens_after ?? data.token_balance ?? tokenBalance()
+            ),
+          });
+        buildFinalPipeline(data.logs || data.steps || [], result, true);
+        clearQueuedRun();
+        stopQueuePoll();
+        refreshGateAndQueueUi().catch(() => {});
+        loadFarmHistory().catch(() => {});
+      } else {
+        buildFinalPipeline(data.logs || data.steps || [], result, false);
+        let msg = farmErrorMessage(result, "ฟาร์มหัวใจไม่สำเร็จ");
+        const code = String(result?.error || data.error || "");
+        if (/heart_timeout/i.test(code)) msg = ERR_TH.heart_timeout;
+        else if (/no_hearts_collected/i.test(code)) msg = ERR_TH.no_hearts_collected;
+        msg += data.refunded ? " · คืนโทเค็นแล้ว" : " · โทเค็นถูกหักแล้ว";
+        setStatus($("farm-status"), msg, "err");
+        loadFarmHistory().catch(() => {});
+      }
+    } catch (e) {
+      clearStageTimer();
+      const raw = String(e.message || "");
+      if (/account_banned/i.test(raw)) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
+        setStatus($("farm-status"), ERR_TH.account_banned, "err");
+      } else if (/maintenance/i.test(raw)) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
+        setStatus($("farm-status"), ERR_TH.maintenance, "err");
+      } else if (/heart_disabled|heart_proxy_not_configured/i.test(raw)) {
+        forceCloseRunStatusPopup();
+        showErrorModal(thError(raw), "ยังใช้ไม่ได้");
+        setStatus($("farm-status"), thError(raw), "err");
+      } else if (e.status === 401 || /login_failed/i.test(raw)) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.login_failed, "เข้าสู่ระบบเกมไม่สำเร็จ");
+        setStatus($("farm-status"), ERR_TH.login_failed, "err");
+      } else if (e.status === 409 || /farm_busy/i.test(raw)) {
+        forceCloseRunStatusPopup();
+        await enterQueueFor(e.gate || e.data?.detail?.gate, runHeart);
+        setStatus($("farm-status"), "ระบบไม่ว่าง — จองคิวให้แล้ว รอสักครู่", "muted");
+      } else {
+        const msg = thError(raw) || "ฟาร์มหัวใจไม่สำเร็จ";
+        setStatus($("farm-status"), msg, "err");
+        buildFinalPipeline(e.data?.logs || [], e.data?.result || { error: raw }, false);
+
+        if (e.status === 402 || /insufficient_tokens/i.test(raw)) {
+          forceCloseRunStatusPopup();
+          profile.token_balance = 0;
+          paintProfile();
+          showEmptyCoinsModal();
+        } else if (typeof e.data?.token_balance === "number") {
+          profile.token_balance = e.data.token_balance;
+          paintProfile();
+        }
+      }
+    } finally {
+      farmRunning = false;
+      updateFarmAvailability();
+    }
+  }
+
   /* ---------- Auth bootstrap ---------- */
   async function bootstrap() {
     initBgFloaters();
@@ -3904,6 +4262,44 @@
     }
   });
 
+  $("heart-minus")?.addEventListener("click", () => {
+    if (heartTarget > 1) {
+      heartTarget -= 1;
+      paintHeartStepper();
+      updateFarmAvailability();
+    }
+  });
+
+  $("heart-plus")?.addEventListener("click", () => {
+    if (heartTarget < heartMax) {
+      heartTarget += 1;
+      paintHeartStepper();
+      updateFarmAvailability();
+    }
+  });
+
+  $("heart-target")?.addEventListener("input", (ev) => {
+    const el = ev.target;
+    const cleaned = String(el.value || "").replace(/[^\d]/g, "");
+    if (el.value !== cleaned) el.value = cleaned;
+  });
+
+  $("heart-target")?.addEventListener("change", () => commitHeartTargetFromInput());
+  $("heart-target")?.addEventListener("blur", () => commitHeartTargetFromInput());
+
+  $("heart-target")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      commitHeartTargetFromInput();
+      ev.target.blur();
+    }
+  });
+
+  $("heart-check-btn")?.addEventListener("click", () => {
+    refreshHeartEstimate().catch(() => {});
+  });
+
+  $("farm-tab-heart")?.addEventListener("click", () => switchFarmTab("heart"));
   $("farm-tab-partyrun")?.addEventListener("click", () => switchFarmTab("partyrun"));
   $("farm-tab-powder")?.addEventListener("click", () => switchFarmTab("powder"));
   $("farm-tab-giftdraw")?.addEventListener("click", () => switchFarmTab("giftdraw"));
@@ -3924,6 +4320,37 @@
 
     if (!hasTokens()) {
       showEmptyCoinsModal();
+      return;
+    }
+
+    if (farmTab === "heart") {
+      commitHeartTargetFromInput();
+      if (!hasDevPlayCreds()) {
+        showErrorModal("กรอกอีเมลและรหัสผ่านบัญชีเกมให้ครบ", "ข้อมูลไม่ครบ");
+        return;
+      }
+      if (Number(heartEstimate?.room || 0) <= 0) {
+        showErrorModal(
+          heartEstimate
+            ? "เพื่อนเต็ม 300 แล้ว — ต้องลบเพื่อนจริงออกก่อน"
+            : "กดตรวจสอบช่องว่างเพื่อนก่อน",
+          "รันไม่ได้"
+        );
+        return;
+      }
+      const confirmed = await showHeartConfirmModal(heartTarget);
+      if (!confirmed) {
+        setStatus($("farm-status"), "ยกเลิกแล้ว — ยังไม่หักโทเค็น", "muted");
+        return;
+      }
+      try {
+        await refreshMe();
+      } catch (_) {}
+      if (!hasTokens()) {
+        showEmptyCoinsModal();
+        return;
+      }
+      await runHeart();
       return;
     }
 

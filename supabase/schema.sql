@@ -516,7 +516,14 @@ values
   ('farm_maintenance', 'false'::jsonb),
   ('topup_maintenance', 'false'::jsonb),
   ('farm_playtime_seconds', '12'::jsonb),
-  ('farm_quit_after_seconds', '1'::jsonb)
+  ('farm_quit_after_seconds', '1'::jsonb),
+  -- Heart farm ships off by default: it also needs HEART_PROXY_URL set on the
+  -- server, since the game rate-limits guest creation per source IP.
+  -- heart_stream_concurrency is the ban-risk lever (writes to the user's own
+  -- account); 2 is the safe value.
+  ('heart_enabled', 'false'::jsonb),
+  ('heart_workers', '30'::jsonb),
+  ('heart_stream_concurrency', '2'::jsonb)
 on conflict (key) do nothing;
 
 alter table public.app_settings enable row level security;

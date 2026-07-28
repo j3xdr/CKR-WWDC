@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260728-giftdraw1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260728-heart1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -308,8 +308,8 @@
               <button type="button" class="farm-tab is-active" id="farm-tab-partyrun" role="tab" aria-selected="true" aria-controls="farm-panel-partyrun" data-tab="partyrun">
                 Party Run
               </button>
-              <button type="button" class="farm-tab is-disabled" id="farm-tab-heart" role="tab" aria-selected="false" aria-disabled="true" data-tab="heart" disabled>
-                Heart <span class="farm-tab-soon">เร็วๆ นี้</span>
+              <button type="button" class="farm-tab" id="farm-tab-heart" role="tab" aria-selected="false" aria-controls="farm-panel-heart" data-tab="heart">
+                Heart
               </button>
               <button type="button" class="farm-tab" id="farm-tab-powder" role="tab" aria-selected="false" aria-controls="farm-panel-powder" data-tab="powder">
                 Powder
@@ -413,8 +413,64 @@
                 </button>
               </div>
 
-              <div class="farm-tab-panel farm-tab-panel-stub hidden" id="farm-panel-heart" role="tabpanel" hidden>
-                <p class="farm-stub-copy">Heart farm กำลังพัฒนา — เร็วๆ นี้</p>
+              <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" hidden>
+                <div class="ticket-stepper">
+                  <span class="ticket-stepper-label">จำนวนหัวใจที่ต้องการ</span>
+                  <div class="ticket-stepper-controls">
+                    <button type="button" class="ticket-step-btn" id="heart-minus" aria-label="ลดหัวใจ" disabled>−</button>
+                    <input
+                      id="heart-target"
+                      class="ticket-count-display"
+                      name="heart_target"
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      autocomplete="off"
+                      value="100"
+                      aria-label="จำนวนหัวใจ"
+                      disabled
+                    />
+                    <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ" disabled>+</button>
+                  </div>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">กดตรวจสอบช่องว่างเพื่อนก่อน</p>
+                </div>
+
+                <div class="powder-estimate" id="heart-estimate" aria-live="polite">
+                  <p class="powder-estimate-target muted" id="heart-estimate-target">
+                    สร้างเพื่อน guest ชั่วคราวให้ส่งหัวใจ แล้วลบทิ้งอัตโนมัติ — เพื่อนจริงไม่ถูกแตะ
+                  </p>
+                  <dl class="powder-estimate-stats">
+                    <div>
+                      <dt>เพื่อนจริง</dt>
+                      <dd id="heart-stat-friends">—</dd>
+                    </div>
+                    <div>
+                      <dt>ช่องว่าง</dt>
+                      <dd id="heart-stat-room">—</dd>
+                    </div>
+                    <div>
+                      <dt>สูงสุด/รอบ</dt>
+                      <dd id="heart-stat-max">—</dd>
+                    </div>
+                    <div>
+                      <dt>เพดานเพื่อน</dt>
+                      <dd id="heart-stat-cap">300</dd>
+                    </div>
+                  </dl>
+                  <p class="powder-estimate-note muted" id="heart-estimate-note"></p>
+                </div>
+
+                <button type="button" class="btn btn-ghost btn-heart-check" id="heart-check-btn" disabled>
+                  ตรวจสอบช่องว่างเพื่อน (ไม่หักโทเค็น)
+                </button>
+
+                <button class="btn btn-run btn-run-heart hidden" type="submit" id="heart-btn" disabled hidden>
+                  <img src="assets/pet81_jelly.png" alt="" width="28" height="28" />
+                  <span class="btn-run-copy">
+                    <span class="btn-run-title">เริ่มฟาร์มหัวใจ · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-sub" id="heart-btn-sub">กรอกบัญชีเกมก่อน</span>
+                  </span>
+                </button>
               </div>
               <div class="farm-tab-panel hidden" id="farm-panel-powder" role="tabpanel" hidden>
                 <div class="powder-picker">
@@ -739,7 +795,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260728-giftdraw1"></script>
-  <script src="js/app.js?v=20260728-giftdraw1"></script>
+  <script src="js/config.js?v=20260728-heart1"></script>
+  <script src="js/app.js?v=20260728-heart1"></script>
 </body>
 </html>
