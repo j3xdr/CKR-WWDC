@@ -16,6 +16,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
+import requests
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -2646,6 +2647,79 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
             }
         )
     return {"ok": True, "users": safe}
+
+
+def _probe_heart_proxy_sync() -> dict[str, Any]:
+    """Try HEART_PROXY_URL exactly the way guest creation will use it.
+
+    Uses requests with the same proxies= shape as heart_core, so a pass here
+    means the real path works — the proxy only ever carries guest signups.
+    """
+    if not HEART_PROXY_URL:
+        return {"error": "heart_proxy_not_configured"}
+    proxies = {"http": HEART_PROXY_URL, "https": HEART_PROXY_URL}
+    try:
+        r = requests.get("https://ipv4.webshare.io/", proxies=proxies, timeout=25)
+    except requests.exceptions.ProxyError as exc:
+        # requests wraps both "could not reach the proxy" and "the proxy said
+        # no" in ProxyError, so the message is the only way to tell them apart —
+        # and which one it is decides whether the fix is the URL or the account.
+        detail = str(exc)
+        tunnel = re.search(r"Tunnel connection failed: (\d{3})", detail)
+        if not tunnel:
+            return {
+                "error": "proxy_unreachable",
+                "detail": detail[:300],
+                "hint": "could not open a connection to the proxy at all — check the host and port",
+            }
+        status = int(tunnel.group(1))
+        hint = (
+            "the proxy is reachable and refused the tunnel. If the same status "
+            "comes back with a deliberately wrong password, the rejection "
+            "happens before auth and the source IP is what it objects to."
+        )
+        if "proxy_ip_not_allowed" in detail or status == 403:
+            hint = (
+                "proxy refused this server's source IP. Allow username/password "
+                "auth from any IP, or allowlist this host — but a free instance "
+                "has no static outbound IP to register, and residential proxies "
+                "commonly refuse datacenter sources on principle."
+            )
+        elif status == 407:
+            hint = "proxy wants credentials it did not get — check the user and password in the URL"
+        return {
+            "error": "proxy_rejected",
+            "proxy_status": status,
+            "detail": detail[:300],
+            "hint": hint,
+        }
+    except Exception as exc:
+        return {"error": "proxy_unreachable", "detail": str(exc)[:300]}
+    if r.status_code != 200:
+        return {"error": f"http_{r.status_code}", "detail": r.text[:200]}
+    return {"ok": True, "exit_ip": r.text.strip()[:64]}
+
+
+@app.get("/api/admin/heart/proxy-check")
+async def admin_heart_proxy_check(admin: dict[str, Any] = Depends(require_admin)):
+    """Does the heart proxy actually work from this server? Costs no tokens.
+
+    Worth running before enabling heart: the run endpoints only check that a
+    proxy is configured, so a proxy that refuses this host would otherwise
+    surface as a failed (refunded, but confusing) farm run.
+    """
+    first = await asyncio.to_thread(_probe_heart_proxy_sync)
+    if not first.get("ok"):
+        return {"ok": False, "proxy_configured": bool(HEART_PROXY_URL), **first}
+    # Second sample: a rotating gateway should hand out a different exit IP.
+    second = await asyncio.to_thread(_probe_heart_proxy_sync)
+    ips = [first.get("exit_ip"), second.get("exit_ip") if second.get("ok") else None]
+    return {
+        "ok": True,
+        "proxy_configured": True,
+        "exit_ips": ips,
+        "rotating": bool(ips[1]) and ips[0] != ips[1],
+    }
 
 
 @app.get("/api/admin/settings")
