@@ -507,10 +507,16 @@ create table if not exists public.app_settings (
   updated_by uuid null references auth.users(id) on delete set null
 );
 
+-- farm_playtime_seconds / farm_quit_after_seconds are Party Run pacing knobs.
+-- 12 is the play time the game expects before it accepts a result; lower
+-- finishes rounds sooner but risks INVALID PLAY. The API clamps both on read
+-- and on write, so a bad value here degrades to the safe default.
 insert into public.app_settings (key, value)
 values
   ('farm_maintenance', 'false'::jsonb),
-  ('topup_maintenance', 'false'::jsonb)
+  ('topup_maintenance', 'false'::jsonb),
+  ('farm_playtime_seconds', '12'::jsonb),
+  ('farm_quit_after_seconds', '1'::jsonb)
 on conflict (key) do nothing;
 
 alter table public.app_settings enable row level security;

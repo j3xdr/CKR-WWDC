@@ -82,6 +82,17 @@ SAFE_COIN_MAX = 449_000
 SAFE_EXP_MAX = 52_000
 DEFAULT_FARM_SCORE = 800_000
 
+# Party Run pacing. 12s is the play-time the game expects before it will accept
+# a result; going lower finishes rounds sooner but the server starts rejecting
+# runs as INVALID PLAY. The default stays at the known-safe value and an admin
+# can step it down from /api/admin/settings without a redeploy.
+FARM_PLAYTIME_DEFAULT = 12
+FARM_PLAYTIME_MIN = 6
+FARM_PLAYTIME_MAX = 20
+FARM_QUIT_AFTER_DEFAULT = 1
+FARM_QUIT_AFTER_MIN = 0
+FARM_QUIT_AFTER_MAX = 10
+
 # Top-up redeem rate limits (in-memory)
 _topup_hits: dict[str, list[float]] = {}
 _topup_ip_hits: dict[str, list[float]] = {}
@@ -294,6 +305,12 @@ class AdminBanBody(BaseModel):
 class AdminSettingsBody(BaseModel):
     farm_maintenance: Optional[bool] = None
     topup_maintenance: Optional[bool] = None
+    farm_playtime_seconds: Optional[int] = Field(
+        default=None, ge=FARM_PLAYTIME_MIN, le=FARM_PLAYTIME_MAX
+    )
+    farm_quit_after_seconds: Optional[int] = Field(
+        default=None, ge=FARM_QUIT_AFTER_MIN, le=FARM_QUIT_AFTER_MAX
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -469,8 +486,9 @@ def _as_bool_json(value: Any) -> bool:
     return False
 
 
-async def _read_app_settings(keys: list[str]) -> dict[str, Any]:
-    out: dict[str, Any] = {k: False for k in keys}
+async def _read_app_settings_raw(keys: list[str]) -> dict[str, Any]:
+    """Fetch app_settings values as stored (no coercion). Missing keys are None."""
+    out: dict[str, Any] = {k: None for k in keys}
     if not keys or not SUPABASE_URL:
         return out
     headers = None
@@ -494,8 +512,43 @@ async def _read_app_settings(keys: list[str]) -> dict[str, Any]:
     for row in r.json() or []:
         k = row.get("key")
         if k in out:
-            out[k] = _as_bool_json(row.get("value"))
+            out[k] = row.get("value")
     return out
+
+
+async def _read_app_settings(keys: list[str]) -> dict[str, Any]:
+    raw = await _read_app_settings_raw(keys)
+    return {k: _as_bool_json(v) for k, v in raw.items()}
+
+
+def _as_int_setting(value: Any, default: int, lo: int, hi: int) -> int:
+    """Clamp a stored setting into a sane range; fall back on anything odd."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, n))
+
+
+async def _farm_pacing() -> dict[str, int]:
+    """Party Run pacing knobs, admin-tunable via app_settings."""
+    raw = await _read_app_settings_raw(
+        ["farm_playtime_seconds", "farm_quit_after_seconds"]
+    )
+    return {
+        "playtime_seconds": _as_int_setting(
+            raw.get("farm_playtime_seconds"),
+            FARM_PLAYTIME_DEFAULT,
+            FARM_PLAYTIME_MIN,
+            FARM_PLAYTIME_MAX,
+        ),
+        "quit_after_seconds": _as_int_setting(
+            raw.get("farm_quit_after_seconds"),
+            FARM_QUIT_AFTER_DEFAULT,
+            FARM_QUIT_AFTER_MIN,
+            FARM_QUIT_AFTER_MAX,
+        ),
+    }
 
 
 async def _require_farm_open() -> None:
@@ -1417,6 +1470,7 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
         "exp": body.exp,
         "ticket_count": body.ticket_count,
     }
+    pacing = await _farm_pacing()
     async with _farm_job(user, "farm_run", job_fields) as job:
         try:
             result = await asyncio.to_thread(
@@ -1429,6 +1483,8 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 body.ticket_count,
                 job.log_cb,
                 session_data,
+                pacing["playtime_seconds"],
+                pacing["quit_after_seconds"],
             )
 
             rounds_ok = int((result or {}).get("rounds_completed") or 0)
@@ -1488,7 +1544,18 @@ def _get_devplay_session(user_id: str, session_id: str) -> dict[str, Any] | None
     return row
 
 
-def _run_farm_sync(email, password, score, coin, exp, ticket_count, log_cb, session_data=None):
+def _run_farm_sync(
+    email,
+    password,
+    score,
+    coin,
+    exp,
+    ticket_count,
+    log_cb,
+    session_data=None,
+    playtime_seconds=None,
+    quit_after_seconds=None,
+):
     from partyrun_core import run_farm_multi  # noqa: WPS433 — server-only
 
     return run_farm_multi(
@@ -1500,6 +1567,8 @@ def _run_farm_sync(email, password, score, coin, exp, ticket_count, log_cb, sess
         ticket_count=ticket_count,
         log_cb=log_cb,
         session_data=session_data,
+        playtime_seconds=playtime_seconds,
+        quit_after_seconds=quit_after_seconds,
     )
 
 
@@ -2288,10 +2357,15 @@ async def admin_users(admin: dict[str, Any] = Depends(require_admin)):
 @app.get("/api/admin/settings")
 async def admin_get_settings(admin: dict[str, Any] = Depends(require_admin)):
     flags = await _read_app_settings(["farm_maintenance", "topup_maintenance"])
+    pacing = await _farm_pacing()
     return {
         "ok": True,
         "farm_maintenance": bool(flags.get("farm_maintenance")),
         "topup_maintenance": bool(flags.get("topup_maintenance")),
+        "farm_playtime_seconds": pacing["playtime_seconds"],
+        "farm_quit_after_seconds": pacing["quit_after_seconds"],
+        "farm_playtime_range": [FARM_PLAYTIME_MIN, FARM_PLAYTIME_MAX],
+        "farm_playtime_safe": FARM_PLAYTIME_DEFAULT,
     }
 
 
@@ -2302,11 +2376,25 @@ async def admin_set_settings(
 ):
     if not _has_service_role():
         raise HTTPException(status_code=503, detail="service_role_not_configured")
-    updates: dict[str, bool] = {}
+    updates: dict[str, Any] = {}
     if body.farm_maintenance is not None:
         updates["farm_maintenance"] = bool(body.farm_maintenance)
     if body.topup_maintenance is not None:
         updates["topup_maintenance"] = bool(body.topup_maintenance)
+    if body.farm_playtime_seconds is not None:
+        updates["farm_playtime_seconds"] = _as_int_setting(
+            body.farm_playtime_seconds,
+            FARM_PLAYTIME_DEFAULT,
+            FARM_PLAYTIME_MIN,
+            FARM_PLAYTIME_MAX,
+        )
+    if body.farm_quit_after_seconds is not None:
+        updates["farm_quit_after_seconds"] = _as_int_setting(
+            body.farm_quit_after_seconds,
+            FARM_QUIT_AFTER_DEFAULT,
+            FARM_QUIT_AFTER_MIN,
+            FARM_QUIT_AFTER_MAX,
+        )
     if not updates:
         return await admin_get_settings(admin)
 
