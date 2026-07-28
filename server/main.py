@@ -940,6 +940,201 @@ async def _gate_for(user_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Farm job lifecycle (shared by every token-consuming run endpoint)
+# ---------------------------------------------------------------------------
+class FarmJob:
+    """One token-consuming farm run: token spent, run_jobs row, farm lock held.
+
+    Every run endpoint goes through `_farm_job()` so the token accounting and
+    the run_jobs bookkeeping stay identical across Party Run / Powder / Gift
+    Draw / Heart — a refund that only one endpoint remembers to do is exactly
+    the bug this exists to prevent.
+    """
+
+    def __init__(self, user_id: str, tokens_before: int, token_balance: Any, job_id: Optional[str]):
+        self.user_id = user_id
+        self.tokens_before = tokens_before
+        self.token_balance = token_balance
+        self.job_id = job_id
+        self.logs: list[str] = []
+        self.settled = False
+
+    def log_cb(self, msg: str) -> None:
+        self.logs.append(msg)
+
+    def tail(self) -> list[str]:
+        return self.logs[-80:]
+
+    async def _refund(self, reason: str = "farm_fail_refund") -> None:
+        bal = await _refund_token(self.user_id, reason)
+        if bal is not None:
+            self.token_balance = bal
+
+    async def finish(
+        self,
+        ok: bool,
+        result: Optional[dict[str, Any]],
+        extra: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Settle a run that completed: refund when it failed, patch the row."""
+        self.settled = True
+        err_code = None if ok else ((result or {}).get("error") or "farm_error")
+        refunded = False
+        if not ok:
+            await self._refund()
+            refunded = True
+        if self.job_id and _has_service_role():
+            await _patch_job(
+                self.job_id,
+                {
+                    "status": "succeeded" if ok else "failed",
+                    "result": result,
+                    "error": None if ok else f"{err_code};refunded",
+                    "finished_at": _now(),
+                },
+            )
+        return {
+            "ok": ok,
+            "token_balance": self.token_balance,
+            "tokens_before": self.tokens_before,
+            "tokens_after": self.token_balance,
+            "job_id": self.job_id,
+            "result": result,
+            "refunded": refunded,
+            "error": err_code,
+            "logs": self.tail(),
+            **(extra or {}),
+        }
+
+    async def fail_500(self, exc: BaseException) -> JSONResponse:
+        """Settle a run that blew up: always refund, always report the tail."""
+        self.settled = True
+        await self._refund()
+        if self.job_id and _has_service_role():
+            await _patch_job(
+                self.job_id,
+                {"status": "failed", "error": f"{exc};refunded", "finished_at": _now()},
+            )
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "detail": "farm_error",
+                "error": str(exc),
+                "token_balance": self.token_balance,
+                "tokens_before": self.tokens_before,
+                "refunded": True,
+                "logs": self.tail(),
+                "trace": traceback.format_exc()[-2000:],
+            },
+        )
+
+
+@asynccontextmanager
+async def _farm_job(
+    user: dict[str, Any],
+    reason: str,
+    job_fields: Optional[dict[str, Any]] = None,
+):
+    """Gate → consume 1 token → run_jobs row → hold the farm lock.
+
+    Raises 402/409 before spending anything, and refunds if the lock turns out
+    to be taken. The lock and the queue turn are always released on the way out.
+    """
+    global _farm_busy
+
+    await _require_farm_open()
+    profile = await load_profile(user)
+    uid = str(user["id"])
+    tokens_before = int(profile.get("token_balance") or 0)
+    if tokens_before < 1:
+        raise HTTPException(status_code=402, detail="insufficient_tokens")
+
+    gate = await _gate_for(uid)
+    if _farm_busy or not gate.get("can_run"):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
+        )
+    # Someone else holds the active turn and it is not mine
+    if gate.get("active") and not gate["active"].get("is_me") and gate.get("me", {}).get("status") != "active":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
+        )
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        cons = await client.post(
+            f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
+            headers=_sb_headers(SUPABASE_ANON_KEY, user["_access_token"]),
+            json={"p_reason": reason},
+        )
+    if cons.status_code != 200:
+        raise HTTPException(status_code=500, detail=f"consume_failed:{cons.text}")
+    cons_data = cons.json()
+    if not cons_data.get("ok"):
+        why = cons_data.get("reason", "consume_failed")
+        raise HTTPException(status_code=402 if why == "insufficient_tokens" else 400, detail=why)
+
+    job_id = None
+    if _has_service_role():
+        fields = {"score": 0, "coin": 0, "exp": 0, "ticket_count": 0, **(job_fields or {})}
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            jr = await client.post(
+                f"{SUPABASE_URL}/rest/v1/run_jobs",
+                headers={**_service_headers(), "Prefer": "return=representation"},
+                json={"user_id": uid, "status": "queued", **fields},
+            )
+            if jr.status_code < 300 and jr.json():
+                job_id = jr.json()[0]["id"]
+
+    if not _farm_lock.acquire(blocking=False):
+        bal = await _refund_token(uid, "farm_busy_refund")
+        gate2 = await _gate_for(uid)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "farm_busy",
+                "message": "farm_busy",
+                "gate": gate2,
+                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
+                "refunded": True,
+            },
+        )
+
+    _farm_busy = True
+    job = FarmJob(uid, tokens_before, cons_data.get("token_balance"), job_id)
+    try:
+        if _has_service_role():
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                await fq.mark_queue_done(client, SUPABASE_URL, _svc(), uid)
+                await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, job_id)
+            if job_id:
+                await _patch_job(job_id, {"status": "running", "started_at": _now()})
+        yield job
+    finally:
+        # A caller that never settled (unexpected raise) must not eat the token.
+        if not job.settled:
+            try:
+                await job.fail_500(RuntimeError("farm_job_unsettled"))
+            except Exception:
+                pass
+        _farm_busy = False
+        try:
+            _farm_lock.release()
+        except RuntimeError:
+            pass
+        if _has_service_role():
+            try:
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
+                    await fq.expire_stale_turns(client, SUPABASE_URL, _svc())
+                    await fq.promote_next(client, SUPABASE_URL, _svc())
+            except Exception:
+                pass
+
+
+# ---------------------------------------------------------------------------
 # Farm gate / queue
 # ---------------------------------------------------------------------------
 @app.get("/api/farm/gate")
@@ -1149,204 +1344,43 @@ async def farm_powder_estimate(
 
 @app.post("/api/farm/powder/run")
 async def farm_powder_run(body: PowderRunBody, user: dict[str, Any] = Depends(verify_user)):
-    global _farm_busy
-    await _require_farm_open()
-    profile = await load_profile(user)
-    token = user["_access_token"]
-    uid = user["id"]
-    tokens_before = int(profile.get("token_balance") or 0)
-
-    if tokens_before < 1:
-        raise HTTPException(status_code=402, detail="insufficient_tokens")
-
-    gate = await _gate_for(uid)
-    if _farm_busy or not gate.get("can_run"):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "farm_busy",
-                "message": "farm_busy",
-                "gate": gate,
-            },
-        )
-    if gate.get("active") and not gate["active"].get("is_me") and gate.get("me", {}).get("status") != "active":
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
-        )
-
+    uid = str(user["id"])
     row = _get_devplay_session(uid, body.devplay_session_id)
     if not row:
         raise HTTPException(status_code=401, detail="devplay_session_expired")
     if not row.get("powder_session"):
         raise HTTPException(status_code=400, detail="powder_session_missing")
 
-    dp_email = row.get("email")
-
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        cons = await client.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
-            headers=_sb_headers(SUPABASE_ANON_KEY, token),
-            json={"p_reason": "powder_run"},
-        )
-    if cons.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"consume_failed:{cons.text}")
-    cons_data = cons.json()
-    if not cons_data.get("ok"):
-        reason = cons_data.get("reason", "consume_failed")
-        code = 402 if reason == "insufficient_tokens" else 400
-        raise HTTPException(status_code=code, detail=reason)
-
-    job_id = None
-    if _has_service_role():
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            jr = await client.post(
-                f"{SUPABASE_URL}/rest/v1/run_jobs",
-                headers={
-                    **_service_headers(),
-                    "Prefer": "return=representation",
-                },
-                json={
-                    "user_id": uid,
-                    "status": "queued",
-                    "score": 0,
-                    "coin": 0,
-                    "exp": 0,
-                    "ticket_count": 0,
-                },
-            )
-            if jr.status_code < 300 and jr.json():
-                job_id = jr.json()[0]["id"]
-
-    if not _farm_lock.acquire(blocking=False):
-        bal = await _refund_token(uid, "farm_busy_refund")
-        gate2 = await _gate_for(uid)
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "farm_busy",
-                "message": "farm_busy",
-                "gate": gate2,
-                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
-                "refunded": True,
-            },
-        )
-
-    _farm_busy = True
-    logs: list[str] = []
-
-    def log_cb(msg: str) -> None:
-        logs.append(msg)
-
-    try:
-        if _has_service_role():
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                await fq.mark_queue_done(client, SUPABASE_URL, _svc(), uid)
-                await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, job_id)
-
-        if job_id and _has_service_role():
-            await _patch_job(job_id, {"status": "running", "started_at": _now()})
-
-        result = await asyncio.to_thread(
-            _run_powder_sync,
-            body.treasure_name,
-            dp_email,
-            row.get("powder_session"),
-            log_cb,
-        )
-
-        if result and result.get("powder_session"):
-            row["powder_session"] = result["powder_session"]
-        if result and result.get("coin_after") is not None:
-            row["coin"] = result["coin_after"]
-        if result and result.get("powder_after") is not None:
-            row["powder"] = result["powder_after"]
-
-        rounds_ok = int((result or {}).get("rounds") or 0)
-        powder_gained = int((result or {}).get("powder_gained") or 0)
-        ok = bool(result and result.get("ok") and powder_gained > 0)
-        token_balance = cons_data.get("token_balance")
-        refunded = False
-        err_code = None if ok else (result or {}).get("error") or "farm_error"
-
-        if not ok:
-            bal = await _refund_token(uid, "farm_fail_refund")
-            refunded = True
-            if bal is not None:
-                token_balance = bal
-            if job_id and _has_service_role():
-                await _patch_job(
-                    job_id,
-                    {
-                        "status": "failed",
-                        "result": result,
-                        "error": f"{err_code};refunded",
-                        "finished_at": _now(),
-                    },
-                )
-        elif job_id and _has_service_role():
-            await _patch_job(
-                job_id,
-                {
-                    "status": "succeeded",
-                    "result": result,
-                    "error": None,
-                    "finished_at": _now(),
-                },
-            )
-
-        return {
-            "ok": ok,
-            "mode": "powder",
-            "token_balance": token_balance,
-            "tokens_before": tokens_before,
-            "tokens_after": token_balance,
-            "job_id": job_id,
-            "result": result,
-            "powder_gained": powder_gained,
-            "rounds_completed": rounds_ok,
-            "refunded": refunded,
-            "error": err_code,
-            "logs": logs[-80:],
-        }
-    except Exception as exc:
-        bal = await _refund_token(uid, "farm_fail_refund")
-        if job_id and _has_service_role():
-            await _patch_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": f"{exc};refunded",
-                    "finished_at": _now(),
-                },
-            )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False,
-                "detail": "farm_error",
-                "error": str(exc),
-                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
-                "tokens_before": tokens_before,
-                "refunded": True,
-                "logs": logs[-80:],
-                "trace": traceback.format_exc()[-2000:],
-            },
-        )
-    finally:
-        _farm_busy = False
+    async with _farm_job(user, "powder_run") as job:
         try:
-            _farm_lock.release()
-        except RuntimeError:
-            pass
-        if _has_service_role():
-            try:
-                async with httpx.AsyncClient(timeout=20.0) as client:
-                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
-                    await fq.expire_stale_turns(client, SUPABASE_URL, _svc())
-                    await fq.promote_next(client, SUPABASE_URL, _svc())
-            except Exception:
-                pass
+            result = await asyncio.to_thread(
+                _run_powder_sync,
+                body.treasure_name,
+                row.get("email"),
+                row.get("powder_session"),
+                job.log_cb,
+            )
+
+            if result and result.get("powder_session"):
+                row["powder_session"] = result["powder_session"]
+            if result and result.get("coin_after") is not None:
+                row["coin"] = result["coin_after"]
+            if result and result.get("powder_after") is not None:
+                row["powder"] = result["powder_after"]
+
+            powder_gained = int((result or {}).get("powder_gained") or 0)
+            ok = bool(result and result.get("ok") and powder_gained > 0)
+            return await job.finish(
+                ok,
+                result,
+                extra={
+                    "mode": "powder",
+                    "powder_gained": powder_gained,
+                    "rounds_completed": int((result or {}).get("rounds") or 0),
+                },
+            )
+        except Exception as exc:
+            return await job.fail_500(exc)
 
 
 # ---------------------------------------------------------------------------
@@ -1354,34 +1388,7 @@ async def farm_powder_run(body: PowderRunBody, user: dict[str, Any] = Depends(ve
 # ---------------------------------------------------------------------------
 @app.post("/api/farm/run")
 async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user)):
-    global _farm_busy
-    await _require_farm_open()
-    profile = await load_profile(user)
-    token = user["_access_token"]
-    uid = user["id"]
-    tokens_before = int(profile.get("token_balance") or 0)
-
-    if tokens_before < 1:
-        raise HTTPException(status_code=402, detail="insufficient_tokens")
-
-    # Queue / busy gate BEFORE spending a token
-    gate = await _gate_for(uid)
-    if _farm_busy or not gate.get("can_run"):
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "farm_busy",
-                "message": "farm_busy",
-                "gate": gate,
-            },
-        )
-    # If someone holds an active turn and it's not me, block
-    if gate.get("active") and not gate["active"].get("is_me") and gate.get("me", {}).get("status") != "active":
-        raise HTTPException(
-            status_code=409,
-            detail={"code": "farm_busy", "message": "farm_busy", "gate": gate},
-        )
-
+    uid = str(user["id"])
     dp_email = body.email
     dp_password = body.password
     session_data = None
@@ -1404,172 +1411,46 @@ async def farm_run(body: FarmRunBody, user: dict[str, Any] = Depends(verify_user
                 },
             )
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        cons = await client.post(
-            f"{SUPABASE_URL}/rest/v1/rpc/consume_token",
-            headers=_sb_headers(SUPABASE_ANON_KEY, token),
-            json={"p_reason": "farm_run"},
-        )
-    if cons.status_code != 200:
-        raise HTTPException(status_code=500, detail=f"consume_failed:{cons.text}")
-    cons_data = cons.json()
-    if not cons_data.get("ok"):
-        reason = cons_data.get("reason", "consume_failed")
-        code = 402 if reason == "insufficient_tokens" else 400
-        raise HTTPException(status_code=code, detail=reason)
-
-    job_id = None
-    if _has_service_role():
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            jr = await client.post(
-                f"{SUPABASE_URL}/rest/v1/run_jobs",
-                headers={
-                    **_service_headers(),
-                    "Prefer": "return=representation",
-                },
-                json={
-                    "user_id": uid,
-                    "status": "queued",
-                    "score": body.score,
-                    "coin": body.coin,
-                    "exp": body.exp,
-                    "ticket_count": body.ticket_count,
-                },
-            )
-            if jr.status_code < 300 and jr.json():
-                job_id = jr.json()[0]["id"]
-
-    if not _farm_lock.acquire(blocking=False):
-        bal = await _refund_token(uid, "farm_busy_refund")
-        gate2 = await _gate_for(uid)
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "farm_busy",
-                "message": "farm_busy",
-                "gate": gate2,
-                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
-                "refunded": True,
-            },
-        )
-
-    _farm_busy = True
-    logs: list[str] = []
-
-    def log_cb(msg: str) -> None:
-        logs.append(msg)
-
-    try:
-        if _has_service_role():
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                await fq.mark_queue_done(client, SUPABASE_URL, _svc(), uid)
-                await fq.set_farm_lock(client, SUPABASE_URL, _svc(), uid, job_id)
-
-        if job_id and _has_service_role():
-            await _patch_job(job_id, {"status": "running", "started_at": _now()})
-
-        result = await asyncio.to_thread(
-            _run_farm_sync,
-            dp_email,
-            dp_password,
-            body.score,
-            body.coin,
-            body.exp,
-            body.ticket_count,
-            log_cb,
-            session_data,
-        )
-
-        rounds_ok = int((result or {}).get("rounds_completed") or 0)
-        ok = bool(result and result.get("ok") and rounds_ok > 0)
-        token_balance = cons_data.get("token_balance")
-        refunded = False
-        err_code = None if ok else (result or {}).get("error") or "farm_error"
-
-        # Refresh in-memory DevPlay session ticket balance after claim(s)
-        if body.devplay_session_id and (result or {}).get("party_run_tickets") is not None:
-            row = _devplay_sessions.get(body.devplay_session_id)
-            if row and row.get("user_id") == uid:
-                row["party_run_tickets"] = (result or {}).get("party_run_tickets")
-
-        if not ok:
-            bal = await _refund_token(uid, "farm_fail_refund")
-            refunded = True
-            if bal is not None:
-                token_balance = bal
-            if job_id and _has_service_role():
-                await _patch_job(
-                    job_id,
-                    {
-                        "status": "failed",
-                        "result": result,
-                        "error": f"{err_code};refunded",
-                        "finished_at": _now(),
-                    },
-                )
-        elif job_id and _has_service_role():
-            await _patch_job(
-                job_id,
-                {
-                    "status": "succeeded",
-                    "result": result,
-                    "error": None,
-                    "finished_at": _now(),
-                },
-            )
-
-        return {
-            "ok": ok,
-            "token_balance": token_balance,
-            "tokens_before": tokens_before,
-            "tokens_after": token_balance,
-            "job_id": job_id,
-            "result": result,
-            "ticket_count": body.ticket_count,
-            "rounds_completed": rounds_ok,
-            "party_run_tickets": (result or {}).get("party_run_tickets"),
-            "refunded": refunded,
-            "error": err_code,
-            "logs": logs[-80:],
-        }
-    except Exception as exc:
-        bal = await _refund_token(uid, "farm_fail_refund")
-        if job_id and _has_service_role():
-            await _patch_job(
-                job_id,
-                {
-                    "status": "failed",
-                    "error": f"{exc};refunded",
-                    "finished_at": _now(),
-                },
-            )
-        return JSONResponse(
-            status_code=500,
-            content={
-                "ok": False,
-                "detail": "farm_error",
-                "error": str(exc),
-                "token_balance": bal if bal is not None else cons_data.get("token_balance"),
-                "tokens_before": tokens_before,
-                "refunded": True,
-                "logs": logs[-80:],
-                "trace": traceback.format_exc()[-2000:],
-            },
-        )
-    finally:
-        _farm_busy = False
+    job_fields = {
+        "score": body.score,
+        "coin": body.coin,
+        "exp": body.exp,
+        "ticket_count": body.ticket_count,
+    }
+    async with _farm_job(user, "farm_run", job_fields) as job:
         try:
-            _farm_lock.release()
-        except RuntimeError:
-            pass
-        if _has_service_role():
-            try:
-                async with httpx.AsyncClient(timeout=20.0) as client:
-                    await fq.set_farm_lock(client, SUPABASE_URL, _svc(), None, None)
-                    await fq.expire_stale_turns(client, SUPABASE_URL, _svc())
-                    await fq.promote_next(client, SUPABASE_URL, _svc())
-            except Exception:
-                pass
+            result = await asyncio.to_thread(
+                _run_farm_sync,
+                dp_email,
+                dp_password,
+                body.score,
+                body.coin,
+                body.exp,
+                body.ticket_count,
+                job.log_cb,
+                session_data,
+            )
+
+            rounds_ok = int((result or {}).get("rounds_completed") or 0)
+            ok = bool(result and result.get("ok") and rounds_ok > 0)
+
+            # Refresh in-memory DevPlay session ticket balance after claim(s)
+            if body.devplay_session_id and (result or {}).get("party_run_tickets") is not None:
+                row = _devplay_sessions.get(body.devplay_session_id)
+                if row and row.get("user_id") == uid:
+                    row["party_run_tickets"] = (result or {}).get("party_run_tickets")
+
+            return await job.finish(
+                ok,
+                result,
+                extra={
+                    "ticket_count": body.ticket_count,
+                    "rounds_completed": rounds_ok,
+                    "party_run_tickets": (result or {}).get("party_run_tickets"),
+                },
+            )
+        except Exception as exc:
+            return await job.fail_500(exc)
 
 
 def _purge_devplay_sessions() -> None:
