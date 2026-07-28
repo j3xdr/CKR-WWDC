@@ -1,0 +1,22 @@
+.DS_Store
+*.log
+
+# Backend / confidential — tracked in private CKR-WWDC-server (keep locally if you dev full-stack)
+server/
+supabase/
+project_py/
+tools/
+MD/
+static/
+Procfile
+render.yaml
+requirements.txt
+.env
+.env.*
+!.env.example
+cookierun_level_table.md
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.supabase/
