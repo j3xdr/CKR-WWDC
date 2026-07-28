@@ -1,0 +1,11 @@
+============================================
+คำสั่งรัน Party Run Farm (partyrun_single_file.py)
+============================================
+
+1. ติดตั้งไลบรารีที่จำเป็น (ทำครั้งแรกครั้งเดียว):
+   pip install -r requirements.txt
+
+2. รันสคริปต์:
+   python partyrun_single_file.py
+
+* หมายเหตุ: อย่าลืมเปิดไฟล์ partyrun_single_file.py เพื่อตั้งค่า EMAIL และ PASSWORD ของคุณก่อนรัน
