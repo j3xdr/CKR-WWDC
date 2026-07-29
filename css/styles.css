@@ -4428,3 +4428,159 @@ body.tutorial-open {
     max-width: 8ch;
   }
 }
+
+/* ---------- Treasure upgrade tab ---------- */
+.upgrade-rng-banner {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 196, 120, 0.35);
+  background: rgba(255, 196, 120, 0.08);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.upgrade-rng-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.upgrade-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.upgrade-target-field {
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.upgrade-grid-hint {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+}
+
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 4px 2px 10px;
+  margin-bottom: 14px;
+}
+
+.upgrade-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px 8px;
+  border-radius: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  text-align: center;
+}
+
+.upgrade-card:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+}
+
+.upgrade-card.is-selected {
+  border-color: rgba(255, 214, 120, 0.85);
+  box-shadow: 0 0 0 1px rgba(255, 214, 120, 0.35);
+}
+
+.upgrade-card.is-maxed {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.upgrade-card.grade-S { border-color: rgba(255, 210, 90, 0.45); }
+.upgrade-card.grade-A { border-color: rgba(196, 130, 255, 0.45); }
+.upgrade-card.grade-B { border-color: rgba(120, 180, 255, 0.4); }
+.upgrade-card.grade-C { border-color: rgba(140, 220, 160, 0.4); }
+
+.upgrade-card-check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(0, 0, 0, 0.35);
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.upgrade-card.is-selected .upgrade-card-check {
+  background: rgba(255, 214, 120, 0.95);
+  color: #2a1600;
+  border-color: transparent;
+}
+
+.upgrade-card-img-wrap {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.upgrade-card-img {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.upgrade-card-fallback {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  border-radius: 10px;
+  color: #fff;
+}
+
+.upgrade-card-fallback.grade-S { background: linear-gradient(145deg, #d4a017, #8b6914); }
+.upgrade-card-fallback.grade-A { background: linear-gradient(145deg, #9b59d6, #5b2c8f); }
+.upgrade-card-fallback.grade-B { background: linear-gradient(145deg, #4a90d9, #1f4f8a); }
+.upgrade-card-fallback.grade-C { background: linear-gradient(145deg, #5cb87a, #2d6b45); }
+
+.upgrade-card-name {
+  font-size: 0.72rem;
+  line-height: 1.25;
+  max-height: 2.5em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.upgrade-card-meta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.btn-run-upgrade {
+  --run-accent: #e8b84a;
+}

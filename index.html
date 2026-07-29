@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260728-pos1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260729-upg1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -212,6 +212,10 @@
           <button type="button" class="pos-side-link" id="farm-tab-giftdraw" data-tab="giftdraw" aria-controls="farm-panel-giftdraw">
             <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
             <span>Gift Draw</span>
+          </button>
+          <button type="button" class="pos-side-link" id="farm-tab-upgrade" data-tab="upgrade" aria-controls="farm-panel-upgrade">
+            <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
+            <span>ตีบวก</span>
           </button>
         </aside>
 
@@ -618,6 +622,68 @@
                   </span>
                 </button>
               </div>
+
+              <div class="farm-tab-panel hidden" id="farm-panel-upgrade" role="tabpanel" hidden>
+                <div class="upgrade-rng-banner" id="upgrade-rng-banner" role="note">
+                  <p><strong>คำเตือน:</strong> การตีบวกมีโอกาสแห้ว — เหรียญจะหายแม้ไม่ติดระดับ (ใช้ coin เท่านั้น ไม่ใช้เพชร)</p>
+                  <label class="upgrade-rng-check">
+                    <input type="checkbox" id="upgrade-rng-accept" disabled />
+                    <span>ยอมรับความเสี่ยง RNG ก่อนเริ่ม</span>
+                  </label>
+                </div>
+
+                <div class="upgrade-toolbar">
+                  <label class="field upgrade-target-field">
+                    <span>เป้าหมายต่อชิ้น</span>
+                    <select id="upgrade-target-level" disabled>
+                      <option value="9" selected>+9 (สูงสุด)</option>
+                      <option value="8">+8</option>
+                      <option value="7">+7</option>
+                      <option value="6">+6</option>
+                      <option value="5">+5</option>
+                      <option value="4">+4</option>
+                      <option value="3">+3</option>
+                      <option value="2">+2</option>
+                      <option value="1">+1</option>
+                    </select>
+                  </label>
+                  <button type="button" class="btn btn-ghost btn-sm" id="upgrade-reload-btn" disabled>โหลดคลังใหม่</button>
+                </div>
+
+                <p class="upgrade-grid-hint muted" id="upgrade-grid-hint">เชื่อม DevPlay เพื่อดูสมบัติในตัว</p>
+                <div class="upgrade-grid" id="upgrade-grid" aria-live="polite"></div>
+
+                <div class="powder-estimate" id="upgrade-estimate" aria-live="polite">
+                  <p class="powder-estimate-target muted" id="upgrade-estimate-target">เลือกสมบัติเพื่อดูประมาณการ</p>
+                  <dl class="powder-estimate-stats">
+                    <div>
+                      <dt>เลือกแล้ว</dt>
+                      <dd id="upgrade-stat-selected">0 ชิ้น</dd>
+                    </div>
+                    <div>
+                      <dt>ใช้โทเค็น</dt>
+                      <dd id="upgrade-stat-tokens">0</dd>
+                    </div>
+                    <div>
+                      <dt>coin สูงสุด (worst)</dt>
+                      <dd id="upgrade-stat-worst">—</dd>
+                    </div>
+                    <div>
+                      <dt>coin ในไอดี</dt>
+                      <dd id="upgrade-stat-coin">—</dd>
+                    </div>
+                  </dl>
+                  <p class="powder-estimate-note muted" id="upgrade-estimate-note"></p>
+                </div>
+
+                <button class="btn btn-run btn-run-upgrade hidden" type="submit" id="upgrade-btn" disabled hidden>
+                  <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
+                  <span class="btn-run-copy">
+                    <span class="btn-run-title">เริ่มตีบวกสมบัติ</span>
+                    <span class="btn-run-sub" id="upgrade-btn-sub">เชื่อม DevPlay ก่อน</span>
+                  </span>
+                </button>
+              </div>
             </div>
 
             <p id="farm-status" class="status" role="status"></p>
@@ -844,7 +910,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260728-pos1"></script>
-  <script src="js/app.js?v=20260728-pos1"></script>
+  <script src="js/config.js?v=20260729-upg1"></script>
+  <script src="js/app.js?v=20260729-upg2"></script>
 </body>
 </html>

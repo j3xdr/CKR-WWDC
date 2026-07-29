@@ -397,6 +397,13 @@
   let heartMax = 300;
   let heartEstimate = null;
   let heartEstimateLoading = false;
+  let upgradeTreasures = [];
+  let upgradeSelected = new Set();
+  let upgradeTargetLevel = 9;
+  let upgradeEstimate = null;
+  let upgradeEstimateLoading = false;
+  let upgradeRngAccepted = false;
+  let upgradeCoin = 0;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 1;
@@ -1053,6 +1060,7 @@
     powder: "ฟาร์มผง",
     giftdraw: "เปิดกล่องขวัญ",
     heart: "ฟาร์มหัวใจ",
+    upgrade: "ตีบวกสมบัติ",
   };
 
   // Rough wait: everyone ahead of you gets up to one full turn. It is an upper
@@ -1626,6 +1634,9 @@
     if (farmTab === "giftdraw") {
       refreshGiftDrawEstimate().catch(() => {});
     }
+    if (farmTab === "upgrade") {
+      loadUpgradeTreasures(true).catch(() => {});
+    }
     if (farmTab === "heart") {
       // Heart's check logs into the game, so it stays an explicit button press
       // rather than firing on every tab switch.
@@ -1716,8 +1727,8 @@
   }
 
   function switchFarmTab(tab) {
-    farmTab = ["powder", "giftdraw", "heart"].includes(tab) ? tab : "partyrun";
-    ["partyrun", "heart", "powder", "giftdraw"].forEach((t) => {
+    farmTab = ["powder", "giftdraw", "heart", "upgrade"].includes(tab) ? tab : "partyrun";
+    ["partyrun", "heart", "powder", "giftdraw", "upgrade"].forEach((t) => {
       const btn = $("farm-tab-" + t);
       const panel = $("farm-panel-" + t);
       const active = t === farmTab;
@@ -1735,6 +1746,7 @@
     const powderBtn = $("powder-btn");
     const giftdrawBtn = $("giftdraw-btn");
     const heartBtn = $("heart-btn");
+    const upgradeBtn = $("upgrade-btn");
     const ticketStepper = $("farm-panel-partyrun")?.querySelector(".ticket-stepper");
     if (partyBtn) {
       partyBtn.hidden = farmTab !== "partyrun";
@@ -1752,6 +1764,10 @@
       heartBtn.hidden = farmTab !== "heart";
       heartBtn.classList.toggle("hidden", farmTab !== "heart");
     }
+    if (upgradeBtn) {
+      upgradeBtn.hidden = farmTab !== "upgrade";
+      upgradeBtn.classList.toggle("hidden", farmTab !== "upgrade");
+    }
     if (ticketStepper) ticketStepper.hidden = farmTab !== "partyrun";
     updateFarmAvailability();
     if (farmTab === "powder") {
@@ -1760,6 +1776,9 @@
     }
     if (farmTab === "giftdraw") {
       refreshGiftDrawEstimate().catch(() => {});
+    }
+    if (farmTab === "upgrade") {
+      loadUpgradeTreasures(false).catch(() => {});
     }
   }
 
@@ -2116,6 +2135,232 @@
     }
   }
 
+  /* ---------- Treasure upgrade ---------- */
+  const TREASURE_IMAGE_CDN = "https://link.clashofdragons.com/images/treasures";
+
+  function upgradeImageSrc(t) {
+    const name = (t?.name || "").trim();
+    if (!name) return "";
+    return TREASURE_IMAGE_CDN + "/" + encodeURIComponent(name) + ".png";
+  }
+
+  function getSelectedUpgradeItems() {
+    return upgradeTreasures.filter((t) => upgradeSelected.has(t.uuid) && t.can_upgrade);
+  }
+
+  function paintUpgradeEstimate() {
+    const selected = getSelectedUpgradeItems();
+    const selEl = $("upgrade-stat-selected");
+    const tokEl = $("upgrade-stat-tokens");
+    const worstEl = $("upgrade-stat-worst");
+    const coinEl = $("upgrade-stat-coin");
+    const targetEl = $("upgrade-estimate-target");
+    const noteEl = $("upgrade-estimate-note");
+    if (coinEl) coinEl.textContent = formatNumTh(upgradeCoin);
+    if (selEl) selEl.textContent = formatNumTh(selected.length) + " ชิ้น";
+    if (tokEl) tokEl.textContent = formatNumTh(selected.length);
+    if (!selected.length) {
+      if (targetEl) targetEl.textContent = "เลือกสมบัติเพื่อดูประมาณการ";
+      if (worstEl) worstEl.textContent = "—";
+      if (noteEl) noteEl.textContent = "";
+      return;
+    }
+    let worst = 0;
+    selected.forEach((t) => {
+      const est = (upgradeEstimate?.estimates || []).find((x) => x.uuid === t.uuid);
+      worst += Number(est?.worst_case_coin || 0);
+    });
+    if (worstEl) worstEl.textContent = formatNumTh(worst) + " coin";
+    if (targetEl) {
+      targetEl.textContent =
+        "เป้าหมาย +"+ upgradeTargetLevel + " · 1 โทเค็น/ชิ้น · อาจแห้วได้";
+    }
+    if (noteEl) {
+      noteEl.textContent =
+        worst > upgradeCoin
+          ? "coin อาจไม่พอถึงเป้า — ระบบจะหยุดและรายงาน partial"
+          : "ค่าใช้จ่ายจริงขึ้นกับ RNG — worst case คือแห้วทุกครั้ง";
+    }
+  }
+
+  function paintUpgradeGrid() {
+    const grid = $("upgrade-grid");
+    const hint = $("upgrade-grid-hint");
+    if (!grid) return;
+    grid.innerHTML = "";
+    if (!isDevPlayConnected()) {
+      if (hint) hint.textContent = "เชื่อม DevPlay เพื่อดูสมบัติในตัว";
+      return;
+    }
+    if (!upgradeTreasures.length) {
+      if (hint) hint.textContent = "ไม่พบสมบัติในคลัง (หรือยังไม่ได้โหลด)";
+      return;
+    }
+    if (hint) hint.textContent = "เลือกได้หลายชิ้น — รันทีละชิ้น (หักโทเค็นต่อชิ้น)";
+    upgradeTreasures.forEach((t) => {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className =
+        "upgrade-card grade-" +
+        escapeHtml((t.grade || "S").toUpperCase()) +
+        (upgradeSelected.has(t.uuid) ? " is-selected" : "") +
+        (t.can_upgrade ? "" : " is-maxed");
+      card.disabled = !t.can_upgrade || farmRunning || devplayConnecting;
+      card.dataset.uuid = t.uuid;
+      const check = document.createElement("span");
+      check.className = "upgrade-card-check";
+      check.textContent = upgradeSelected.has(t.uuid) ? "✓" : "";
+      const imgWrap = document.createElement("div");
+      imgWrap.className = "upgrade-card-img-wrap";
+      const src = t.image_url || upgradeImageSrc(t);
+      if (src) {
+        const img = document.createElement("img");
+        img.className = "upgrade-card-img";
+        img.alt = "";
+        img.loading = "lazy";
+        img.src = src;
+        img.onerror = () => {
+          img.remove();
+          const fb = document.createElement("div");
+          fb.className = "upgrade-card-fallback grade-" + (t.grade || "S").toUpperCase();
+          fb.textContent = (t.grade || "S").toUpperCase();
+          imgWrap.appendChild(fb);
+        };
+        imgWrap.appendChild(img);
+      } else {
+        const fb = document.createElement("div");
+        fb.className = "upgrade-card-fallback grade-" + (t.grade || "S").toUpperCase();
+        fb.textContent = (t.grade || "S").toUpperCase();
+        imgWrap.appendChild(fb);
+      }
+      const name = document.createElement("div");
+      name.className = "upgrade-card-name";
+      name.textContent = t.name || "Treasure";
+      const meta = document.createElement("div");
+      meta.className = "upgrade-card-meta";
+      meta.textContent = (t.grade || "S") + " · +" + (t.tag ?? t.level ?? 0);
+      card.append(check, imgWrap, name, meta);
+      card.addEventListener("click", () => {
+        if (!t.can_upgrade) return;
+        if (upgradeSelected.has(t.uuid)) upgradeSelected.delete(t.uuid);
+        else upgradeSelected.add(t.uuid);
+        paintUpgradeGrid();
+        refreshUpgradeEstimate().catch(() => {});
+        updateFarmAvailability();
+      });
+      grid.appendChild(card);
+    });
+    paintUpgradeEstimate();
+  }
+
+  async function loadUpgradeTreasures(force) {
+    if (!isDevPlayConnected()) {
+      upgradeTreasures = [];
+      upgradeSelected.clear();
+      paintUpgradeGrid();
+      return;
+    }
+    if (upgradeTreasures.length && !force) {
+      paintUpgradeGrid();
+      return;
+    }
+    try {
+      await ensureApiReady();
+      const data = await api(
+        "/api/farm/upgrade/treasures?devplay_session_id=" +
+          encodeURIComponent(devplaySession.id)
+      );
+      upgradeTreasures = Array.isArray(data.treasures) ? data.treasures : [];
+      upgradeCoin = Number(data.coin || 0);
+      const valid = new Set(upgradeTreasures.map((t) => t.uuid));
+      upgradeSelected.forEach((id) => {
+        if (!valid.has(id)) upgradeSelected.delete(id);
+      });
+      paintUpgradeGrid();
+      await refreshUpgradeEstimate();
+    } catch (e) {
+      upgradeTreasures = [];
+      paintUpgradeGrid();
+      const msg = thError(e.message);
+      if (msg) setStatus($("farm-status"), msg, "err");
+    }
+  }
+
+  async function refreshUpgradeEstimate() {
+    const selected = getSelectedUpgradeItems();
+    if (!selected.length || !isDevPlayConnected()) {
+      upgradeEstimate = null;
+      paintUpgradeEstimate();
+      return;
+    }
+    upgradeEstimateLoading = true;
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const items = selected.map((t) => ({
+        uuid: t.uuid,
+        group_seq: t.group_seq,
+        grade: t.grade || "S",
+        target_level: upgradeTargetLevel,
+      }));
+      upgradeEstimate = await api("/api/farm/upgrade/estimate", {
+        method: "POST",
+        body: {
+          devplay_session_id: devplaySession.id,
+          items,
+        },
+      });
+      if (upgradeEstimate?.coin != null) upgradeCoin = Number(upgradeEstimate.coin);
+    } catch (_) {
+      upgradeEstimate = null;
+    } finally {
+      upgradeEstimateLoading = false;
+      paintUpgradeEstimate();
+      updateFarmAvailability();
+    }
+  }
+
+  function showUpgradeConfirmModal(items) {
+    const n = items.length;
+    const worst =
+      upgradeEstimate?.total_worst_case_coin != null
+        ? formatNumTh(upgradeEstimate.total_worst_case_coin)
+        : "—";
+    return new Promise((resolve) => {
+      clearModalActions();
+      openModal({
+        mode: "confirm",
+        title: "ยืนยันตีบวกสมบัติ?",
+        body:
+          "ตีบวก " +
+          formatNumTh(n) +
+          " ชิ้น → เป้า +" +
+          upgradeTargetLevel +
+          "\nหัก " +
+          formatNumTh(n) +
+          " โทเค็น (ชิ้นละ 1)\n" +
+          "coin สูงสุด (worst): " +
+          worst +
+          "\n⚠ แห้วได้ — coin หายแม้ไม่ติดระดับ",
+        icon: "assets/tr_ga170.png",
+        locked: false,
+      });
+      modalActions.classList.add("row");
+      modalActions.appendChild(
+        makeBtn("ยกเลิก", "btn-ghost", () => {
+          forceCloseModal();
+          resolve(false);
+        })
+      );
+      modalActions.appendChild(
+        makeBtn("ยืนยัน", "btn-candy", () => {
+          forceCloseModal();
+          resolve(true);
+        })
+      );
+    });
+  }
+
   /* ---------- Heart farm ---------- */
   function clampHeartTarget(value) {
     const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
@@ -2248,6 +2493,11 @@
     const heartBtn = $("heart-btn");
     const heartCheckBtn = $("heart-check-btn");
     const heartSub = $("heart-btn-sub");
+    const upgradeBtn = $("upgrade-btn");
+    const upgradeSub = $("upgrade-btn-sub");
+    const upgradeRng = $("upgrade-rng-accept");
+    const upgradeTarget = $("upgrade-target-level");
+    const upgradeReload = $("upgrade-reload-btn");
     const empty = !hasTokens();
     const credsReady = hasDevPlayCreds();
     const connected = isDevPlayConnected();
@@ -2281,6 +2531,7 @@
       if (btn && !farmRunning) btn.disabled = true;
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
       if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
+      if (upgradeBtn && !farmRunning) upgradeBtn.disabled = true;
       if (heartSub) {
         if (heartOffline) heartSub.textContent = "ฟาร์มหัวใจยังไม่เปิด";
         else if (!credsReady) heartSub.textContent = "กรอกบัญชีเกมก่อน";
@@ -2302,6 +2553,7 @@
       if (btn && !farmRunning) btn.disabled = true;
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
       if (heartBtn && !farmRunning) heartBtn.disabled = true;
+      if (upgradeBtn && !farmRunning) upgradeBtn.disabled = true;
       if (giftdrawSub) {
         if (!connected) giftdrawSub.textContent = "เชื่อม DevPlay ก่อน";
         else if (giftdrawEstimateLoading) giftdrawSub.textContent = "กำลังนับกล่อง…";
@@ -2311,6 +2563,39 @@
             "เปิด " + formatNumTh(giftdrawCount) + " กล่อง · หัก 1 โทเค็น";
         }
       }
+    } else if (farmTab === "upgrade") {
+      const selected = getSelectedUpgradeItems();
+      const needTokens = selected.length;
+      const blocked =
+        !connected ||
+        upgradeEstimateLoading ||
+        !selected.length ||
+        !upgradeRngAccepted ||
+        needTokens > Number(tokenBalance());
+      if (upgradeBtn && !farmRunning) {
+        upgradeBtn.disabled = empty || busy || blocked;
+      }
+      if (btn && !farmRunning) btn.disabled = true;
+      if (powderBtn && !farmRunning) powderBtn.disabled = true;
+      if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
+      if (heartBtn && !farmRunning) heartBtn.disabled = true;
+      const canPick = connected && !farmRunning && !devplayConnecting;
+      if (upgradeRng) upgradeRng.disabled = !canPick;
+      if (upgradeTarget) upgradeTarget.disabled = !canPick;
+      if (upgradeReload) upgradeReload.disabled = !canPick;
+      if (upgradeSub) {
+        if (!connected) upgradeSub.textContent = "เชื่อม DevPlay ก่อน";
+        else if (!selected.length) upgradeSub.textContent = "เลือกสมบัติก่อน";
+        else if (!upgradeRngAccepted) upgradeSub.textContent = "ยอมรับความเสี่ยง RNG ก่อน";
+        else if (needTokens > Number(tokenBalance())) {
+          upgradeSub.textContent = "โทเค็นไม่พอ (" + formatNumTh(needTokens) + " ชิ้น)";
+        } else if (upgradeEstimateLoading) upgradeSub.textContent = "กำลังคำนวณ…";
+        else {
+          upgradeSub.textContent =
+            formatNumTh(needTokens) + " ชิ้น · หัก " + formatNumTh(needTokens) + " โทเค็น";
+        }
+      }
+      paintUpgradeEstimate();
     } else if (isPowder) {
       const powderBlocked =
         !connected || powderEstimateLoading || !powderEstimate?.can_run;
@@ -2329,6 +2614,7 @@
       }
       if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
       if (heartBtn && !farmRunning) heartBtn.disabled = true;
+      if (upgradeBtn && !farmRunning) upgradeBtn.disabled = true;
       paintPowderStepper();
       const search = $("powder-treasure-search");
       const sel = $("powder-treasure-select");
@@ -2339,6 +2625,7 @@
       if (powderBtn && !farmRunning) powderBtn.disabled = true;
       if (giftdrawBtn && !farmRunning) giftdrawBtn.disabled = true;
       if (heartBtn && !farmRunning) heartBtn.disabled = true;
+      if (upgradeBtn && !farmRunning) upgradeBtn.disabled = true;
       if (btn && !farmRunning) {
         btn.disabled = empty || !connected || busy || noTickets;
       }
@@ -3155,6 +3442,20 @@
         return "กำลังฟาร์มผง…";
       },
     },
+    upgrade: {
+      title: "สถานะตีบวกสมบัติ",
+      runningSub: "กำลังตีบวก… ห้ามปิดจนกว่าจะเสร็จ",
+      heroIcon: "assets/tr_ga170.png",
+      steps: [
+        { id: "login", label: "เข้าสู่ระบบเกม" },
+        { id: "upgrade", label: "ตีบวกสมบัติ" },
+        { id: "done", label: "สรุปผล" },
+      ],
+      progressText(current, total) {
+        if (total > 0) return "ชิ้นที่ " + formatNumTh(current) + "/" + formatNumTh(total);
+        return "กำลังตีบวกสมบัติ…";
+      },
+    },
   };
 
   let pipelineState = null;
@@ -3250,6 +3551,15 @@
         }
         if (/powder:\s*loading/i.test(s)) out.stepIdx = 0;
         if (/ซื้อ|buy/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
+      } else if (mode === "upgrade") {
+        const m = s.match(/upgrade\s+\[(\d+)\]/i);
+        if (m) {
+          out.current = Number(m[1]);
+          out.phase = "upgrade";
+          out.stepIdx = 1;
+        }
+        if (/upgrade:\s*refresh|initMember/i.test(s)) out.stepIdx = 0;
+        if (/SUCCESS|FAIL|coin ไม่พอ/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
       }
     }
 
@@ -3279,6 +3589,12 @@
     if (mode === "powder" && /\[(\d+)\]\s+\+\d+\s+powder/i.test(s)) {
       const m = s.match(/\[(\d+)\]\s+\+(\d+)\s+powder\s+gained=(\d+)\/(\d+)/i);
       if (m) return "รอบ " + m[1] + " +" + formatNumTh(m[2]) + " ผง (" + formatNumTh(m[3]) + "/" + formatNumTh(m[4]) + ")";
+    }
+    if (mode === "upgrade" && /upgrade\s+\[/i.test(s)) {
+      if (/SUCCESS/i.test(s)) return truncateLogLine(s.replace(/upgrade\s+\[\d+\]\s*/i, "✅ "), 140);
+      if (/FAIL/i.test(s)) return truncateLogLine(s.replace(/upgrade\s+\[\d+\]\s*/i, "❌ "), 140);
+      if (/coin ไม่พอ/i.test(s)) return truncateLogLine(s, 140);
+      return truncateLogLine(s, 140);
     }
     if (s.length > 160 || /[{}\[\]]/.test(s)) return "";
     return truncateLogLine(s, 160);
@@ -3710,6 +4026,9 @@
       } else if (m === "powder") {
         if (/login/i.test(errCode)) failId = "login";
         else failId = "extract";
+      } else if (m === "upgrade") {
+        if (/login|session/i.test(errCode)) failId = "login";
+        else failId = "upgrade";
       }
       const alreadyErr = steps.some((s) => pipelineState.kinds[s.id] === "err");
       const errMsg = farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -4225,6 +4544,136 @@
     $("modal-body")?.classList.add("result-stagger");
     spawnPixelConfetti();
     modalActions.appendChild(makeBtn("ตกลง", "btn-candy", () => forceCloseModal()));
+  }
+
+  async function runUpgrade() {
+    const items = getSelectedUpgradeItems();
+    if (!items.length) {
+      showErrorModal("เลือกสมบัติที่จะตีบวกก่อน", "ยังไม่ได้เลือก");
+      return;
+    }
+    if (!hasTokens()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    if (!upgradeRngAccepted) {
+      showErrorModal("ต้องยอมรับความเสี่ยง RNG ก่อนเริ่ม", "ยังไม่ยืนยัน");
+      return;
+    }
+    if (items.length > tokenBalance()) {
+      showEmptyCoinsModal();
+      return;
+    }
+
+    const btn = $("upgrade-btn");
+    const tokensBefore = tokenBalance();
+    farmRunning = true;
+    if (btn) btn.disabled = true;
+    setStatus(
+      $("farm-status"),
+      "กำลังตีบวก " + formatNumTh(items.length) + " ชิ้น…",
+      "muted"
+    );
+    startLiveStages({ mode: "upgrade", target: items.length });
+
+    const allLogs = [];
+    let lastResult = null;
+    let anyOk = false;
+    let completed = 0;
+
+    try {
+      await ensureApiReady();
+      for (let i = 0; i < items.length; i++) {
+        if (!hasTokens()) break;
+        const item = items[i];
+        setStatus(
+          $("farm-status"),
+          "ชิ้นที่ " + (i + 1) + "/" + items.length + ": " + (item.name || "สมบัติ") + "…",
+          "muted"
+        );
+        const data = await api("/api/farm/upgrade/run", {
+          method: "POST",
+          body: {
+            devplay_session_id: devplaySession.id,
+            uuid: item.uuid,
+            group_seq: item.group_seq,
+            grade: item.grade || "S",
+            target_level: upgradeTargetLevel,
+            name: item.name || "",
+          },
+        });
+        if (typeof data.token_balance === "number") {
+          profile.token_balance = data.token_balance;
+          paintProfile();
+        }
+        const result = data.result || data;
+        lastResult = result;
+        allLogs.push(...(data.logs || []));
+        completed += 1;
+        if (data.ok) anyOk = true;
+        upgradeSelected.delete(item.uuid);
+        if (!data.ok && !result?.partial) {
+          break;
+        }
+      }
+
+      clearStageTimer();
+      await refreshMe().catch(() => {});
+
+      if (anyOk) {
+        setStatus(
+          $("farm-status"),
+          "ตีบวกเสร็จ " + formatNumTh(completed) + "/" + formatNumTh(items.length) + " ชิ้น",
+          "ok"
+        );
+        buildFinalPipeline(allLogs, lastResult || {}, true, "upgrade");
+        clearQueuedRun();
+        stopQueuePoll();
+        refreshGateAndQueueUi().catch(() => {});
+        loadUpgradeTreasures(true).catch(() => {});
+        loadFarmHistory().catch(() => {});
+      } else {
+        buildFinalPipeline(allLogs, lastResult || {}, false, "upgrade");
+        const msg =
+          farmErrorMessage(lastResult, "ตีบวกไม่สำเร็จ") +
+          (lastResult?.partial ? " · ได้บางส่วน (partial)" : "");
+        setStatus($("farm-status"), msg, "err");
+        loadUpgradeTreasures(true).catch(() => {});
+        loadFarmHistory().catch(() => {});
+      }
+    } catch (e) {
+      clearStageTimer();
+      if (/account_banned/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
+      } else if (/maintenance/i.test(String(e.message || ""))) {
+        forceCloseRunStatusPopup();
+        showErrorModal(ERR_TH.maintenance, "ปิดปรับปรุง");
+      } else if (e.status === 401 || /devplay_session_expired/i.test(String(e.message))) {
+        forceCloseRunStatusPopup();
+        resetDevPlaySession();
+        showErrorModal(ERR_TH.devplay_session_expired, "เชื่อมใหม่");
+      } else if (e.status === 409) {
+        buildFinalPipeline(allLogs, lastResult || {}, anyOk, "upgrade");
+        await enterQueueFor(e.gate || e.data?.detail?.gate, runUpgrade);
+      } else {
+        buildFinalPipeline(
+          allLogs.length ? allLogs : e.data?.logs || [],
+          e.data?.result || { error: e.message },
+          anyOk,
+          "upgrade"
+        );
+        setStatus($("farm-status"), thError(e.message) || "ตีบวกไม่สำเร็จ", "err");
+      }
+    } finally {
+      farmRunning = false;
+      updateFarmAvailability();
+      paintUpgradeGrid();
+    }
   }
 
   async function runHeart() {
@@ -4825,6 +5274,21 @@
   $("farm-tab-partyrun")?.addEventListener("click", () => switchFarmTab("partyrun"));
   $("farm-tab-powder")?.addEventListener("click", () => switchFarmTab("powder"));
   $("farm-tab-giftdraw")?.addEventListener("click", () => switchFarmTab("giftdraw"));
+  $("farm-tab-upgrade")?.addEventListener("click", () => switchFarmTab("upgrade"));
+
+  $("upgrade-rng-accept")?.addEventListener("change", (ev) => {
+    upgradeRngAccepted = !!ev.target.checked;
+    updateFarmAvailability();
+  });
+
+  $("upgrade-target-level")?.addEventListener("change", (ev) => {
+    upgradeTargetLevel = Number(ev.target.value) || 9;
+    refreshUpgradeEstimate().catch(() => {});
+  });
+
+  $("upgrade-reload-btn")?.addEventListener("click", () => {
+    loadUpgradeTreasures(true).catch(() => {});
+  });
 
   $("powder-treasure-select")?.addEventListener("change", (ev) => {
     powderTreasureName = ev.target.value || powderTreasureName;
@@ -4911,6 +5375,40 @@
         return;
       }
       await runHeart();
+      return;
+    }
+
+    if (farmTab === "upgrade") {
+      if (!isDevPlayConnected()) {
+        showErrorModal("เชื่อม DevPlay ก่อนตีบวกสมบัติ", "ยังไม่ได้เชื่อม");
+        return;
+      }
+      const upgradeItems = getSelectedUpgradeItems();
+      if (!upgradeItems.length) {
+        showErrorModal("เลือกสมบัติที่จะตีบวกก่อน", "ยังไม่ได้เลือก");
+        return;
+      }
+      if (!upgradeRngAccepted) {
+        showErrorModal("ต้องยอมรับความเสี่ยง RNG ก่อนเริ่ม", "ยังไม่ยืนยัน");
+        return;
+      }
+      if (upgradeItems.length > tokenBalance()) {
+        showEmptyCoinsModal();
+        return;
+      }
+      const upgradeConfirmed = await showUpgradeConfirmModal(upgradeItems);
+      if (!upgradeConfirmed) {
+        setStatus($("farm-status"), "ยกเลิกแล้ว — ยังไม่หักโทเค็น", "muted");
+        return;
+      }
+      try {
+        await refreshMe();
+      } catch (_) {}
+      if (!hasTokens() || upgradeItems.length > tokenBalance()) {
+        showEmptyCoinsModal();
+        return;
+      }
+      await runUpgrade();
       return;
     }
 
