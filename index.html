@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260729-upg1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260731-q1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -30,44 +30,62 @@
         <span class="brand-sub">คุกกี้ฟาร์ม</span>
       </span>
     </a>
-    <nav class="pos-nav hidden" id="pos-nav" aria-label="เมนูหลัก">
-      <button type="button" class="pos-nav-link is-active" id="pos-nav-farm" data-pos-view="farm">ฟาร์ม</button>
-      <button type="button" class="pos-nav-link" id="pos-nav-topup" data-pos-view="topup">เติมเงิน</button>
-      <button type="button" class="pos-nav-link" id="pos-nav-history" data-pos-view="history">ประวัติ</button>
-    </nav>
-    <div class="topbar-actions">
-      <div class="topbar-user hidden" id="topbar-user">
-        <img class="topbar-user-avatar" src="assets/notice_b20.png" alt="" width="28" height="28" />
-        <span id="who-user" class="topbar-user-name">—</span>
+    <div class="topbar-end">
+      <nav class="pos-nav pos-nav--bar hidden" id="pos-nav" aria-label="เมนูหลัก">
+        <button type="button" class="pos-nav-link is-active" id="pos-nav-farm" data-pos-view="farm">ฟาร์ม</button>
+        <button
+          type="button"
+          class="pos-nav-link"
+          id="pos-nav-topup"
+          data-pos-view="topup"
+          aria-haspopup="dialog"
+          aria-controls="vault-modal"
+          aria-expanded="false"
+        >
+          ต่ออายุ
+        </button>
+        <button type="button" class="pos-nav-link" id="pos-nav-history" data-pos-view="history">ประวัติ</button>
+      </nav>
+      <div class="topbar-actions topbar-actions--bar hidden" id="topbar-actions-bar">
+        <div class="topbar-user toolbar-chip hidden" id="topbar-user">
+          <img class="topbar-user-avatar" src="assets/notice_b20.png" alt="" width="24" height="24" />
+          <span id="who-user" class="topbar-user-name">—</span>
+        </div>
+        <div id="nav-balance" class="rental-chip toolbar-chip hidden" title="สิทธิ์เช่า">
+          <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="18" height="18" />
+          <span id="nav-balance-num">0</span>
+        </div>
+        <button type="button" id="logout-btn" class="btn-toolbar btn-logout toolbar-chip hidden" aria-label="ออกจากระบบ" title="ออกจากระบบ">
+          <svg class="logout-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M10 17l5-5-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M15 12H4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+            <path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="logout-text">ออก</span>
+        </button>
       </div>
-      <button
-        type="button"
-        class="btn btn-candy btn-topup-chip hidden"
-        id="topup-toggle"
-        aria-haspopup="dialog"
-        aria-controls="vault-modal"
-        aria-expanded="false"
-      >
-        <img src="assets/coin.png" alt="" width="18" height="18" />
-        <span>เติมโทเค็น</span>
-      </button>
-      <div id="nav-balance" class="token-chip hidden" title="โทเค็นคงเหลือ">
-        <img src="assets/coin.png" alt="" width="18" height="18" />
-        <span id="nav-balance-num">0</span>
+      <div class="topbar-actions topbar-actions--compact hidden" id="topbar-actions-compact">
+        <div id="nav-balance-compact" class="rental-chip toolbar-chip hidden" title="สิทธิ์เช่า">
+          <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="18" height="18" />
+          <span id="nav-balance-num-compact">0</span>
+        </div>
+        <button
+          type="button"
+          id="topbar-menu-toggle"
+          class="btn-toolbar btn-menu"
+          aria-expanded="false"
+          aria-controls="farm-sidebar"
+          aria-label="เปิดเมนู"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
-      <div id="api-status" class="api-chip is-waking" title="สถานะเซิร์ฟเวอร์" aria-live="polite">
-        API…
-      </div>
-      <button type="button" id="logout-btn" class="btn btn-candy btn-logout hidden" aria-label="ออกจากระบบ" title="ออกจากระบบ">
-        <svg class="logout-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M10 17l5-5-5-5" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M15 12H4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
-          <path d="M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span class="logout-text">ออกจากระบบ</span>
-      </button>
     </div>
   </header>
+
+  <div id="topbar-menu" class="topbar-menu hidden" aria-hidden="true"></div>
 
   <div id="maintenance-banner" class="maintenance-banner hidden" role="status" aria-live="polite"></div>
 
@@ -78,8 +96,7 @@
         <div class="login-hero">
           <img class="hero-logo" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
           <h1 class="hero-title">CKR WWDC</h1>
-          <p class="hero-lead">ฟาร์มคุกกี้รันง่าย ๆ · ใช้ 1 โทเค็นต่อการวิ่ง</p>
-          <p class="hero-note">สมัครฟรีได้เลย · เติมโทเค็นอัตโนมัติด้วยซอง TrueMoney</p>
+          <p class="hero-lead">ใช้ส่วนตัว กรุณาไม่แชร์ต่อ</p>
         </div>
 
         <div class="panel login-panel">
@@ -196,80 +213,17 @@
     <!-- APP — POS layout -->
     <section id="user-view" class="view hidden">
       <div class="pos-shell">
-        <aside class="pos-sidebar" aria-label="โหมดฟาร์ม">
-          <button type="button" class="pos-side-link is-active" id="farm-tab-partyrun" data-tab="partyrun" aria-controls="farm-panel-partyrun">
-            <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
-            <span>Party Run</span>
-          </button>
-          <button type="button" class="pos-side-link" id="farm-tab-heart" data-tab="heart" aria-controls="farm-panel-heart">
-            <img src="assets/pet81_jelly.png" alt="" width="28" height="28" />
-            <span>Heart</span>
-          </button>
-          <button type="button" class="pos-side-link" id="farm-tab-powder" data-tab="powder" aria-controls="farm-panel-powder">
-            <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
-            <span>Powder</span>
-          </button>
-          <button type="button" class="pos-side-link" id="farm-tab-giftdraw" data-tab="giftdraw" aria-controls="farm-panel-giftdraw">
-            <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
-            <span>Gift Draw</span>
-          </button>
-          <button type="button" class="pos-side-link" id="farm-tab-upgrade" data-tab="upgrade" aria-controls="farm-panel-upgrade">
-            <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
-            <span>ตีบวก</span>
-          </button>
-        </aside>
-
         <div class="pos-main">
-          <div class="pos-token-strip panel hidden" id="pos-token-strip" aria-hidden="true">
-            <div class="pos-token-copy">
-              <p class="eyebrow">โทเค็นคงเหลือ</p>
-              <p class="vault-num" id="token-balance">0</p>
-              <p class="muted status-strip-note">1 โทเค็น / รอบ</p>
-            </div>
-            <img src="assets/coin.png" alt="" width="48" height="48" />
-          </div>
-
           <div id="heart-service-banner" class="heart-service-banner hidden" role="status"></div>
-
-          <div class="profile-card panel hidden" id="devplay-profile-card" aria-live="polite">
-            <div class="profile-card-head">
-              <img class="profile-avatar" id="profile-avatar" src="assets/notice_b20.png" alt="" width="56" height="56" />
-              <div class="profile-card-identity">
-                <p class="profile-name" id="profile-name">—</p>
-                <p class="profile-sub muted" id="profile-sub">ยังไม่ได้เชื่อม DevPlay</p>
-              </div>
-            </div>
-            <div class="profile-stats" id="profile-stats">
-              <div class="stat-chip" data-stat="level"><img src="assets/level.png" alt="" width="18" height="18" /><span id="profile-lv">—</span></div>
-              <div class="stat-chip" data-stat="coin"><img src="assets/coin.png" alt="" width="18" height="18" /><span id="profile-coin">—</span></div>
-              <div class="stat-chip" data-stat="powder"><img src="assets/crc_cookie_stone_box.png" alt="" width="18" height="18" /><span id="profile-powder">—</span></div>
-              <div class="stat-chip" data-stat="xp"><img src="assets/score.png" alt="" width="18" height="18" /><span id="profile-xp">—</span></div>
-              <div class="stat-chip" data-stat="tickets"><img src="assets/tr_event_116.png" alt="" width="18" height="18" /><span id="profile-tickets">—</span></div>
-            </div>
-          </div>
-
-          <div class="tip-banner tip-banner-compact">
-            <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
-            <p>ใช้บัญชี <strong>DevPlay ของเกม</strong> เท่านั้น — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
-          </div>
 
           <div class="panel oven-panel" id="run">
           <div class="oven-head">
             <div class="oven-titles">
               <img class="oven-title-icon" src="assets/pirate_cookie_run.gif" alt="" width="56" height="56" />
               <div class="oven-title-copy">
-                <h2 class="panel-title">เริ่มวิ่งฟาร์ม</h2>
-                <p class="panel-hint">เชื่อม DevPlay แล้วเลือกจำนวนตั๋ว · ใช้ 1 โทเค็น</p>
+                <h2 class="panel-title" id="farm-panel-title">เริ่มวิ่งฟาร์ม</h2>
+                <p class="panel-hint" id="farm-panel-hint">เลือกโหมดจากเมนูด้านซ้าย</p>
               </div>
-            </div>
-            <div class="oven-head-pills">
-              <button type="button" class="pill pill-devplay pill-action" id="devplay-connect-btn" disabled>
-                เชื่อมต่อ
-              </button>
-              <button type="button" class="pill pill-devplay pill-action is-ghost hidden" id="devplay-reconnect-btn" hidden>
-                เชื่อมใหม่
-              </button>
-              <span class="pill pill-devplay">DevPlay</span>
             </div>
           </div>
 
@@ -287,52 +241,90 @@
               <input type="password" name="password" tabindex="-1" autocomplete="current-password" />
             </div>
 
-            <section class="devplay-connect" id="devplay-connect">
-              <div class="devplay-connect-head">
-                <h3 class="devplay-connect-title">เชื่อมต่อ DevPlay</h3>
-                <p class="devplay-connect-hint">ต้องเชื่อมก่อนเริ่ม Party Run</p>
-              </div>
-              <div class="grid-2 farm-creds">
-                <label class="field">
-                  <span>อีเมล DevPlay</span>
-                  <input
-                    id="dp-acct-mail"
-                    name="ckr_dp_acct_mail"
-                    type="text"
-                    inputmode="email"
-                    required
-                    autocomplete="off"
-                    autocapitalize="off"
-                    autocorrect="off"
-                    spellcheck="false"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    data-form-type="other"
-                    placeholder="อีเมลเกม"
-                    readonly
-                  />
-                </label>
-                <label class="field">
-                  <span>รหัสผ่าน DevPlay</span>
-                  <input
-                    id="dp-acct-secret"
-                    name="ckr_dp_acct_secret"
-                    type="password"
-                    required
-                    autocomplete="new-password"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    data-form-type="other"
-                    placeholder="รหัสเกม"
-                    readonly
-                  />
-                </label>
-              </div>
-              <div id="devplay-connect-status" class="devplay-connect-status muted hidden" role="status" aria-live="polite" hidden></div>
-            </section>
-
             <div class="farm-tab-panels">
-              <div class="farm-tab-panel" id="farm-panel-partyrun" role="tabpanel" aria-labelledby="farm-tab-partyrun">
+              <div class="farm-tab-panel is-active" id="farm-panel-devplay" role="tabpanel" aria-labelledby="farm-tab-devplay">
+                <div class="devplay-hub">
+                  <div class="devplay-login-card panel" id="devplay-login-card">
+                    <div class="devplay-login-hero">
+                      <img class="devplay-login-mascot" src="assets/notice_b20.png" alt="" width="72" height="72" />
+                      <div>
+                        <h3 class="devplay-login-title">เชื่อมต่อ DevPlay</h3>
+                        <p class="devplay-login-lead muted">ใช้บัญชี <strong>DevPlay ของเกม</strong> — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
+                      </div>
+                    </div>
+                    <div class="grid-2 farm-creds devplay-creds">
+                      <label class="field">
+                        <span>อีเมล DevPlay</span>
+                        <input
+                          id="dp-acct-mail"
+                          name="ckr_dp_acct_mail"
+                          type="text"
+                          inputmode="email"
+                          required
+                          autocomplete="off"
+                          autocapitalize="off"
+                          autocorrect="off"
+                          spellcheck="false"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          data-form-type="other"
+                          placeholder="อีเมลเกม"
+                          readonly
+                        />
+                      </label>
+                      <label class="field">
+                        <span>รหัสผ่าน DevPlay</span>
+                        <input
+                          id="dp-acct-secret"
+                          name="ckr_dp_acct_secret"
+                          type="password"
+                          required
+                          autocomplete="new-password"
+                          data-lpignore="true"
+                          data-1p-ignore="true"
+                          data-form-type="other"
+                          placeholder="รหัสเกม"
+                          readonly
+                        />
+                      </label>
+                    </div>
+                    <button type="button" class="btn btn-connect-devplay" id="devplay-connect-btn" disabled>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 3l7 4v5c0 4.2-2.7 7.9-7 9-4.3-1.1-7-4.8-7-9V7l7-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                        <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+                      </svg>
+                      เชื่อมต่อ DevPlay
+                    </button>
+                    <div id="devplay-connect-status" class="devplay-connect-status muted hidden" role="status" aria-live="polite" hidden></div>
+                  </div>
+
+                  <div class="devplay-account-card panel hidden" id="devplay-account-card" aria-live="polite">
+                    <div class="devplay-account-head">
+                      <img class="devplay-account-avatar" id="devplay-account-avatar" src="assets/notice_b20.png" alt="" width="64" height="64" />
+                      <div class="devplay-account-identity">
+                        <p class="devplay-account-name" id="devplay-account-name">—</p>
+                        <p class="devplay-account-sub muted" id="devplay-account-sub">เชื่อม DevPlay แล้ว</p>
+                      </div>
+                      <div class="devplay-account-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="devplay-reconnect-btn" hidden>เชื่อมใหม่</button>
+                        <button type="button" class="btn btn-ghost btn-sm btn-devplay-logout" id="devplay-logout-btn">สลับไอดี</button>
+                      </div>
+                    </div>
+                    <div class="devplay-stat-grid" id="devplay-stat-grid">
+                      <div class="devplay-stat" data-stat="level"><img src="assets/level.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เลเวล</span><strong id="devplay-stat-level">—</strong></div>
+                      <div class="devplay-stat" data-stat="coin"><img src="assets/coin_silver.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เหรียญ</span><strong id="devplay-stat-coin">—</strong></div>
+                      <div class="devplay-stat" data-stat="gem"><img src="assets/gem.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เพชร</span><strong id="devplay-stat-gem">—</strong></div>
+                      <div class="devplay-stat" data-stat="life"><img src="assets/bbc_stat_iconHeart.png" alt="" width="40" height="40" /><span class="devplay-stat-label">หัวใจ</span><strong id="devplay-stat-life">—</strong></div>
+                      <div class="devplay-stat" data-stat="powder"><img src="assets/crc_cookie_stone_box.png" alt="" width="40" height="40" /><span class="devplay-stat-label">ผง</span><strong id="devplay-stat-powder">—</strong></div>
+                      <div class="devplay-stat" data-stat="tickets"><img src="assets/reward_icon_partyrun_ticket.png" alt="" width="40" height="40" /><span class="devplay-stat-label">ตั๋ว PR</span><strong id="devplay-stat-tickets">—</strong></div>
+                      <div class="devplay-stat" data-stat="boxes"><img src="assets/icon_giftpoint.png" alt="" width="40" height="40" /><span class="devplay-stat-label">กล่อง</span><strong id="devplay-stat-boxes">—</strong></div>
+                      <div class="devplay-stat" data-stat="xp"><img src="assets/score.png" alt="" width="40" height="40" /><span class="devplay-stat-label">EXP</span><strong id="devplay-stat-xp">—</strong></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="farm-tab-panel hidden" id="farm-panel-partyrun" role="tabpanel" aria-labelledby="farm-tab-partyrun" hidden>
                 <div class="ticket-stepper">
                   <span class="ticket-stepper-label">จำนวนตั๋ว Party Run</span>
                   <div class="ticket-stepper-controls">
@@ -419,17 +411,38 @@
                 <button class="btn btn-run" type="submit" id="farm-btn" disabled>
                   <img src="assets/tr_event_116.png" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
-                    <span class="btn-run-title">เริ่ม Party Run · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-title">เริ่ม Party Run</span>
                     <span class="btn-run-sub" id="farm-btn-sub">เชื่อม DevPlay ก่อน</span>
                   </span>
                 </button>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" hidden>
+                <label class="field heart-proxy-field">
+                  <span>Rotating Proxy (จำเป็น)</span>
+                  <input
+                    id="heart-proxy-url"
+                    name="ckr_heart_proxy"
+                    type="url"
+                    inputmode="url"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    autocorrect="off"
+                    spellcheck="false"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    placeholder="http://user:pass@host:port/"
+                    required
+                  />
+                  <p class="heart-proxy-hint muted" id="heart-proxy-hint">
+                    ต้องใส่ rotating proxy ของคุณเอง — ใช้เฉพาะตอนสร้างบัญชี guest
+                  </p>
+                </label>
+
                 <div class="ticket-stepper">
                   <span class="ticket-stepper-label">จำนวนหัวใจที่ต้องการ</span>
                   <div class="ticket-stepper-controls">
-                    <button type="button" class="ticket-step-btn" id="heart-minus" aria-label="ลดหัวใจ" disabled>−</button>
+                    <button type="button" class="ticket-step-btn" id="heart-minus" aria-label="ลดหัวใจ">−</button>
                     <input
                       id="heart-target"
                       class="ticket-count-display"
@@ -440,69 +453,42 @@
                       autocomplete="off"
                       value="100"
                       aria-label="จำนวนหัวใจ"
-                      disabled
                     />
-                    <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ" disabled>+</button>
+                    <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ">+</button>
                   </div>
-                  <p class="ticket-stepper-hint" id="heart-max-hint">กดตรวจสอบช่องว่างเพื่อนก่อน</p>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ต้องใส่ proxy ก่อนรัน</p>
                 </div>
 
-                <div class="powder-estimate" id="heart-estimate" aria-live="polite">
-                  <p class="powder-estimate-target muted" id="heart-estimate-target">
-                    สร้างเพื่อน guest ชั่วคราวให้ส่งหัวใจ แล้วลบทิ้งอัตโนมัติ — เพื่อนจริงไม่ถูกแตะ
-                  </p>
-                  <dl class="powder-estimate-stats">
-                    <div>
-                      <dt>เพื่อนจริง</dt>
-                      <dd id="heart-stat-friends">—</dd>
-                    </div>
-                    <div>
-                      <dt>ช่องว่าง</dt>
-                      <dd id="heart-stat-room">—</dd>
-                    </div>
-                    <div>
-                      <dt>สูงสุด/รอบ</dt>
-                      <dd id="heart-stat-max">—</dd>
-                    </div>
-                    <div>
-                      <dt>เพดานเพื่อน</dt>
-                      <dd id="heart-stat-cap">300</dd>
-                    </div>
-                  </dl>
-                  <p class="powder-estimate-note muted" id="heart-estimate-note"></p>
-                </div>
-
-                <button type="button" class="btn btn-ghost btn-heart-check" id="heart-check-btn" disabled>
-                  ตรวจสอบช่องว่างเพื่อน (ไม่หักโทเค็น)
-                </button>
+                <p class="heart-info-note muted">
+                  สร้างเพื่อน guest ชั่วคราวให้ส่งหัวใจ แล้วลบทิ้งอัตโนมัติ — เพื่อนจริงไม่ถูกแตะ
+                </p>
 
                 <button class="btn btn-run btn-run-heart hidden" type="submit" id="heart-btn" disabled hidden>
-                  <img src="assets/pet81_jelly.png" alt="" width="28" height="28" />
+                  <img src="assets/bbc_stat_iconHeart.png" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
-                    <span class="btn-run-title">เริ่มฟาร์มหัวใจ · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-title">เริ่มฟาร์มหัวใจ</span>
                     <span class="btn-run-sub" id="heart-btn-sub">กรอกบัญชีเกมก่อน</span>
                   </span>
                 </button>
               </div>
               <div class="farm-tab-panel hidden" id="farm-panel-powder" role="tabpanel" hidden>
-                <div class="powder-picker">
-                  <label class="field powder-treasure-field">
-                    <span>สมบัติที่จะซื้อแล้วย่อย</span>
-                    <input
-                      type="search"
-                      id="powder-treasure-search"
-                      class="powder-treasure-search"
-                      placeholder="ค้นหาชื่อสมบัติ…"
-                      autocomplete="off"
-                      disabled
-                    />
-                    <select id="powder-treasure-select" class="powder-treasure-select" size="6" disabled>
-                      <option value="Revival Boots">Revival Boots</option>
-                    </select>
-                  </label>
-                </div>
+                <div class="ticket-stepper powder-stepper">
+                  <div class="powder-treasure-header">
+                    <div class="powder-treasure-selected" id="powder-treasure-selected">
+                      <div class="powder-treasure-img-wrap" id="powder-treasure-img-wrap" aria-hidden="true"></div>
+                      <div class="powder-treasure-copy">
+                        <span class="powder-treasure-label">สมบัติที่จะซื้อแล้วย่อย</span>
+                        <span class="powder-treasure-name" id="powder-treasure-name">Revival Boots</span>
+                        <span class="powder-treasure-meta muted" id="powder-treasure-meta">—</span>
+                      </div>
+                    </div>
+                    <button type="button" class="btn btn-ghost btn-sm powder-pick-btn" id="powder-pick-btn" disabled>
+                      เลือกสมบัติ
+                    </button>
+                  </div>
 
-                <div class="ticket-stepper">
+                  <div class="powder-stepper-divider" aria-hidden="true"></div>
+
                   <span class="ticket-stepper-label">จำนวนรอบที่จะรัน</span>
                   <div class="ticket-stepper-controls">
                     <button type="button" class="ticket-step-btn" id="powder-minus" aria-label="ลดรอบ" disabled>−</button>
@@ -561,7 +547,7 @@
                 <button class="btn btn-run btn-run-powder hidden" type="submit" id="powder-btn" disabled hidden>
                   <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
-                    <span class="btn-run-title">เริ่มฟาร์มผง · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-title">เริ่มฟาร์มผง</span>
                     <span class="btn-run-sub" id="powder-btn-sub">เชื่อม DevPlay ก่อน</span>
                   </span>
                 </button>
@@ -617,103 +603,353 @@
                 <button class="btn btn-run btn-run-giftdraw hidden" type="submit" id="giftdraw-btn" disabled hidden>
                   <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
-                    <span class="btn-run-title">เปิดกล่องขวัญ · ใช้ 1 โทเค็น</span>
+                    <span class="btn-run-title">เปิดกล่องขวัญ</span>
                     <span class="btn-run-sub" id="giftdraw-btn-sub">เชื่อม DevPlay ก่อน</span>
                   </span>
                 </button>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-upgrade" role="tabpanel" hidden>
-                <div class="upgrade-rng-banner" id="upgrade-rng-banner" role="note">
-                  <p><strong>คำเตือน:</strong> การตีบวกมีโอกาสแห้ว — เหรียญจะหายแม้ไม่ติดระดับ (ใช้ coin เท่านั้น ไม่ใช้เพชร)</p>
-                  <label class="upgrade-rng-check">
-                    <input type="checkbox" id="upgrade-rng-accept" disabled />
-                    <span>ยอมรับความเสี่ยง RNG ก่อนเริ่ม</span>
-                  </label>
+                <div class="upgrade-panel-layout">
+                  <section class="upgrade-section upgrade-section-warn" id="upgrade-rng-banner" role="note">
+                    <p><strong>คำเตือน:</strong> การตีบวกมีโอกาสแห้ว — เหรียญจะหายแม้ไม่ติดระดับ (ใช้ coin เท่านั้น ไม่ใช้เพชร)</p>
+                    <label class="upgrade-rng-check">
+                      <input type="checkbox" id="upgrade-rng-accept" disabled />
+                      <span>ยอมรับความเสี่ยง RNG ก่อนเริ่ม</span>
+                    </label>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-settings">
+                    <div class="upgrade-settings-head">
+                      <h3 class="upgrade-section-title">ตั้งค่าตีบวก</h3>
+                      <button type="button" class="upgrade-reload-btn" id="upgrade-reload-btn" disabled>โหลดคลังใหม่</button>
+                    </div>
+
+                    <div class="upgrade-settings-body">
+                      <div class="upgrade-level-slider" id="upgrade-target-levels" role="group" aria-label="เป้าหมายระดับต่อชิ้น">
+                        <div class="upgrade-level-slider-head">
+                          <span class="upgrade-target-label">เป้าหมาย</span>
+                          <strong class="upgrade-level-value" id="upgrade-level-value">+9</strong>
+                        </div>
+                        <div class="upgrade-level-track" id="upgrade-level-track">
+                          <button type="button" class="upgrade-level-seg" data-level="1" disabled aria-label="+1">1</button>
+                          <button type="button" class="upgrade-level-seg" data-level="2" disabled aria-label="+2">2</button>
+                          <button type="button" class="upgrade-level-seg" data-level="3" disabled aria-label="+3">3</button>
+                          <button type="button" class="upgrade-level-seg" data-level="4" disabled aria-label="+4">4</button>
+                          <button type="button" class="upgrade-level-seg" data-level="5" disabled aria-label="+5">5</button>
+                          <button type="button" class="upgrade-level-seg" data-level="6" disabled aria-label="+6">6</button>
+                          <button type="button" class="upgrade-level-seg" data-level="7" disabled aria-label="+7">7</button>
+                          <button type="button" class="upgrade-level-seg" data-level="8" disabled aria-label="+8">8</button>
+                          <button type="button" class="upgrade-level-seg is-active" data-level="9" disabled aria-label="+9 สูงสุด">9</button>
+                        </div>
+                        <div class="upgrade-level-range-labels">
+                          <span>+1</span>
+                          <span>+9</span>
+                        </div>
+                      </div>
+
+                      <div class="upgrade-mode-row" id="upgrade-mode-row" role="group" aria-label="โหมดตีบวกหลายชิ้น">
+                        <button type="button" class="upgrade-mode-btn is-active" data-mode="sequential" disabled>เรียงทีละชิ้น</button>
+                        <button type="button" class="upgrade-mode-btn" data-mode="fast" disabled>Fast</button>
+                      </div>
+                    </div>
+
+                    <div class="upgrade-fast-banner hidden" id="upgrade-fast-banner" role="note" hidden>
+                      <p><strong>โหมด Fast:</strong> ตีบวกทุกชิ้นพร้อมกัน — เร็วกว่าแต่เสี่ยง <strong>ID ถูกระงับ</strong> จากเซิร์ฟเวอร์เกม ต้องยืนยันก่อนรัน</p>
+                    </div>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-inventory">
+                    <h3 class="upgrade-section-title">เลือกสมบัติในคลัง</h3>
+                    <p class="upgrade-grid-hint muted" id="upgrade-grid-hint">เชื่อม DevPlay เพื่อดูสมบัติในตัว</p>
+                    <div class="upgrade-grid-wrap">
+                      <div class="upgrade-grid" id="upgrade-grid" aria-live="polite"></div>
+                      <button
+                        type="button"
+                        class="upgrade-grid-toggle hidden"
+                        id="upgrade-grid-toggle"
+                        aria-expanded="false"
+                      >
+                        ดูสมบัติทั้งหมด
+                      </button>
+                    </div>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-summary">
+                    <div class="powder-estimate" id="upgrade-estimate" aria-live="polite">
+                      <p class="powder-estimate-target muted" id="upgrade-estimate-target">เลือกสมบัติเพื่อดูประมาณการ</p>
+                      <dl class="powder-estimate-stats">
+                        <div>
+                          <dt>เลือกแล้ว</dt>
+                          <dd id="upgrade-stat-selected">0 ชิ้น</dd>
+                        </div>
+                        <div>
+                          <dt>ชิ้นที่เลือก</dt>
+                          <dd id="upgrade-stat-tokens">0</dd>
+                        </div>
+                        <div>
+                          <dt>coin สูงสุด (worst)</dt>
+                          <dd id="upgrade-stat-worst">—</dd>
+                        </div>
+                        <div>
+                          <dt>coin ในไอดี</dt>
+                          <dd id="upgrade-stat-coin">—</dd>
+                        </div>
+                      </dl>
+                      <p class="powder-estimate-note muted" id="upgrade-estimate-note"></p>
+                    </div>
+
+                    <button class="btn btn-run btn-run-upgrade hidden" type="submit" id="upgrade-btn" disabled hidden>
+                      <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
+                      <span class="btn-run-copy">
+                        <span class="btn-run-title">เริ่มตีบวกสมบัติ</span>
+                        <span class="btn-run-sub" id="upgrade-btn-sub">เชื่อม DevPlay ก่อน</span>
+                      </span>
+                    </button>
+                  </section>
                 </div>
+              </div>
 
-                <div class="upgrade-toolbar">
-                  <label class="field upgrade-target-field">
-                    <span>เป้าหมายต่อชิ้น</span>
-                    <select id="upgrade-target-level" disabled>
-                      <option value="9" selected>+9 (สูงสุด)</option>
-                      <option value="8">+8</option>
-                      <option value="7">+7</option>
-                      <option value="6">+6</option>
-                      <option value="5">+5</option>
-                      <option value="4">+4</option>
-                      <option value="3">+3</option>
-                      <option value="2">+2</option>
-                      <option value="1">+1</option>
-                    </select>
-                  </label>
-                  <button type="button" class="btn btn-ghost btn-sm" id="upgrade-reload-btn" disabled>โหลดคลังใหม่</button>
+              <div class="farm-tab-panel hidden" id="farm-panel-cookie" role="tabpanel" hidden>
+                <div class="upgrade-panel-layout cookie-panel-layout">
+                  <section class="upgrade-section upgrade-section-warn" id="cookie-warn-banner" role="note">
+                    <p><strong>ปลดล็อกคุกกี้:</strong> รันทีละตัว · ถ้ามีคุกกี้นั้นแล้วหรือเหรียญไม่พอ จะซื้อไม่ได้</p>
+                    <p class="muted" style="margin:0.35rem 0 0">Sea Fairy ใช้เหรียญสูงมาก (~586,040) — ตรวจยอดก่อนกดรัน</p>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-settings">
+                    <div class="upgrade-settings-head">
+                      <h3 class="upgrade-section-title">เลือกคุกกี้</h3>
+                      <div class="cookie-toolbar">
+                        <button type="button" class="upgrade-reload-btn" id="cookie-select-all-btn" disabled>เลือกที่ซื้อได้</button>
+                        <button type="button" class="upgrade-reload-btn" id="cookie-reload-btn" disabled>โหลดใหม่</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-inventory">
+                    <p class="upgrade-grid-hint muted" id="cookie-grid-hint">เชื่อม DevPlay เพื่อดูรายการคุกกี้</p>
+                    <div class="upgrade-grid-wrap">
+                      <div class="upgrade-grid cookie-grid is-expanded" id="cookie-grid" aria-live="polite"></div>
+                    </div>
+                  </section>
+
+                  <section class="upgrade-section upgrade-section-summary">
+                    <div class="powder-estimate" id="cookie-estimate" aria-live="polite">
+                      <p class="powder-estimate-target muted" id="cookie-estimate-target">เลือกคุกกี้เพื่อดูประมาณการ</p>
+                      <dl class="powder-estimate-stats">
+                        <div>
+                          <dt>เลือกแล้ว</dt>
+                          <dd id="cookie-stat-selected">0 ตัว</dd>
+                        </div>
+                        <div>
+                          <dt>ตัวที่เลือก</dt>
+                          <dd id="cookie-stat-tokens">0</dd>
+                        </div>
+                        <div>
+                          <dt>coin ที่ต้องใช้</dt>
+                          <dd id="cookie-stat-cost">—</dd>
+                        </div>
+                        <div>
+                          <dt>coin ในไอดี</dt>
+                          <dd id="cookie-stat-coin">—</dd>
+                        </div>
+                      </dl>
+                      <p class="powder-estimate-note muted" id="cookie-estimate-note"></p>
+                    </div>
+
+                    <button class="btn btn-run btn-run-cookie hidden" type="submit" id="cookie-btn" disabled hidden>
+                      <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
+                      <span class="btn-run-copy">
+                        <span class="btn-run-title">เริ่มปลดล็อกคุกกี้</span>
+                        <span class="btn-run-sub" id="cookie-btn-sub">เชื่อม DevPlay ก่อน</span>
+                      </span>
+                    </button>
+                  </section>
                 </div>
-
-                <p class="upgrade-grid-hint muted" id="upgrade-grid-hint">เชื่อม DevPlay เพื่อดูสมบัติในตัว</p>
-                <div class="upgrade-grid" id="upgrade-grid" aria-live="polite"></div>
-
-                <div class="powder-estimate" id="upgrade-estimate" aria-live="polite">
-                  <p class="powder-estimate-target muted" id="upgrade-estimate-target">เลือกสมบัติเพื่อดูประมาณการ</p>
-                  <dl class="powder-estimate-stats">
-                    <div>
-                      <dt>เลือกแล้ว</dt>
-                      <dd id="upgrade-stat-selected">0 ชิ้น</dd>
-                    </div>
-                    <div>
-                      <dt>ใช้โทเค็น</dt>
-                      <dd id="upgrade-stat-tokens">0</dd>
-                    </div>
-                    <div>
-                      <dt>coin สูงสุด (worst)</dt>
-                      <dd id="upgrade-stat-worst">—</dd>
-                    </div>
-                    <div>
-                      <dt>coin ในไอดี</dt>
-                      <dd id="upgrade-stat-coin">—</dd>
-                    </div>
-                  </dl>
-                  <p class="powder-estimate-note muted" id="upgrade-estimate-note"></p>
-                </div>
-
-                <button class="btn btn-run btn-run-upgrade hidden" type="submit" id="upgrade-btn" disabled hidden>
-                  <img src="assets/tr_ga170.png" alt="" width="28" height="28" />
-                  <span class="btn-run-copy">
-                    <span class="btn-run-title">เริ่มตีบวกสมบัติ</span>
-                    <span class="btn-run-sub" id="upgrade-btn-sub">เชื่อม DevPlay ก่อน</span>
-                  </span>
-                </button>
               </div>
             </div>
 
-            <p id="farm-status" class="status" role="status"></p>
-            <button
-              type="button"
-              class="farm-history-trigger"
-              id="farm-history-open"
-              aria-haspopup="dialog"
-            >
-              <span class="farm-history-trigger-label">ประวัติฟาร์มล่าสุด</span>
-              <span class="farm-history-trigger-count" id="farm-history-count" hidden></span>
-              <span class="farm-history-trigger-chevron" aria-hidden="true">›</span>
-            </button>
           </form>
         </div>
         </div>
       </div>
+
+      <aside class="farm-sidebar" id="farm-sidebar" data-open="true" aria-label="เมนูหลัก">
+        <div class="farm-sidebar-scroll">
+          <section class="farm-sidebar-section">
+            <p class="farm-sidebar-section-label">ฟีเจอร์ฟาร์ม</p>
+            <nav class="farm-side-nav" id="farm-bottom-nav" aria-label="ฟีเจอร์ฟาร์ม" role="tablist">
+        <button
+          type="button"
+          class="farm-nav-item is-active"
+          id="farm-tab-devplay"
+          data-tab="devplay"
+          role="tab"
+          aria-controls="farm-panel-devplay"
+          aria-selected="true"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/notice_b20.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">DevPlay</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-partyrun"
+          data-tab="partyrun"
+          role="tab"
+          aria-controls="farm-panel-partyrun"
+          aria-selected="false"
+          aria-disabled="true"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/tr_event_116.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Party Run</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-heart"
+          data-tab="heart"
+          role="tab"
+          aria-controls="farm-panel-heart"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/bbc_stat_iconHeart.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Heart</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-powder"
+          data-tab="powder"
+          role="tab"
+          aria-controls="farm-panel-powder"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/crc_cookie_stone_box.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Powder</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-giftdraw"
+          data-tab="giftdraw"
+          role="tab"
+          aria-controls="farm-panel-giftdraw"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/icon_giftpoint.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Gift Draw</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-upgrade"
+          data-tab="upgrade"
+          role="tab"
+          aria-controls="farm-panel-upgrade"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/tr_ga170.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">ตีบวก</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-cookie"
+          data-tab="cookie"
+          role="tab"
+          aria-controls="farm-panel-cookie"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/crc_cookie_stone_box.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Cookie</span>
+          </span>
+        </button>
+            </nav>
+          </section>
+
+          <div class="farm-sidebar-divider" role="separator" aria-hidden="true"></div>
+
+          <section class="farm-sidebar-section">
+            <p class="farm-sidebar-section-label">เมนู</p>
+            <nav class="farm-sidebar-features" aria-label="เมนูหลัก">
+              <button
+                type="button"
+                class="farm-sidebar-link"
+                id="menu-nav-topup"
+                data-menu-action="topup"
+                aria-haspopup="dialog"
+                aria-controls="vault-modal"
+                aria-expanded="false"
+              >
+                <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="20" height="20" />
+                <span>ต่ออายุ</span>
+              </button>
+              <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M12 8v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+                </svg>
+                <span>ประวัติ Powder</span>
+              </button>
+            </nav>
+          </section>
+
+          <div class="farm-sidebar-divider" role="separator" aria-hidden="true"></div>
+
+          <section class="farm-sidebar-section farm-sidebar-section--account">
+            <p class="farm-sidebar-section-label">บัญชี</p>
+            <div class="farm-sidebar-user hidden" id="topbar-menu-user">
+              <img class="topbar-user-avatar" id="menu-user-avatar" src="assets/notice_b20.png" alt="" width="36" height="36" />
+              <div class="farm-sidebar-user-meta">
+                <span class="farm-sidebar-user-name" id="menu-who-user">—</span>
+                <div class="farm-sidebar-user-rental">
+                  <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="14" height="14" />
+                  <span id="menu-balance-num">—</span>
+                  <span class="muted">เช่าถึง</span>
+                </div>
+              </div>
+            </div>
+            <div
+              id="api-status-menu"
+              class="api-chip toolbar-chip is-waking farm-sidebar-api"
+              title="สถานะเซิร์ฟเวอร์"
+              aria-live="polite"
+            >
+              <span class="api-chip-dot" aria-hidden="true"></span>
+              <span class="api-chip-label">API…</span>
+            </div>
+          </section>
+        </div>
+
+        <div class="farm-sidebar-foot">
+          <div class="farm-sidebar-divider" role="separator" aria-hidden="true"></div>
+          <button type="button" id="logout-btn-menu" class="farm-sidebar-logout hidden">ออกจากระบบ</button>
+        </div>
+      </aside>
+      <div class="farm-sidebar-scrim" id="farm-sidebar-scrim" hidden></div>
     </section>
   </main>
 
-  <footer class="footer">
-    <img src="assets/logo_4k.png" alt="" width="28" height="28" />
-    <p>CKR WWDC by j3da1</p>
-  </footer>
-
-  <!-- Coin Vault popup -->
+  <!-- สิทธิ์ใช้งาน / ต่ออายุเช่า -->
   <div id="vault-modal" class="vault-modal-root hidden" aria-hidden="true">
     <div class="vault-modal-backdrop" data-vault-close></div>
     <div
-      class="panel topup-panel coin-vault vault-modal-sheet"
+      class="panel pass-modal-sheet"
       id="topup"
       role="dialog"
       aria-modal="true"
@@ -721,77 +957,80 @@
     >
       <div class="vault-modal-head">
         <div class="vault-modal-titles">
-          <p class="vault-eyebrow">Coin Vault</p>
-          <h2 class="panel-title" id="vault-modal-title">ตู้เติมโทเค็น</h2>
+          <p class="pass-eyebrow">สิทธิ์ใช้งาน</p>
+          <h2 class="panel-title" id="vault-modal-title">ต่ออายุ</h2>
         </div>
         <button type="button" class="vault-modal-close" id="vault-close" aria-label="ปิด" data-vault-close>×</button>
       </div>
 
-      <div class="vault-chamber vault-chamber-compact">
-        <div class="vault-chamber-frame">
-          <p class="vault-chamber-label">เลือกจำนวนโทเค็น</p>
-          <div
-            id="topup-packages"
-            class="vault-ingot-grid"
-            role="listbox"
-            aria-label="แพ็กโทเค็น"
-          ></div>
+      <div class="pass-status" id="pass-status" aria-live="polite">
+        <div class="pass-status-icon" aria-hidden="true">
+          <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="32" height="32" />
         </div>
-
-        <div class="vault-deposit">
-          <div class="vault-selected" id="topup-selected" aria-live="polite">
-            <img src="assets/coin.png" alt="" width="24" height="24" />
-            <div>
-              <p class="vault-selected-label">ต้องสร้างซองยอด</p>
-              <p class="vault-selected-value" id="topup-selected-text">100฿ · 1 Token</p>
-            </div>
-            <button type="button" class="btn btn-ghost vault-copy-price" id="topup-copy-price">
-              คัดลอก
-            </button>
-          </div>
-
-          <button type="button" class="vault-tutorial-btn" id="wallet-tutorial-open">
-            <span class="vault-tutorial-btn-main">
-              <span class="vault-tutorial-btn-title">วิธีสร้างซอง TrueMoney</span>
-              <span class="vault-tutorial-btn-sub">
-                สร้างซองยอด <strong id="topup-step-amount">100฿</strong> · กดดูทีละขั้นพร้อมรูป
-              </span>
-            </span>
-            <span class="vault-tutorial-btn-chevron" aria-hidden="true">›</span>
-          </button>
-
-          <label class="field vault-voucher-field">
-            <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
-            <input
-              id="topup-voucher"
-              type="text"
-              autocomplete="off"
-              spellcheck="false"
-              placeholder="https://gift.truemoney.com/campaign/?v=..."
-            />
-          </label>
-          <div class="vault-actions">
-            <button type="button" class="btn btn-ghost" id="topup-verify-btn">
-              ตรวจซอง
-            </button>
-            <button type="button" class="btn btn-run vault-confirm" id="topup-btn">
-              <img src="assets/coin.png" alt="" width="20" height="20" />
-              เติมโทเค็น
-            </button>
-          </div>
-          <p id="topup-status" class="status" role="status"></p>
-          <div class="vault-history">
-            <p class="vault-history-title">ประวัติเติมล่าสุด</p>
-            <ul id="topup-history" class="vault-history-list">
-              <li class="muted">ยังไม่มีประวัติ</li>
-            </ul>
-          </div>
-          <p class="muted topup-note">
-            ยอดซองต้องตรงราคาแพ็กเป๊ะ · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน) · สำรอง:
-            <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
-          </p>
+        <div class="pass-status-copy">
+          <p class="pass-status-label" id="pass-status-label">กำลังโหลด…</p>
+          <p class="pass-status-detail" id="pass-status-detail"></p>
         </div>
       </div>
+
+      <section class="pass-section">
+        <h3 class="pass-section-title">เลือกแพ็กวันเช่า</h3>
+        <div
+          id="topup-packages"
+          class="pass-card-grid"
+          role="listbox"
+          aria-label="แพ็กวันเช่า"
+        ></div>
+      </section>
+
+      <section class="pass-checkout">
+        <div class="pass-price-row">
+          <div class="pass-price-copy">
+            <span class="pass-price-label">ยอดซองที่ต้องสร้าง</span>
+            <span class="pass-price-value" id="topup-selected-text">200฿ · 1 วัน</span>
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm pass-copy-btn" id="topup-copy-price">
+            คัดลอก
+          </button>
+        </div>
+
+        <button type="button" class="pass-tutorial-link" id="wallet-tutorial-open">
+          <span class="pass-tutorial-title">วิธีสร้างซอง TrueMoney</span>
+          <span class="pass-tutorial-sub">
+            ยอด <strong id="topup-step-amount">200฿</strong> · ดูทีละขั้นพร้อมรูป ›
+          </span>
+        </button>
+
+        <label class="field pass-voucher-field">
+          <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
+          <input
+            id="topup-voucher"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="https://gift.truemoney.com/campaign/?v=..."
+          />
+        </label>
+
+        <div class="pass-actions">
+          <button type="button" class="btn btn-ghost" id="topup-verify-btn">ตรวจซอง</button>
+          <button type="button" class="btn btn-candy pass-confirm" id="topup-btn">ยืนยันต่ออายุ</button>
+        </div>
+        <p id="topup-status" class="status pass-status-msg" role="status"></p>
+        <a
+          href="https://t.me/j3xdr"
+          class="btn btn-telegram pass-admin-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <img src="assets/telegram_logo.svg" alt="" width="22" height="22" />
+          <span>ต้องการวันใช้งานอื่น? ติดต่อแอดมิน Telegram</span>
+        </a>
+        <p class="muted pass-footnote">
+          ยอดซองต้องตรงราคาแพ็ก · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน) · สำรอง:
+          <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
+        </p>
+      </section>
     </div>
   </div>
 
@@ -844,55 +1083,61 @@
     </div>
   </div>
 
-  <!-- Run status popup (single-stage hero) -->
-  <div id="run-status-root" class="run-status-root hidden" aria-hidden="true">
-    <div class="run-status-backdrop"></div>
-    <div
-      class="run-status-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="run-status-title"
-    >
-      <div class="run-status-head">
-        <div class="run-status-title-row">
-          <img src="assets/notice_b19.png" alt="" width="22" height="22" />
-          <h2 id="run-status-title">สถานะการวิ่ง</h2>
+  <!-- Farm dock — FAB + floating popup (live job + history) -->
+  <div id="farm-dock-root" class="farm-dock-root hidden" aria-hidden="true">
+    <div id="farm-dock-sheet" class="farm-dock-sheet hidden" role="dialog" aria-labelledby="farm-dock-panel-title">
+      <div class="farm-dock-panel">
+        <header class="farm-dock-panel-head">
+          <div class="farm-dock-panel-titles">
+            <h2 id="farm-dock-panel-title">ประวัติ / สถานะ</h2>
+            <p id="farm-dock-panel-sub" class="farm-dock-panel-sub muted">งานที่กำลังรันและประวัติล่าสุด</p>
+          </div>
+          <button type="button" id="run-status-close" class="farm-dock-close-btn" aria-label="ปิด">
+            ×
+          </button>
+        </header>
+
+        <div id="farm-dock-flash-section" class="farm-dock-section farm-dock-flash-section hidden">
+          <p id="farm-dock-flash" class="farm-dock-flash" role="status"></p>
         </div>
-        <button
-          type="button"
-          id="run-status-close"
-          class="run-status-close"
-          aria-label="ปิด"
-          disabled
-        >
-          ×
-        </button>
-      </div>
-      <p id="run-status-subtitle" class="run-status-subtitle">กำลังฟาร์ม… ห้ามปิดจนกว่าจะเสร็จ</p>
-      <div class="run-status-hero" id="run-status-hero" data-state="pending">
-        <div class="run-status-hero-orb" aria-hidden="true">
-          <img
-            class="run-status-hero-cookie"
-            id="run-status-hero-icon"
-            src="assets/cookie_run.gif"
-            alt=""
-            width="64"
-            height="74"
-            decoding="async"
-          />
+
+        <div class="farm-dock-tabs" role="tablist" aria-label="กรองรายการ">
+          <button type="button" class="farm-dock-tab is-active" id="farm-dock-tab-all" data-dock-tab="all" role="tab" aria-selected="true">
+            ทั้งหมด <span id="farm-dock-tab-all-count">(0)</span>
+          </button>
+          <button type="button" class="farm-dock-tab" id="farm-dock-tab-active" data-dock-tab="active" role="tab" aria-selected="false">
+            กำลังดำเนินการ <span id="farm-dock-tab-active-count">(0)</span>
+          </button>
         </div>
-        <p id="run-status-hero-label" class="run-status-hero-label">กำลังเข้าสู่ระบบเกม…</p>
-        <p id="run-status-hero-hint" class="run-status-hero-hint">กรุณารอสักครู่ อย่าปิดหน้านี้</p>
-      </div>
-      <div id="run-status-progress" class="run-status-progress hidden" aria-hidden="true">
-        <div class="run-status-progress-track">
-          <div class="run-status-progress-fill" id="run-status-progress-fill"></div>
+
+        <div id="farm-dock-list" class="farm-dock-list" aria-live="polite"></div>
+
+        <!-- Queue (when waiting for farm turn) -->
+        <div id="farm-dock-queue-section" class="farm-dock-section farm-dock-queue-card hidden">
+          <h3 class="farm-dock-section-label">คิวรอ</h3>
+          <ul id="farm-dock-queue" class="farm-dock-queue"></ul>
         </div>
-        <span id="run-status-progress-text" class="run-status-progress-text"></span>
+
+        <ul id="farm-log" class="farm-dock-logs hidden" aria-hidden="true"></ul>
       </div>
-      <div id="run-status-dots" class="run-status-dots" aria-hidden="true"></div>
-      <ul id="farm-log" class="run-status-extras hidden" aria-live="polite"></ul>
     </div>
+
+    <button
+      type="button"
+      id="farm-dock-fab"
+      class="farm-dock-fab"
+      aria-expanded="false"
+      aria-controls="farm-dock-sheet"
+      title="เปิดประวัติ / สถานะฟาร์ม"
+    >
+      <span class="farm-dock-fab-ring" aria-hidden="true">
+        <span id="farm-dock-fab-progress" class="farm-dock-fab-progress" style="--pct: 0"></span>
+      </span>
+      <span class="farm-dock-fab-icon" id="farm-dock-fab-icon" aria-hidden="true">
+        <img src="assets/cookie_run.gif" alt="" width="28" height="28" decoding="async" />
+      </span>
+      <span id="farm-dock-fab-dot" class="farm-dock-fab-dot hidden" aria-hidden="true"></span>
+    </button>
   </div>
 
   <!-- Modals -->
@@ -910,7 +1155,7 @@
     </div>
   </div>
 
-  <script src="js/config.js?v=20260729-upg1"></script>
-  <script src="js/app.js?v=20260729-upg2"></script>
+  <script src="js/config.js?v=20260730-vps1"></script>
+  <script src="js/app.js?v=20260731-q1"></script>
 </body>
 </html>
