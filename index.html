@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260731-exam2" />
+  <link rel="stylesheet" href="css/styles.css?v=20260731-exam3" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -274,6 +274,7 @@
                         <p class="devplay-account-sub muted" id="devplay-account-sub">เชื่อม DevPlay แล้ว</p>
                       </div>
                       <div class="devplay-account-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="devplay-proxy-btn" hidden>ตั้ง Proxy</button>
                         <button type="button" class="btn btn-ghost btn-sm" id="devplay-reconnect-btn" hidden>เชื่อมใหม่</button>
                         <button type="button" class="btn btn-ghost btn-sm btn-devplay-logout" id="devplay-logout-btn">สลับไอดี</button>
                       </div>
@@ -431,26 +432,9 @@
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" aria-labelledby="farm-tab-heart" hidden>
-                <label class="field heart-proxy-field">
-                  <span>Rotating Proxy (จำเป็น)</span>
-                  <input
-                    id="heart-proxy-url"
-                    name="ckr_heart_proxy"
-                    type="url"
-                    inputmode="url"
-                    autocomplete="off"
-                    autocapitalize="off"
-                    autocorrect="off"
-                    spellcheck="false"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    placeholder="http://user:pass@host:port/"
-                    required
-                  />
-                  <p class="heart-proxy-hint muted" id="heart-proxy-hint">
-                    ต้องใส่ rotating proxy ของคุณเอง — ใช้เฉพาะตอนสร้างบัญชี guest
-                  </p>
-                </label>
+                <p class="heart-info-note muted" id="heart-proxy-hint">
+                  ใช้ proxy ที่ตั้งหลัง login DevPlay — เฉพาะตอนสร้างบัญชี guest · บัญชีหลักไม่ผ่าน proxy
+                </p>
 
                 <div class="ticket-stepper">
                   <span class="ticket-stepper-label">จำนวนหัวใจที่ต้องการ</span>
@@ -469,7 +453,7 @@
                     />
                     <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ">+</button>
                   </div>
-                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ต้องใส่ proxy ก่อนรัน</p>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ต้องตั้ง proxy หลัง login ก่อนรัน</p>
                 </div>
 
                 <p class="heart-info-note muted">
@@ -485,85 +469,86 @@
                 </button>
               </div>
               <div class="farm-tab-panel hidden" id="farm-panel-powder" role="tabpanel" aria-labelledby="farm-tab-powder" hidden>
-                <div class="ticket-stepper powder-stepper">
-                  <div class="powder-treasure-header">
-                    <div class="powder-treasure-selected" id="powder-treasure-selected">
-                      <div class="powder-treasure-img-wrap" id="powder-treasure-img-wrap" aria-hidden="true"></div>
-                      <div class="powder-treasure-copy">
-                        <span class="powder-treasure-label">สมบัติที่จะซื้อแล้วย่อย</span>
-                        <span class="powder-treasure-name" id="powder-treasure-name">Revival Boots</span>
-                        <span class="powder-treasure-meta muted" id="powder-treasure-meta">—</span>
+                <div class="upgrade-panel-layout powder-exam-layout">
+                  <section class="upgrade-section upgrade-section-settings">
+                    <div class="upgrade-settings-head">
+                      <h3 class="upgrade-section-title">Magic Powder</h3>
+                    </div>
+                    <p class="muted farm-panel-hint-line">ซื้อ Box stuff seq แล้วย่อยเป็นผง (ค่าเริ่มต้น 811 / 5000 เหรียญ / 15 ผง)</p>
+
+                    <label class="field" for="powder-stuff-seq">
+                      <span>TREASURE / BOX STUFF SEQ</span>
+                      <input id="powder-stuff-seq" type="number" min="1" value="811" placeholder="811" />
+                    </label>
+                    <p class="muted" id="powder-stuff-name" style="margin-top:-6px;min-height:16px;">→ Normal Treasure Box (811)</p>
+
+                    <div class="fields-row powder-fields-row">
+                      <label class="field" for="powder-price">
+                        <span>PRICE (COIN)</span>
+                        <input id="powder-price" type="number" min="0" value="5000" placeholder="5000" />
+                      </label>
+                      <label class="field" for="powder-rounds">
+                        <span>BUY COUNT</span>
+                        <div class="ticket-stepper-controls">
+                          <button type="button" class="ticket-step-btn" id="powder-minus" aria-label="ลดรอบ">−</button>
+                          <input
+                            id="powder-rounds"
+                            class="ticket-count-display"
+                            name="powder_rounds"
+                            type="text"
+                            inputmode="numeric"
+                            pattern="[0-9]*"
+                            autocomplete="off"
+                            value="10"
+                            aria-label="จำนวนรอบ"
+                          />
+                          <button type="button" class="ticket-step-btn" id="powder-plus" aria-label="เพิ่มรอบ">+</button>
+                        </div>
+                      </label>
+                    </div>
+
+                    <label class="field" for="powder-qty">
+                      <span>POWDER / ITEM</span>
+                      <input id="powder-qty" type="number" min="1" value="15" placeholder="15" />
+                    </label>
+
+                    <label class="powder-break-toggle" for="powder-do-break">
+                      <input type="checkbox" id="powder-do-break" checked />
+                      <span>Break items after buying (ย่อยหลังซื้อ)</span>
+                    </label>
+
+                    <p class="ticket-stepper-hint" id="powder-cost-line">เชื่อม DevPlay เพื่อดูประมาณการ</p>
+                  </section>
+
+                  <section class="upgrade-section">
+                    <div class="powder-estimate" id="powder-estimate" aria-live="polite">
+                      <p class="powder-estimate-target muted" id="powder-estimate-target">ประมาณการจากจำนวนรอบ × ราคา</p>
+                      <dl class="powder-estimate-stats">
+                        <div><dt>ราคา/กล่อง</dt><dd id="powder-stat-price">5,000</dd></div>
+                        <div><dt>ผง/ชิ้น</dt><dd id="powder-stat-yield">15</dd></div>
+                        <div><dt>จำนวนรอบ</dt><dd id="powder-stat-rounds">10</dd></div>
+                        <div><dt>เหรียญที่ใช้</dt><dd id="powder-stat-coin">—</dd></div>
+                      </dl>
+                      <div id="powder-summary" class="powder-run-summary hidden" hidden>
+                        <div class="powder-summary-grid">
+                          <div><span class="lbl">Bought</span><strong id="mp-res-bought">—</strong></div>
+                          <div><span class="lbl">Broken</span><strong id="mp-res-broken">—</strong></div>
+                          <div><span class="lbl">Powder</span><strong id="mp-res-powder">—</strong></div>
+                          <div><span class="lbl">Coin left</span><strong id="mp-res-coin">—</strong></div>
+                        </div>
                       </div>
+                      <p class="powder-estimate-note muted" id="powder-estimate-note"></p>
                     </div>
-                    <button type="button" class="btn btn-ghost btn-sm powder-pick-btn" id="powder-pick-btn" disabled>
-                      เลือกสมบัติ
-                    </button>
-                  </div>
+                  </section>
 
-                  <div class="powder-stepper-divider" aria-hidden="true"></div>
-
-                  <span class="ticket-stepper-label">จำนวนรอบที่จะรัน</span>
-                  <div class="ticket-stepper-controls">
-                    <button type="button" class="ticket-step-btn" id="powder-minus" aria-label="ลดรอบ" disabled>−</button>
-                    <input
-                      id="powder-rounds"
-                      class="ticket-count-display"
-                      name="powder_rounds"
-                      type="text"
-                      inputmode="numeric"
-                      pattern="[0-9]*"
-                      autocomplete="off"
-                      value="1"
-                      aria-label="จำนวนรอบ"
-                      disabled
-                    />
-                    <button type="button" class="ticket-step-btn" id="powder-plus" aria-label="เพิ่มรอบ" disabled>+</button>
-                  </div>
-                  <label class="powder-target-field">
-                    <span>หรือระบุจำนวนผงที่ต้องการ</span>
-                    <input
-                      id="powder-target-input"
-                      type="text"
-                      inputmode="numeric"
-                      pattern="[0-9]*"
-                      autocomplete="off"
-                      aria-label="จำนวนผงที่ต้องการ"
-                      disabled
-                    />
-                  </label>
-                  <p class="ticket-stepper-hint" id="powder-cost-line">เชื่อม DevPlay เพื่อเลือกจำนวนรอบ</p>
+                  <button class="btn btn-run btn-run-powder" type="submit" id="powder-btn" disabled>
+                    <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title">เริ่มฟาร์มผง</span>
+                      <span class="btn-run-sub" id="powder-btn-sub">เชื่อม DevPlay ก่อน</span>
+                    </span>
+                  </button>
                 </div>
-
-                <div class="powder-estimate" id="powder-estimate" aria-live="polite">
-                  <p class="powder-estimate-target muted" id="powder-estimate-target">เชื่อม DevPlay เพื่อดูเป้าหมาย</p>
-                  <dl class="powder-estimate-stats">
-                    <div>
-                      <dt>ราคา/รอบ</dt>
-                      <dd id="powder-stat-price">—</dd>
-                    </div>
-                    <div>
-                      <dt>ผง/รอบ</dt>
-                      <dd id="powder-stat-yield">—</dd>
-                    </div>
-                    <div>
-                      <dt>ประมาณรอบ</dt>
-                      <dd id="powder-stat-rounds">—</dd>
-                    </div>
-                    <div>
-                      <dt>เหรียญที่ใช้</dt>
-                      <dd id="powder-stat-coin">—</dd>
-                    </div>
-                  </dl>
-                  <p class="powder-estimate-note muted" id="powder-estimate-note"></p>
-                </div>
-
-                <button class="btn btn-run btn-run-powder hidden" type="submit" id="powder-btn" disabled hidden>
-                  <img src="assets/crc_cookie_stone_box.png" alt="" width="28" height="28" />
-                  <span class="btn-run-copy">
-                    <span class="btn-run-title">เริ่มฟาร์มผง</span>
-                    <span class="btn-run-sub" id="powder-btn-sub">เชื่อม DevPlay ก่อน</span>
-                  </span>
-                </button>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-giftdraw" role="tabpanel" aria-labelledby="farm-tab-giftdraw" hidden>
@@ -839,6 +824,7 @@
                       <span class="btn-run-sub" id="reroll-btn-sub">เชื่อม DevPlay ก่อน</span>
                     </span>
                   </button>
+                  <div id="reroll-results" class="reroll-results hidden" hidden aria-live="polite"></div>
                 </div>
               </div>
 
@@ -1381,6 +1367,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260731-exam2"></script>
+  <script src="js/app.js?v=20260731-exam3"></script>
 </body>
 </html>

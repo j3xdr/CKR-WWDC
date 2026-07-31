@@ -7517,3 +7517,69 @@ main.shell:has(#user-view:not(.hidden)) {
 #farm-panel-dstool textarea {
   width: 100%;
 }
+
+
+/* Exam Magic Powder + global proxy + reroll results */
+.powder-exam-layout .powder-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.powder-break-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.powder-run-summary {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 255, 136, 0.2);
+  background: rgba(0, 255, 136, 0.06);
+}
+.powder-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.powder-summary-grid .lbl {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted, rgba(245,230,210,.65));
+}
+.reroll-results {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+.reroll-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.reroll-results-list {
+  display: grid;
+  gap: 8px;
+}
+.reroll-result-card {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line, rgba(255,255,255,.12));
+  background: rgba(0,0,0,.28);
+  display: grid;
+  gap: 6px;
+}
+.reroll-secret {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.reroll-secret code {
+  font-size: 0.75rem;
+  word-break: break-all;
+}

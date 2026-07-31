@@ -11,7 +11,8 @@
 
   const REMEMBER_KEY = "ckr_wwdc_remember";
   const SESSION_KEY = "ckr_session_token";
-  const HEART_PROXY_KEY = "ckr_heart_proxy_url";
+  const GLOBAL_PROXY_KEY = "ckr_global_proxy_url";
+  const HEART_PROXY_KEY = GLOBAL_PROXY_KEY; // compat alias
   const FARM_SIDEBAR_KEY = "ckr_farm_sidebar_open";
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
@@ -533,7 +534,8 @@
   let powderEstimateLoading = false;
   // Rounds is the single source of truth; the powder field is derived from it.
   // null means "untouched" — a fresh estimate then fills in the affordable max.
-  let powderRounds = null;
+  let powderRounds = 10;
+  let lastRerollResults = [];
   let giftdrawCount = 1;
   let giftdrawMax = 1;
   let giftdrawEstimate = null;
@@ -683,7 +685,8 @@
     powder_session_missing: "เชื่อม DevPlay ใหม่ (ไม่มี session ผง)",
     no_gift_boxes: "ไม่มีกล่องขวัญในไอดีนี้ — ต้องมี Gift Point ครบ 100 ต่อ 1 กล่อง",
     heart_disabled: "ฟาร์มหัวใจปิดใช้งานอยู่ — รอแอดมินเปิด",
-    heart_proxy_not_configured: "ยังไม่มี proxy — ใส่ rotating proxy ของคุณในแท็บ Heart ก่อนรัน",
+    heart_proxy_not_configured: "ยังไม่มี proxy — ตั้ง proxy หลัง login DevPlay ก่อนรัน",
+    proxy_url_required: "ต้องใส่ Proxy URL ก่อนใช้งาน",
     proxy_url_invalid: "รูปแบบ proxy ไม่ถูกต้อง — ต้องขึ้นต้นด้วย http:// หรือ https://",
     heart_timeout: "ฟาร์มหัวใจใช้เวลานานเกินกำหนด — ลองลดจำนวนหัวใจแล้วรันใหม่",
     no_hearts_collected: "เก็บหัวใจไม่ได้เลย — ลองใหม่อีกครั้ง",
@@ -1109,6 +1112,7 @@
 
   function closeModal() {
     if (modalMode === "queue") return;
+    if (modalMode === "proxy" && modalRoot.classList.contains("locked")) return;
     if (modalMode === "empty") emptyModalDismissed = true;
     modalMode = null;
     clearModalActions();
@@ -2218,36 +2222,129 @@
     paintDevPlayHub();
   }
 
-  function getHeartProxy() {
-    const el = $("heart-proxy-url");
-    const fromInput = el ? String(el.value || "").trim() : "";
-    if (fromInput) return fromInput;
+
+  function getSavedProxyDraft() {
     try {
-      return String(localStorage.getItem(HEART_PROXY_KEY) || "").trim();
+      return String(localStorage.getItem(GLOBAL_PROXY_KEY) || "").trim();
     } catch (_) {
       return "";
     }
   }
 
-  function saveHeartProxy(value) {
+  function saveProxyDraft(value) {
     const v = String(value || "").trim();
     try {
-      if (v) localStorage.setItem(HEART_PROXY_KEY, v);
-      else localStorage.removeItem(HEART_PROXY_KEY);
+      if (v) localStorage.setItem(GLOBAL_PROXY_KEY, v);
+      else localStorage.removeItem(GLOBAL_PROXY_KEY);
     } catch (_) {}
   }
 
-  function loadHeartProxyIntoInput() {
-    const el = $("heart-proxy-url");
-    if (!el) return;
-    try {
-      const saved = String(localStorage.getItem(HEART_PROXY_KEY) || "").trim();
-      if (saved && !el.value) el.value = saved;
-    } catch (_) {}
+  function getSessionProxy() {
+    return String((devplaySession && devplaySession.proxyUrl) || "").trim();
   }
 
+  function hasUsableProxy() {
+    return !!(getSessionProxy() || getSavedProxyDraft());
+  }
+
+  function isValidProxyUrl(v) {
+    const s = String(v || "").trim().toLowerCase();
+    return s.startsWith("http://") || s.startsWith("https://");
+  }
+
+  async function saveProxyToServer(proxyUrl, { required = true } = {}) {
+    if (!devplaySession?.id) {
+      throw new Error("devplay_session_expired");
+    }
+    const v = String(proxyUrl || "").trim();
+    if (!isValidProxyUrl(v)) {
+      const err = new Error("proxy_url_invalid");
+      err.code = "proxy_url_invalid";
+      throw err;
+    }
+    await ensureApiReady();
+    await api("/api/farm/devplay/proxy", {
+      method: "POST",
+      body: {
+        devplay_session_id: devplaySession.id,
+        proxy_url: v,
+      },
+    });
+    saveProxyDraft(v);
+    if (devplaySession) {
+      devplaySession.proxyUrl = v;
+      devplaySession.proxyConfigured = true;
+    }
+    paintHeartProxyHint();
+    paintDevPlayHub();
+    updateFarmAvailability();
+    return v;
+  }
+
+  function promptProxyModal({ locked = true, title } = {}) {
+    return new Promise((resolve) => {
+      clearModalActions();
+      const draft = getSessionProxy() || getSavedProxyDraft();
+      openModal({
+        mode: "proxy",
+        title: title || "ตั้งค่า Proxy",
+        locked: !!locked,
+        icon: "assets/gem.png",
+        bodyHtml:
+          '<p class="muted" style="margin:0 0 10px;">ใส่ rotating proxy ของคุณ (บังคับ) — ใช้กับทุกฟังก์ชันที่ต้องยิงเกม เพื่อไม่ให้โหลดตกที่เซิร์ฟเวอร์</p>' +
+          '<label class="field" for="modal-proxy-url"><span>PROXY URL</span>' +
+          '<input id="modal-proxy-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" ' +
+          'placeholder="http://user:pass@host:port/" value="' +
+          String(draft).replace(/"/g, "&quot;") +
+          '" /></label>' +
+          '<p class="muted" id="modal-proxy-err" style="color:#ff8a80;min-height:18px;margin-top:6px;"></p>',
+      });
+      const input = $("modal-proxy-url");
+      const errEl = $("modal-proxy-err");
+      const saveBtn = makeBtn("บันทึก Proxy", "btn-candy", async () => {
+        const v = String(input?.value || "").trim();
+        if (!isValidProxyUrl(v)) {
+          if (errEl) errEl.textContent = "รูปแบบไม่ถูกต้อง — ต้องขึ้นต้นด้วย http:// หรือ https://";
+          return;
+        }
+        try {
+          setBtnLoading(saveBtn, true);
+          await saveProxyToServer(v);
+          forceCloseModal();
+          showToast("บันทึก proxy แล้ว", "ok");
+          resolve(v);
+        } catch (e) {
+          if (errEl) {
+            errEl.textContent =
+              thError(e.code || e.message) || e.message || "บันทึก proxy ไม่สำเร็จ";
+          }
+        } finally {
+          setBtnLoading(saveBtn, false);
+        }
+      });
+      modalActions.appendChild(saveBtn);
+      if (!locked) {
+        modalActions.appendChild(
+          makeBtn("ยกเลิก", "btn-ghost", () => {
+            forceCloseModal();
+            resolve(null);
+          })
+        );
+      }
+      setTimeout(() => input?.focus?.(), 50);
+    });
+  }
+
+  // Compat aliases used by older heart UI code paths
+  function getHeartProxy() {
+    return getSessionProxy() || getSavedProxyDraft();
+  }
+  function saveHeartProxy(value) {
+    saveProxyDraft(value);
+  }
+  function loadHeartProxyIntoInput() {}
   function hasUsableHeartProxy() {
-    return !!getHeartProxy();
+    return hasUsableProxy();
   }
 
   function isHeartServiceEnabled() {
@@ -2354,14 +2451,21 @@
   function paintHeartProxyHint() {
     const hint = $("heart-proxy-hint");
     if (!hint) return;
-    const hasUser = !!getHeartProxy();
+    const hasUser = hasUsableProxy();
     hint.classList.toggle("is-warn", !hasUser);
     if (hasUser) {
       hint.textContent =
-        "ใช้ proxy ของคุณ — เฉพาะตอนสร้าง guest · บัญชีหลักไม่ผ่าน proxy";
+        "ใช้ proxy ที่ตั้งหลัง login — เฉพาะตอนสร้าง guest · บัญชีหลักไม่ผ่าน proxy";
     } else {
       hint.textContent =
-        "จำเป็นต้องใส่ rotating proxy ของคุณก่อนเริ่มฟาร์ม (รูปแบบ http://user:pass@host:port/)";
+        "ยังไม่ได้ตั้ง proxy — หลัง login DevPlay ต้องใส่ rotating proxy ก่อนรันฟังก์ชันใดๆ";
+    }
+    const btn = $("devplay-proxy-btn");
+    if (btn) {
+      const connected = isDevPlayConnected();
+      btn.hidden = !connected;
+      btn.classList.toggle("hidden", !connected);
+      btn.textContent = hasUser ? "แก้ Proxy" : "ตั้ง Proxy";
     }
   }
 
@@ -2402,6 +2506,8 @@
       id: data.devplay_session_id,
       nickname: data.nickname || "player",
       powderReady: data.powder_ready !== false,
+      proxyConfigured: !!data.proxy_configured,
+      proxyUrl: data.proxy_configured ? getSavedProxyDraft() : "",
       tickets: ticketsN,
       ticketsLoading: !ticketsKnown,
       coin: data.coin,
@@ -2442,6 +2548,7 @@
       // rather than firing on every tab switch.
       paintHeartStepper();
     }
+    paintHeartProxyHint();
   }
 
   async function refreshDevPlayTickets(sessionId) {
@@ -2504,6 +2611,9 @@
       });
       applyDevPlayConnect(data);
       switchFarmTab("devplay", { silent: true });
+      if (!devplaySession.proxyConfigured) {
+        await promptProxyModal({ locked: true, title: "ใส่ Proxy ก่อนใช้งาน" });
+      }
       const powderHint =
         data.powder_ready === false
           ? " · ผง / Gift Draw / ตีบวก อาจต้องเชื่อมใหม่อีกครั้ง"
@@ -2906,28 +3016,20 @@
   }
 
   function powderMaxRounds() {
-    return Math.max(1, Number(powderEstimate?.max_rounds ?? powderEstimate?.rounds_planned) || 1);
+    const fromEst = Number(powderEstimate?.max_rounds);
+    if (Number.isFinite(fromEst) && fromEst > 0) return Math.min(9999, fromEst);
+    const price = Math.max(1, Number($("powder-price")?.value) || 5000);
+    const coin = Number(devplaySession?.coin || 0);
+    if (coin > 0) return Math.min(9999, Math.max(1, Math.floor(coin / price)));
+    return 9999;
   }
 
   function powderYield() {
-    return Math.max(
-      1,
-      Number(
-        powderEstimate?.powder_yield_lv1 ??
-          powderTreasures.find((x) => x.name === powderTreasureName)?.powder_yield_lv1
-      ) || 1
-    );
+    return Math.max(1, Number(powderEstimate?.powder_yield_lv1 ?? $("powder-qty")?.value) || 15);
   }
 
   function powderPricePerRound() {
-    return Math.max(
-      0,
-      Number(
-        powderEstimate?.coin_per_round ??
-          powderEstimate?.price ??
-          powderTreasures.find((x) => x.name === powderTreasureName)?.price
-      ) || 0
-    );
+    return Math.max(0, Number(powderEstimate?.price ?? $("powder-price")?.value) || 5000);
   }
 
   function clampPowderRounds(value) {
@@ -2935,69 +3037,23 @@
     return Math.min(Math.max(1, n || 1), powderMaxRounds());
   }
 
-  // `max_rounds` only exists on an API build that also honours the `rounds`
-  // field. An older API silently ignores it and spends every coin instead, so
-  // offering the control there would be lying about what the run will do.
   function powderRoundsSupported() {
-    return !!powderEstimate && powderEstimate.max_rounds != null;
+    return true;
   }
 
   function paintPowderStepper() {
     const roundsEl = $("powder-rounds");
-    const targetEl = $("powder-target-input");
     const minus = $("powder-minus");
     const plus = $("powder-plus");
-    const costEl = $("powder-cost-line");
-    const max = powderMaxRounds();
     const connected = isDevPlayConnected();
-    const supported = powderRoundsSupported();
-    const ready = connected && !!powderEstimate && powderEstimate.can_run && supported;
-
-    if (ready && powderRounds == null) powderRounds = max;
-    const rounds = ready ? clampPowderRounds(powderRounds ?? max) : 1;
-    powderRounds = ready ? rounds : powderRounds;
-
-    // Don't fight the field the user is typing in.
-    if (roundsEl && document.activeElement !== roundsEl) {
-      roundsEl.value = ready ? String(rounds) : "";
-    }
-    if (targetEl && document.activeElement !== targetEl) {
-      targetEl.value = ready ? String(rounds * powderYield()) : "";
-    }
-
-    if (costEl) {
-      if (!connected) {
-        costEl.textContent = "เชื่อม DevPlay เพื่อเลือกจำนวนรอบ";
-      } else if (powderEstimateLoading) {
-        costEl.textContent = "กำลังคำนวณ…";
-      } else if (!powderEstimate) {
-        costEl.textContent = "ยังไม่ทราบยอดเหรียญ";
-      } else if (!powderEstimate.can_run) {
-        costEl.textContent = "เหรียญไม่พอแม้แต่รอบเดียว";
-      } else if (!supported) {
-        costEl.textContent =
-          "⚠ เซิร์ฟเวอร์ยังไม่รองรับการเลือกจำนวนรอบ — รันแล้วจะใช้เหรียญทั้งหมดที่มี";
-      } else {
-        const cost = rounds * powderPricePerRound();
-        const left = Math.max(0, Number(powderEstimate.coin_available || 0) - cost);
-        costEl.textContent =
-          "ใช้เหรียญ " +
-          formatNumTh(cost) +
-          " · ได้ผง " +
-          formatNumTh(rounds * powderYield()) +
-          " · เหลือ " +
-          formatNumTh(left) +
-          " (สูงสุด " +
-          formatNumTh(max) +
-          " รอบ)";
-      }
-    }
-
-    const canEdit = ready && !isModeActivelyRunning("powder") && !devplayConnecting;
-    if (roundsEl) roundsEl.disabled = !canEdit;
-    if (targetEl) targetEl.disabled = !canEdit;
-    if (minus) minus.disabled = !canEdit || rounds <= 1;
-    if (plus) plus.disabled = !canEdit || rounds >= max;
+    const rounds = clampPowderRounds(powderRounds ?? Number(roundsEl?.value) || 10);
+    powderRounds = rounds;
+    if (roundsEl && document.activeElement !== roundsEl) roundsEl.value = String(rounds);
+    const busy = isModeActivelyRunning("powder") || !!devplayConnecting;
+    if (minus) minus.disabled = !connected || busy || rounds <= 1;
+    if (plus) plus.disabled = !connected || busy || rounds >= powderMaxRounds();
+    if (roundsEl) roundsEl.disabled = !connected || busy;
+    paintPowderExamEstimate();
   }
 
   function commitPowderRoundsFromInput() {
@@ -3058,31 +3114,64 @@
     paintPowderStepper();
   }
 
-  async function refreshPowderEstimate() {
-    if (farmTab !== "powder" || !isDevPlayConnected()) {
-      paintPowderEstimateFromApi(null);
-      return;
+
+  function paintPowderExamEstimate() {
+    const rounds = Math.max(1, Math.min(9999, Number($("powder-rounds")?.value) || powderRounds || 10));
+    powderRounds = rounds;
+    const price = Math.max(0, Number($("powder-price")?.value) || 5000);
+    const yieldP = Math.max(1, Number($("powder-qty")?.value) || 15);
+    const coin = Number(devplaySession?.coin || 0);
+    const cost = rounds * price;
+    const can = !!devplaySession && coin >= price;
+    powderEstimate = {
+      can_run: can,
+      max_rounds: price > 0 ? Math.max(1, Math.floor(coin / price)) : 1,
+      coin_available: coin,
+      price,
+      powder_yield_lv1: yieldP,
+      target_powder: rounds * yieldP,
+      capped: false,
+    };
+    const setTxt = (id, v) => {
+      const el = $(id);
+      if (el) el.textContent = v;
+    };
+    setTxt("powder-stat-price", formatNumTh(price));
+    setTxt("powder-stat-yield", formatNumTh(yieldP));
+    setTxt("powder-stat-rounds", formatNumTh(rounds));
+    setTxt("powder-stat-coin", formatNumTh(cost));
+    const line = $("powder-cost-line");
+    if (line) {
+      if (!devplaySession) line.textContent = "เชื่อม DevPlay เพื่อดูประมาณการ";
+      else if (!can) line.textContent = "เหรียญไม่พอ (มี " + formatNumTh(coin) + ")";
+      else
+        line.textContent =
+          "จะใช้ " +
+          formatNumTh(cost) +
+          " เหรียญ · เหลือประมาณ " +
+          formatNumTh(Math.max(0, coin - cost)) +
+          " · ได้ประมาณ " +
+          formatNumTh(rounds * yieldP) +
+          " ผง";
     }
-    powderEstimateLoading = true;
+    const note = $("powder-estimate-note");
+    if (note) {
+      note.textContent = $("powder-do-break")?.checked
+        ? "โหมด: ซื้อแล้วย่อยทันที (break after buying)"
+        : "โหมด: ซื้ออย่างเดียว ไม่ย่อย";
+    }
+    const nameEl = $("powder-stuff-name");
+    if (nameEl) {
+      const seq = Number($("powder-stuff-seq")?.value) || 811;
+      nameEl.textContent =
+        seq === 811 ? "→ Normal Treasure Box (811)" : "→ stuffSeq " + seq;
+    }
     updateFarmAvailability();
-    try {
-      await ensureApiReady();
-      const data = await api("/api/farm/powder/estimate", {
-        method: "POST",
-        body: {
-          devplay_session_id: devplaySession.id,
-          treasure_name: powderTreasureName,
-        },
-      });
-      paintPowderEstimateFromApi(data);
-    } catch (e) {
-      paintPowderEstimateFromApi(null);
-      const msg = thError(e.message);
-      if (msg) setFarmStatus( msg, "err");
-    } finally {
-      powderEstimateLoading = false;
-      updateFarmAvailability();
-    }
+  }
+
+  async function refreshPowderEstimate() {
+    powderEstimateLoading = false;
+    paintPowderExamEstimate();
   }
 
   /* ---------- Gift Draw ---------- */
@@ -4021,6 +4110,156 @@
     return accounts;
   }
 
+
+  function downloadRerollResults(results) {
+    const lines = (results || [])
+      .filter((r) => r && (r.guest_secret || r.email || r.mid))
+      .map((r) => {
+        if (r.email) return [r.email, "", r.nickname || "", r.mid || ""].join("\t");
+        return [
+          r.mid || "",
+          r.guest_secret || "",
+          r.device_id || "",
+          r.nickname || "",
+          (r.draws || []).map((d) => d.name || d.itemId).filter(Boolean).join(","),
+        ].join("\t");
+      });
+    const header = "mid_or_email\tguest_secret_or_blank\tdevice_id\tnickname\tdraws\n";
+    const blob = new Blob([header + lines.join("\n")], { type: "text/plain;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "reroll_accounts.txt";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function registerRerollGuest(row) {
+    if (!row?.mid || !row?.guest_secret) {
+      showErrorModal("ไม่มี guest_secret สำหรับไอดีนี้", "แปลงอีเมลไม่ได้");
+      return;
+    }
+    clearModalActions();
+    openModal({
+      mode: "reroll-register",
+      title: "แปลง guest เป็นอีเมล",
+      icon: "assets/gem.png",
+      bodyHtml:
+        '<p class="muted">mid: <code>' +
+        String(row.mid) +
+        "</code></p>" +
+        '<label class="field"><span>EMAIL</span><input id="reroll-reg-email" type="email" autocomplete="off" /></label>' +
+        '<label class="field"><span>PASSWORD</span><input id="reroll-reg-pass" type="password" autocomplete="new-password" /></label>',
+    });
+    modalActions.appendChild(
+      makeBtn("แปลง", "btn-candy", async () => {
+        const email = String($("reroll-reg-email")?.value || "").trim();
+        const password = String($("reroll-reg-pass")?.value || "");
+        if (!email || password.length < 6) {
+          showErrorModal("กรอกอีเมลและรหัสผ่าน (อย่างน้อย 6 ตัว)", "ข้อมูลไม่ครบ");
+          return;
+        }
+        try {
+          await ensureApiReady();
+          const data = await api("/api/farm/reroll/register", {
+            method: "POST",
+            body: {
+              mid: row.mid,
+              email,
+              password,
+              guest_secret: row.guest_secret,
+              device_id: row.device_id,
+              game_access_token: row.game_access_token,
+              oven_access_token: row.oven_access_token,
+              devplay_session_id: devplaySession?.id,
+              proxy_url: getHeartProxy() || undefined,
+          devplay_session_id: devplaySession?.id,
+            },
+          });
+          forceCloseModal();
+          if (data.ok) {
+            showToast("แปลงอีเมลสำเร็จ: " + email, "ok");
+            row.email = email;
+            paintRerollResults(lastRerollResults);
+          } else {
+            showErrorModal("แปลงอีเมลไม่สำเร็จ", "ล้มเหลว");
+          }
+        } catch (e) {
+          showErrorModal(thError(e.code || e.message) || String(e.message || e), "แปลงอีเมลไม่สำเร็จ");
+        }
+      })
+    );
+    modalActions.appendChild(makeBtn("ยกเลิก", "btn-ghost", () => forceCloseModal()));
+  }
+
+  function paintRerollResults(results) {
+    const root = $("reroll-results");
+    if (!root) return;
+    const rows = Array.isArray(results) ? results : [];
+    if (!rows.length) {
+      root.innerHTML = "";
+      root.hidden = true;
+      root.classList.add("hidden");
+      return;
+    }
+    root.hidden = false;
+    root.classList.remove("hidden");
+    const head =
+      '<div class="reroll-results-head"><strong>ผลรีโรล ' +
+      rows.length +
+      ' ไอดี</strong> <button type="button" class="btn btn-ghost btn-sm" id="reroll-download-btn">ดาวน์โหลด</button></div>';
+    const cards = rows
+      .map((r, idx) => {
+        const draws = (r.draws || [])
+          .map((d) => d.name || d.itemId || "?")
+          .slice(0, 8)
+          .join(", ");
+        const secret = r.guest_secret
+          ? '<div class="reroll-secret"><code>' +
+            String(r.guest_secret) +
+            '</code> <button type="button" class="btn btn-ghost btn-sm" data-copy="' +
+            String(r.guest_secret).replace(/"/g, "&quot;") +
+            '">คัดลอก</button></div>'
+          : "";
+        const regBtn = r.guest_secret
+          ? '<button type="button" class="btn btn-ghost btn-sm" data-reg-idx="' +
+            idx +
+            '">แปลงเป็นอีเมล</button>'
+          : "";
+        return (
+          '<article class="reroll-result-card">' +
+          "<div><strong>" +
+          (r.nickname || r.email || r.mid || "—") +
+          "</strong> <span class=\"muted\">" +
+          (r.mid || "") +
+          "</span></div>" +
+          (r.device_id ? '<div class="muted">device: ' + r.device_id + "</div>" : "") +
+          secret +
+          '<div class="muted">draws: ' +
+          (draws || "—") +
+          "</div>" +
+          regBtn +
+          "</article>"
+        );
+      })
+      .join("");
+    root.innerHTML = head + '<div class="reroll-results-list">' + cards + "</div>";
+    $("reroll-download-btn")?.addEventListener("click", () => downloadRerollResults(rows));
+    root.querySelectorAll("[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(btn.getAttribute("data-copy") || "");
+          showToast("คัดลอกแล้ว", "ok");
+        } catch (_) {}
+      });
+    });
+    root.querySelectorAll("[data-reg-idx]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const i = Number(btn.getAttribute("data-reg-idx"));
+        registerRerollGuest(rows[i]);
+      });
+    });
+  }
+
   async function runReroll() {
     if (!hasFarmAccess()) {
       showEmptyCoinsModal();
@@ -4050,9 +4289,23 @@
     } else {
       rerollCount = clampRerollCount($("reroll-count")?.value || rerollCount);
       paintRerollStepper();
-      body = { mode: "guest", count: rerollCount, draw_count: 8 };
+      body = {
+        mode: "guest",
+        count: rerollCount,
+        draw_count: 8,
+        devplay_session_id: devplaySession.id,
+        proxy_url: getHeartProxy() || undefined,
+      };
       target = rerollCount;
       label = "รีโรล · " + formatNumTh(rerollCount) + " ไอดี";
+    }
+    if (!hasUsableProxy()) {
+      await promptProxyModal({ locked: true, title: "ใส่ Proxy ก่อนรีโรล" });
+      if (!hasUsableProxy()) return;
+    }
+    if (rerollMode === "accounts") {
+      body.proxy_url = getHeartProxy() || undefined;
+      body.devplay_session_id = devplaySession.id;
     }
 
     setFarmStatus("กำลังรีโรล…", "muted");
@@ -4068,6 +4321,8 @@
           onSuccess: (data) => {
             refreshMe().catch(() => {});
             const result = data.result || data;
+            lastRerollResults = Array.isArray(result?.results) ? result.results : [];
+            paintRerollResults(lastRerollResults);
             const n =
               result?.results?.length ||
               result?.accounts?.length ||
@@ -4655,6 +4910,7 @@
       if (upgradeBtn) upgradeBtn.disabled = true;
       if (cookieBtn) cookieBtn.disabled = true;
       paintPowderStepper();
+      paintPowderExamEstimate();
       const pickBtn = $("powder-pick-btn");
       if (pickBtn) pickBtn.disabled = connecting || powderRunning;
     } else if (farmTab === "partyrun") {
@@ -7483,32 +7739,41 @@
       showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
       return;
     }
+    if (!hasUsableProxy()) {
+      await promptProxyModal({ locked: true, title: "ใส่ Proxy ก่อนฟาร์มผง" });
+      if (!hasUsableProxy()) return;
+    }
+    paintPowderExamEstimate();
     if (!powderEstimate?.can_run) {
       showErrorModal(ERR_TH.insufficient_coin, "เหรียญไม่พอ");
       return;
     }
 
-    // null when the API cannot honour a round count — then this is the old
-    // spend-everything run and the status line must not promise otherwise.
-    const rounds = powderRoundsSupported()
-      ? clampPowderRounds(powderRounds ?? powderMaxRounds())
-      : null;
+    const rounds = clampPowderRounds(powderRounds ?? Number($("powder-rounds")?.value) ?? 10);
+    const stuffSeq = Math.max(1, Number($("powder-stuff-seq")?.value) || 811);
+    const price = Math.max(0, Number($("powder-price")?.value) || 5000);
+    const powderQty = Math.max(1, Number($("powder-qty")?.value) || 15);
+    const doBreak = !!$("powder-do-break")?.checked;
     setFarmStatus(
-      rounds == null
-        ? "กำลังฟาร์มผง (ใช้เหรียญทั้งหมดที่มี) … อาจใช้เวลาหลายนาที"
-        : "กำลังฟาร์มผง " +
-            formatNumTh(rounds) +
-            " รอบ (≈" +
-            formatNumTh(rounds * powderYield()) +
-            " ผง) …",
+      "กำลังฟาร์มผง " +
+        formatNumTh(rounds) +
+        " รอบ (seq " +
+        stuffSeq +
+        " · ≈" +
+        formatNumTh(rounds * powderQty) +
+        " ผง) …",
       "muted"
     );
 
     const body = {
       devplay_session_id: devplaySession.id,
-      treasure_name: powderTreasureName,
+      treasure_name: "Box-" + stuffSeq,
+      rounds,
+      stuff_seq: stuffSeq,
+      price,
+      powder_qty: powderQty,
+      do_break: doBreak,
     };
-    if (rounds != null) body.rounds = rounds;
 
     if (
       queueIfBusy(
@@ -7538,8 +7803,22 @@
               if (result.powder_after != null) devplaySession.powder = result.powder_after;
               paintDevPlaySessionLine();
             }
-            const powderGained = Number(data.powder_gained || result.powder_gained || 0);
-            const roundsCompleted = Number(data.rounds_completed || result.rounds || 0);
+            const powderGained = Number(data.powder_gained || result.powder_gained || result.total_powder || 0);
+            const roundsCompleted = Number(data.rounds_completed || result.rounds || result.bought || 0);
+            const sum = $("powder-summary");
+            if (sum) {
+              sum.hidden = false;
+              sum.classList.remove("hidden");
+              const setTxt = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+              setTxt("mp-res-bought", formatNumTh(result.bought ?? roundsCompleted));
+              setTxt("mp-res-broken", formatNumTh(result.broken ?? "—"));
+              setTxt("mp-res-powder", formatNumTh(powderGained));
+              setTxt("mp-res-coin", formatNumTh(result.remaining_coin ?? result.coin_after ?? "—"));
+            }
+            if (result.remaining_coin != null && devplaySession) {
+              devplaySession.coin = result.remaining_coin;
+              paintDevPlaySessionLine();
+            }
             setFarmStatus(
               "ฟาร์มผงสำเร็จ +" + formatNumTh(powderGained),
               "ok"
@@ -7836,6 +8115,7 @@
           password: $("dp-acct-secret").value,
           target_hearts: target,
           proxy_url: getHeartProxy() || undefined,
+          devplay_session_id: devplaySession?.id,
         },
         mode: "heart",
         target,
@@ -8368,6 +8648,13 @@
     }
   });
 
+  $("devplay-proxy-btn")?.addEventListener("click", () => {
+    promptProxyModal({ locked: false, title: "ตั้งค่า Proxy" }).catch(() => {});
+  });
+  ["powder-stuff-seq", "powder-price", "powder-qty", "powder-do-break"].forEach((id) => {
+    $(id)?.addEventListener("input", () => paintPowderExamEstimate());
+    $(id)?.addEventListener("change", () => paintPowderExamEstimate());
+  });
   $("heart-proxy-url")?.addEventListener("input", (ev) => {
     saveHeartProxy(ev.target.value);
     paintHeartProxyHint();
