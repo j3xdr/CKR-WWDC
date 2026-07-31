@@ -789,9 +789,14 @@
     showErrorModal(ERR_TH.session_replaced, "มีการเข้าสู่ระบบจากที่อื่น");
   }
 
+  function isRentalPermanent(p) {
+    if (!p) return false;
+    return !!(p.rental_is_permanent ?? p.is_permanent);
+  }
+
   function hasFarmAccess() {
     if (!profile) return false;
-    if (profile.is_permanent) return true;
+    if (isRentalPermanent(profile)) return true;
     if (profile.farm_access === true) return true;
     if (profile.farm_access === false) return false;
     const exp = profile.rental_expires_at ? Date.parse(profile.rental_expires_at) : NaN;
@@ -800,7 +805,7 @@
 
   function rentalStatusLabel() {
     if (!profile) return "—";
-    if (profile.is_permanent) return "ถาวร";
+    if (isRentalPermanent(profile)) return "ถาวร";
     const expRaw = profile.rental_expires_at;
     if (!expRaw) return "หมดอายุ";
     const exp = Date.parse(expRaw);
@@ -811,6 +816,18 @@
       hour: "2-digit",
       minute: "2-digit",
     });
+  }
+
+  function sidebarRentalMeta() {
+    if (!profile) return { text: "—", kind: "" };
+    if (isRentalPermanent(profile)) return { text: "สิทธิ์ถาวร · ใช้งานได้ไม่จำกัด", kind: "is-permanent" };
+    if (hasFarmAccess()) {
+      const daysLeft = rentalDaysRemaining();
+      const parts = ["เช่าถึง " + rentalStatusLabel()];
+      if (daysLeft != null) parts.unshift("เหลือ ~" + formatNumTh(daysLeft) + " วัน");
+      return { text: parts.join(" · "), kind: "is-active" };
+    }
+    return { text: "หมดอายุแล้ว · กดต่ออายุด้านบน", kind: "is-expired" };
   }
 
   function formatRentalExpiry(iso) {
@@ -833,6 +850,7 @@
   function applyProfileRental(data) {
     if (!profile || !data) return;
     if (data.rental_expires_at !== undefined) profile.rental_expires_at = data.rental_expires_at;
+    if (data.rental_is_permanent !== undefined) profile.rental_is_permanent = data.rental_is_permanent;
     if (data.is_permanent !== undefined) profile.is_permanent = data.is_permanent;
     if (data.farm_access !== undefined) profile.farm_access = data.farm_access;
     paintProfile();
@@ -1962,9 +1980,12 @@
     const connected = isDevPlayConnected();
     const loginCard = $("devplay-login-card");
     const accountCard = $("devplay-account-card");
+    const hub = document.querySelector("#farm-panel-devplay .devplay-hub");
     loginCard?.classList.toggle("hidden", connected);
     accountCard?.classList.toggle("hidden", !connected);
+    hub?.classList.toggle("is-connected", connected);
     paintFarmNavLock();
+    syncOvenDevPlayLayout();
 
     if (!devplaySession) return;
 
@@ -2273,6 +2294,13 @@
     }
   }
 
+  function syncOvenDevPlayLayout() {
+    const run = $("run");
+    if (!run) return;
+    const compactLogin = farmTab === "devplay" && !isDevPlayConnected();
+    run.classList.toggle("oven-panel--devplay-login", compactLogin);
+  }
+
   function switchFarmTab(tab, opts = {}) {
     const tabs = ["devplay", "partyrun", "heart", "powder", "giftdraw", "upgrade", "cookie"];
     let next = tabs.includes(tab) ? tab : "devplay";
@@ -2353,6 +2381,7 @@
     if (farmTab === "devplay") {
       paintDevPlayHub();
     }
+    syncOvenDevPlayLayout();
   }
 
   async function loadPowderTreasures() {
@@ -3915,7 +3944,6 @@
 
   function setTopupExpanded(expanded) {
     const val = expanded ? "true" : "false";
-    $("pos-nav-topup")?.setAttribute("aria-expanded", val);
     $("menu-nav-topup")?.setAttribute("aria-expanded", val);
   }
 
@@ -3971,7 +3999,7 @@
   }
 
   function rentalDaysRemaining() {
-    if (!profile || profile.is_permanent) return null;
+    if (!profile || isRentalPermanent(profile)) return null;
     const exp = profile.rental_expires_at ? Date.parse(profile.rental_expires_at) : NaN;
     if (!Number.isFinite(exp) || exp <= Date.now()) return 0;
     return Math.max(1, Math.ceil((exp - Date.now()) / 86400000));
@@ -3988,7 +4016,7 @@
       root?.classList.remove("is-active", "is-expired");
       return;
     }
-    if (profile.is_permanent) {
+    if (isRentalPermanent(profile)) {
       label.textContent = "สิทธิ์ถาวร";
       if (detail) detail.textContent = "ใช้งานได้ไม่จำกัด";
       root?.classList.add("is-active");
@@ -4467,7 +4495,7 @@
   }
 
   function flashTopupDoor() {
-    const door = $("pos-nav-topup") || $("menu-nav-topup");
+    const door = $("menu-nav-topup");
     const panel = $("topup");
     const target = door || panel;
     if (!target) return;
@@ -4762,14 +4790,8 @@
   function showApp() {
     loginView.classList.add("hidden");
     userView.classList.remove("hidden");
-    $("logout-btn")?.classList.remove("hidden");
     $("logout-btn-menu")?.classList.remove("hidden");
-    $("nav-balance")?.classList.remove("hidden");
-    $("nav-balance-compact")?.classList.remove("hidden");
-    $("pos-nav")?.classList.remove("hidden");
-    $("topbar-actions-bar")?.classList.remove("hidden");
     $("topbar-actions-compact")?.classList.remove("hidden");
-    $("topbar-user")?.classList.remove("hidden");
     $("topbar-menu-user")?.classList.remove("hidden");
     restorePeekCooldown();
     paintDevPlayHub();
@@ -4799,30 +4821,21 @@
     closeTopbarMenu();
     loginView.classList.remove("hidden");
     userView.classList.add("hidden");
-    $("logout-btn")?.classList.add("hidden");
     $("logout-btn-menu")?.classList.add("hidden");
-    $("nav-balance")?.classList.add("hidden");
-    $("nav-balance-compact")?.classList.add("hidden");
-    $("pos-nav")?.classList.add("hidden");
-    $("topbar-actions-bar")?.classList.add("hidden");
     $("topbar-actions-compact")?.classList.add("hidden");
-    $("topbar-user")?.classList.add("hidden");
     $("topbar-menu-user")?.classList.add("hidden");
   }
 
   function paintProfile() {
-    const rentalText = rentalStatusLabel();
-    const navBal = $("nav-balance-num");
-    const navBalCompact = $("nav-balance-num-compact");
-    const menuBal = $("menu-balance-num");
-    const who = $("who-user");
     const menuWho = $("menu-who-user");
+    const menuRental = $("menu-rental-label");
     const whoName = profile?.username || profile?.display_name || "—";
-    if (navBal) navBal.textContent = rentalText;
-    if (navBalCompact) navBalCompact.textContent = rentalText;
-    if (menuBal) menuBal.textContent = rentalText;
-    if (who) who.textContent = whoName;
     if (menuWho) menuWho.textContent = whoName;
+    const rental = sidebarRentalMeta();
+    if (menuRental) {
+      menuRental.textContent = rental.text;
+      menuRental.className = "account-card-rental" + (rental.kind ? " " + rental.kind : "");
+    }
     paintPassStatus();
     updateFarmAvailability();
   }
@@ -7153,7 +7166,7 @@
     }
   });
 
-  $("logout-btn").addEventListener("click", async () => {
+  async function doLogout() {
     await sb.auth.signOut();
     accessToken = null;
     profile = null;
@@ -7171,10 +7184,10 @@
     } catch (_) {}
     emptyModalDismissed = false;
     showLogin();
-  });
+  }
 
   $("logout-btn-menu")?.addEventListener("click", () => {
-    $("logout-btn")?.click();
+    doLogout().catch(() => {});
   });
 
   $("topbar-menu-toggle")?.addEventListener("click", () => {
@@ -7475,10 +7488,10 @@
     paintHeartProxyHint();
   });
 
-  $("pos-nav-topup")?.addEventListener("click", () => openVaultModal());
-  $("pos-nav-history")?.addEventListener("click", () => showFarmHistoryModal().catch(() => {}));
-  $("pos-nav-farm")?.addEventListener("click", () => {
-    document.getElementById("run")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  $("devplay-shortcuts")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-shortcut-tab]");
+    if (!btn) return;
+    onFarmTabClick(btn.dataset.shortcutTab);
   });
 
   function onFarmTabClick(tab) {
