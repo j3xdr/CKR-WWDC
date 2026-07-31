@@ -3046,7 +3046,7 @@
     const minus = $("powder-minus");
     const plus = $("powder-plus");
     const connected = isDevPlayConnected();
-    const rounds = clampPowderRounds(powderRounds ?? Number(roundsEl?.value) || 10);
+    const rounds = clampPowderRounds(powderRounds ?? (Number(roundsEl?.value) || 10));
     powderRounds = rounds;
     if (roundsEl && document.activeElement !== roundsEl) roundsEl.value = String(rounds);
     const busy = isModeActivelyRunning("powder") || !!devplayConnecting;
