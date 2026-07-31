@@ -365,6 +365,90 @@
     setTimeout(finish, MOTION_CLOSE_MS);
   }
 
+
+  const FOCUSABLE_SEL =
+    'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  let activeFocusTrap = null;
+
+  function getFocusable(container) {
+    if (!container) return [];
+    return Array.from(container.querySelectorAll(FOCUSABLE_SEL)).filter((el) => {
+      if (el.hasAttribute("disabled") || el.getAttribute("aria-hidden") === "true") return false;
+      const style = window.getComputedStyle(el);
+      return style.visibility !== "hidden" && style.display !== "none";
+    });
+  }
+
+  function trapFocus(container) {
+    releaseFocusTrap();
+    if (!container) return;
+    const previouslyFocused = document.activeElement;
+    const onKeyDown = (ev) => {
+      if (ev.key !== "Tab") return;
+      const nodes = getFocusable(container);
+      if (!nodes.length) {
+        ev.preventDefault();
+        return;
+      }
+      const first = nodes[0];
+      const last = nodes[nodes.length - 1];
+      if (ev.shiftKey) {
+        if (document.activeElement === first || !container.contains(document.activeElement)) {
+          ev.preventDefault();
+          last.focus();
+        }
+      } else if (document.activeElement === last || !container.contains(document.activeElement)) {
+        ev.preventDefault();
+        first.focus();
+      }
+    };
+    container.addEventListener("keydown", onKeyDown);
+    activeFocusTrap = { container, onKeyDown, previouslyFocused };
+    const nodes = getFocusable(container);
+    (nodes[0] || container).focus?.();
+  }
+
+  function releaseFocusTrap() {
+    if (!activeFocusTrap) return;
+    const { container, onKeyDown, previouslyFocused } = activeFocusTrap;
+    container?.removeEventListener("keydown", onKeyDown);
+    activeFocusTrap = null;
+    if (previouslyFocused && typeof previouslyFocused.focus === "function") {
+      try {
+        previouslyFocused.focus();
+      } catch (_) {}
+    }
+  }
+
+  function setBtnLoading(btn, loading) {
+    if (!btn) return;
+    btn.classList.toggle("is-loading", !!loading);
+    if (loading) {
+      if (!btn.querySelector(".btn-spinner")) {
+        const sp = document.createElement("span");
+        sp.className = "btn-spinner";
+        sp.setAttribute("aria-hidden", "true");
+        btn.appendChild(sp);
+      }
+      btn.setAttribute("aria-busy", "true");
+    } else {
+      btn.removeAttribute("aria-busy");
+      btn.querySelector(".btn-spinner")?.remove();
+    }
+  }
+
+  function renderSkeletonCards(grid, count = 6) {
+    if (!grid) return;
+    grid.innerHTML = "";
+    grid.classList.add("card-stagger");
+    for (let i = 0; i < count; i++) {
+      const sk = document.createElement("div");
+      sk.className = "skeleton-card";
+      sk.setAttribute("aria-hidden", "true");
+      grid.appendChild(sk);
+    }
+  }
+
   let accessToken = null;
   let sessionToken = null;
   let profile = null;
@@ -416,6 +500,26 @@
       hint: "เลือกคุกกี้ · รันทีละตัว",
       icon: "cookie_run.gif",
     },
+    reroll: {
+      title: "รีโรล",
+      hint: "สุ่มของจากตั๋วในไอดีใหม่",
+      icon: "gem.png",
+    },
+    quest: {
+      title: "เควส",
+      hint: "โหลดแล้วเลือกรับรางวัลที่ทำครบ",
+      icon: "icon_giftpoint.png",
+    },
+    account: {
+      title: "ข้อมูลไอดี",
+      hint: "ดูคุกกี้ สัตว์เลี้ยง สมบัติ และทรัพยากร",
+      icon: "notice_b20.png",
+    },
+    dstool: {
+      title: "ทดสอบคำสั่งเกม",
+      hint: "สำหรับผู้ใช้ขั้นสูง — เลือกคำสั่งที่อนุญาตเท่านั้น",
+      icon: "score.png",
+    },
   };
   let devplayConnecting = false;
   let devplaySession = null; // { id, nickname, tickets, expiresAt }
@@ -452,6 +556,19 @@
   let cookieEstimate = null;
   let cookieEstimateLoading = false;
   let cookieListLoading = false;
+  let upgradeListLoading = false;
+  let powderPickerLoading = false;
+  let rerollMode = "guest";
+  let rerollCount = 1;
+  const REROLL_MAX = 50;
+  let questList = [];
+  let questSelected = new Set();
+  let questLoading = false;
+  let accountProfile = null;
+  let accountLoading = false;
+  let dsAllowlist = [];
+  let dsAllowlistLoaded = false;
+  let dsCalling = false;
   let peekCooldownUntil = 0;
   let peekCooldownTimer = null;
   let selectedTopupTokens = 7;
@@ -598,6 +715,14 @@
     claim_rejected:
       "เซิร์ฟเวอร์ปฏิเสธรางวัลรอบนี้ — ลองลดค่า Coin/EXP แล้วรันใหม่",
     could_not_claim: "รับรางวัลไม่ทัน ลองใหม่อีกครั้ง",
+    ds_path_not_allowed: "คำสั่งนี้ไม่ได้รับอนุญาต",
+    reroll_too_many_accounts: "ใส่บัญชีได้สูงสุด 50 รายการต่อครั้ง",
+    reroll_accounts_required: "ใส่รายการบัญชี (อีเมลและรหัส) ก่อนรีโรล",
+    quest_not_claimable: "เควสนี้ยังรับรางวัลไม่ได้",
+    worker_unavailable: "เซิร์ฟเวอร์ประมวลผลไม่พร้อม กำลังลองใหม่",
+    already_running: "มีงานกำลังรันอยู่แล้ว — รอให้เสร็จหรือดูที่แถบสถานะ",
+    rate_limited: "เรียกถี่เกินไป รอสักครู่แล้วลองใหม่",
+    account_info_failed: "โหลดข้อมูลไอดีไม่สำเร็จ ลองใหม่",
   };
 
   function thError(raw) {
@@ -642,6 +767,48 @@
       showFarmDock();
     }
     renderFarmDock();
+  }
+
+
+  const TOAST_MAX = 3;
+  const TOAST_MS = 4000;
+  let toastTimers = new WeakMap();
+
+  function showToast(message, kind = "muted", opts = {}) {
+    const root = $("toast-root");
+    if (!root || !message) return;
+    while (root.children.length >= TOAST_MAX) {
+      root.firstElementChild?.remove();
+    }
+    const el = document.createElement("div");
+    el.className = "toast " + (kind || "muted");
+    el.setAttribute("role", "status");
+    const msg = document.createElement("div");
+    msg.className = "toast-msg";
+    msg.textContent = message;
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "toast-close";
+    close.setAttribute("aria-label", "ปิด");
+    close.textContent = "×";
+    el.append(msg, close);
+
+    const dismiss = () => {
+      if (!el.isConnected) return;
+      el.classList.add("is-leaving");
+      setTimeout(() => el.remove(), 200);
+    };
+    close.addEventListener("click", dismiss);
+
+    let timer = setTimeout(dismiss, opts.duration ?? TOAST_MS);
+    el.addEventListener("mouseenter", () => {
+      clearTimeout(timer);
+    });
+    el.addEventListener("mouseleave", () => {
+      timer = setTimeout(dismiss, opts.duration ?? TOAST_MS);
+    });
+    root.appendChild(el);
+    return el;
   }
 
   function setStatus(el, text, kind) {
@@ -936,6 +1103,8 @@
       if (mode === "error") modalCard.classList.add("is-shake");
     }
     animateOpen(modalRoot);
+    const sheet = modalRoot.querySelector(".modal-card") || modalRoot;
+    trapFocus(sheet);
   }
 
   function closeModal() {
@@ -944,6 +1113,7 @@
     modalMode = null;
     clearModalActions();
     clearPixelConfetti();
+    releaseFocusTrap();
     animateClose(modalRoot, () => {
       modalRoot.classList.remove("locked");
       if (modalCard) modalCard.classList.remove("is-shake");
@@ -956,6 +1126,7 @@
     clearModalActions();
     clearPixelConfetti();
     $("modal-body")?.classList.remove("result-stagger");
+    releaseFocusTrap();
     animateClose(
       modalRoot,
       () => {
@@ -1032,7 +1203,7 @@
         forceCloseModal();
         switchFarmTab("devplay", { silent: true });
         document.getElementById("run")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        setTimeout(() => $("devplay-email")?.focus(), 280);
+        setTimeout(() => $("dp-acct-mail")?.focus(), 280);
       })
     );
     modalActions.appendChild(
@@ -1266,12 +1437,18 @@
       giftdraw: "giftdraw",
       upgrade: "upgrade",
       cookie_unlock: "cookie_unlock",
+      cookie: "cookie_unlock",
+      reroll: "reroll",
+      quest_claim: "quest_claim",
+      quest: "quest_claim",
     };
     return map[kind] || kind || "partyrun";
   }
 
   function modeToJobKind(mode) {
-    if (mode === "cookie_unlock") return "cookie_unlock";
+    if (mode === "cookie_unlock" || mode === "cookie") return "cookie_unlock";
+    if (mode === "quest" || mode === "quest_claim") return "quest_claim";
+    if (mode === "reroll") return "reroll";
     return mode || "partyrun";
   }
 
@@ -1282,6 +1459,8 @@
     heart: "ฟาร์มหัวใจ",
     upgrade: "ตีบวกสมบัติ",
     cookie_unlock: "ปลดล็อกคุกกี้",
+    reroll: "รีโรล",
+    quest_claim: "รับรางวัลเควส",
   };
 
   // Rough wait: everyone ahead of you gets up to one full turn. It is an upper
@@ -1438,6 +1617,8 @@
       giftdraw: "giftdraw",
       upgrade: "upgrade",
       cookie: "cookie_unlock",
+      reroll: "reroll",
+      quest: "quest_claim",
     };
     return map[farmTab] || null;
   }
@@ -1855,7 +2036,15 @@
     const el = $("devplay-connect-status");
     if (!el) return;
     el.textContent = text || "";
-    el.classList.remove("is-ok", "is-err", "muted");
+    el.classList.remove("is-ok", "is-err", "muted", "hidden");
+    if (text) {
+      el.removeAttribute("hidden");
+      el.hidden = false;
+    } else {
+      el.setAttribute("hidden", "");
+      el.hidden = true;
+      el.classList.add("hidden");
+    }
     if (kind === "ok") el.classList.add("is-ok");
     else if (kind === "err") el.classList.add("is-err");
     else el.classList.add("muted");
@@ -1950,6 +2139,7 @@
     paintTicketStepper();
     updateFarmAvailability();
     setFarmStatus( "ออกจาก DevPlay แล้ว — พร้อมสลับไอดี", "muted");
+    showToast("ออกจาก DevPlay แล้ว — พร้อมสลับไอดี", "muted");
   }
 
   function resetDevPlaySession() {
@@ -1968,7 +2158,7 @@
 
   function paintFarmNavLock() {
     const connected = isDevPlayConnected();
-    ["partyrun", "heart", "powder", "giftdraw", "upgrade", "cookie"].forEach((t) => {
+    ["partyrun", "heart", "powder", "giftdraw", "upgrade", "cookie", "reroll", "quest", "account", "dstool"].forEach((t) => {
       const btn = $("farm-tab-" + t);
       if (!btn) return;
       btn.classList.toggle("is-locked", !connected);
@@ -2070,6 +2260,7 @@
     const scrim = $("farm-sidebar-scrim");
     const userView = $("user-view");
     const compact = isCompactNav();
+    const wasOpen = document.body.classList.contains("farm-sidebar-open");
     const isOpen = compact ? !!open : true;
     if (sidebar) {
       sidebar.dataset.open = isOpen ? "true" : "false";
@@ -2090,6 +2281,13 @@
       try {
         localStorage.setItem(FARM_SIDEBAR_KEY, isOpen ? "1" : "0");
       } catch (_) {}
+      if (isOpen && !wasOpen) {
+        const firstLink =
+          sidebar?.querySelector(".farm-nav-item, .farm-sidebar-link, a, button");
+        setTimeout(() => firstLink?.focus?.(), 40);
+      } else if (!isOpen && wasOpen) {
+        toggle?.focus?.();
+      }
     }
   }
 
@@ -2108,6 +2306,49 @@
     window.addEventListener("resize", () => {
       if (!isCompactNav()) setFarmSidebarOpen(true);
     });
+
+    const sidebar = $("farm-sidebar");
+    if (sidebar) {
+      let touchStartX = 0;
+      let touchStartY = 0;
+      let tracking = false;
+      sidebar.addEventListener(
+        "touchstart",
+        (ev) => {
+          if (!isCompactNav() || !document.body.classList.contains("farm-sidebar-open")) return;
+          const t = ev.changedTouches[0];
+          touchStartX = t.clientX;
+          touchStartY = t.clientY;
+          tracking = true;
+        },
+        { passive: true }
+      );
+      sidebar.addEventListener(
+        "touchmove",
+        (ev) => {
+          if (!tracking) return;
+          const t = ev.changedTouches[0];
+          const dx = t.clientX - touchStartX;
+          const dy = t.clientY - touchStartY;
+          if (Math.abs(dy) > Math.abs(dx)) {
+            tracking = false;
+            return;
+          }
+          if (dx > 72) {
+            tracking = false;
+            setFarmSidebarOpen(false);
+          }
+        },
+        { passive: true }
+      );
+      sidebar.addEventListener(
+        "touchend",
+        () => {
+          tracking = false;
+        },
+        { passive: true }
+      );
+    }
   }
 
   function paintHeartProxyHint() {
@@ -2247,7 +2488,9 @@
       showErrorModal("กรอกอีเมลและรหัสผ่าน DevPlay ให้ครบ", "ข้อมูลไม่ครบ");
       return;
     }
+    const connectBtn = $("devplay-connect-btn");
     devplayConnecting = true;
+    setBtnLoading(connectBtn, true);
     paintDevPlayConnectStatus("กำลังเชื่อมต่อ…", "muted");
     updateFarmAvailability();
     try {
@@ -2265,12 +2508,12 @@
         data.powder_ready === false
           ? " · ผง / Gift Draw / ตีบวก อาจต้องเชื่อมใหม่อีกครั้ง"
           : "";
-      setFarmStatus(
+      const okMsg =
         farmTab === "powder"
           ? "เชื่อม DevPlay แล้ว · พร้อมฟาร์มผง" + powderHint
-          : "เชื่อม DevPlay แล้ว · พร้อม Party Run" + powderHint,
-        data.powder_ready === false ? "muted" : "ok"
-      );
+          : "เชื่อม DevPlay แล้ว · พร้อม Party Run" + powderHint;
+      setFarmStatus(okMsg, data.powder_ready === false ? "muted" : "ok");
+      showToast(okMsg, data.powder_ready === false ? "muted" : "ok");
     } catch (e) {
       resetDevPlaySession();
       const reason =
@@ -2290,6 +2533,7 @@
       );
     } finally {
       devplayConnecting = false;
+      setBtnLoading(connectBtn, false);
       updateFarmAvailability();
     }
   }
@@ -2302,7 +2546,19 @@
   }
 
   function switchFarmTab(tab, opts = {}) {
-    const tabs = ["devplay", "partyrun", "heart", "powder", "giftdraw", "upgrade", "cookie"];
+    const tabs = [
+      "devplay",
+      "partyrun",
+      "heart",
+      "powder",
+      "giftdraw",
+      "upgrade",
+      "cookie",
+      "reroll",
+      "quest",
+      "account",
+      "dstool",
+    ];
     let next = tabs.includes(tab) ? tab : "devplay";
     if (next !== "devplay" && !isDevPlayConnected()) {
       if (!opts.silent) showDevPlayRequiredModal();
@@ -2378,6 +2634,12 @@
     if (farmTab === "cookie") {
       loadCookieList(false).catch(() => {});
     }
+    if (farmTab === "reroll") {
+      paintRerollMode();
+    }
+    if (farmTab === "dstool") {
+      loadDsAllowlist(false).catch(() => {});
+    }
     if (farmTab === "devplay") {
       paintDevPlayHub();
     }
@@ -2445,6 +2707,8 @@
       const frameBg = document.createElement("img");
       frameBg.className = "treasure-frame-bg";
       frameBg.alt = "";
+      frameBg.width = 96;
+      frameBg.height = 96;
       frameBg.referrerPolicy = "no-referrer";
       frameBg.src = gradeFrameSrc(grade);
       const inner = document.createElement("div");
@@ -2454,6 +2718,8 @@
         const img = document.createElement("img");
         img.className = "treasure-frame-icon";
         img.alt = "";
+        img.width = 64;
+        img.height = 64;
         img.loading = "lazy";
         img.onerror = () => {
           img.remove();
@@ -2482,6 +2748,8 @@
         ? "powder-treasure-img"
         : "powder-pick-card-img";
       img.alt = "";
+      img.width = 72;
+      img.height = 72;
       img.loading = "lazy";
       img.onerror = () => {
         img.remove();
@@ -2547,15 +2815,21 @@
   function paintPowderPickerGrid() {
     const grid = $("powder-picker-grid");
     if (!grid) return;
+    grid.innerHTML = "";
+    grid.classList.remove("card-stagger");
+    if (powderPickerLoading) {
+      renderSkeletonCards(grid, 6);
+      return;
+    }
     const q = powderPickerFilter.trim().toLowerCase();
     const list = (powderTreasures.length ? powderTreasures : [getPowderTreasure()]).filter(
       (t) => !q || (t.name || "").toLowerCase().includes(q)
     );
-    grid.innerHTML = "";
     if (!list.length) {
       grid.innerHTML = '<p class="muted powder-picker-empty">ไม่พบสมบัติ</p>';
       return;
     }
+    grid.classList.add("card-stagger");
     list.slice(0, 300).forEach((t) => {
       const card = document.createElement("button");
       card.type = "button";
@@ -2583,10 +2857,6 @@
   }
 
   function showPowderTreasurePickerModal() {
-    if (!powderTreasures.length) {
-      loadPowderTreasures().then(() => showPowderTreasurePickerModal()).catch(() => {});
-      return;
-    }
     powderPickerFilter = "";
     clearModalActions();
     openModal({
@@ -2600,7 +2870,21 @@
       icon: "assets/crc_cookie_stone_box.png",
       locked: false,
     });
-    paintPowderPickerGrid();
+    if (!powderTreasures.length) {
+      powderPickerLoading = true;
+      paintPowderPickerGrid();
+      loadPowderTreasures()
+        .then(() => {
+          powderPickerLoading = false;
+          paintPowderPickerGrid();
+        })
+        .catch(() => {
+          powderPickerLoading = false;
+          paintPowderPickerGrid();
+        });
+    } else {
+      paintPowderPickerGrid();
+    }
     const search = $("powder-picker-search");
     if (search) {
       search.value = "";
@@ -3158,7 +3442,13 @@
     const hint = $("upgrade-grid-hint");
     if (!grid) return;
     grid.innerHTML = "";
-    grid.classList.remove("is-collapsed", "is-expanded");
+    grid.classList.remove("is-collapsed", "is-expanded", "card-stagger");
+    if (upgradeListLoading) {
+      if (hint) hint.textContent = "กำลังโหลดสมบัติ…";
+      renderSkeletonCards(grid, 6);
+      paintUpgradeGridToggle(false, 0);
+      return;
+    }
     if (!isDevPlayConnected()) {
       if (hint) hint.textContent = "เชื่อม DevPlay เพื่อดูสมบัติในตัว";
       paintUpgradeGridToggle(false, 0);
@@ -3190,6 +3480,7 @@
       if (hint) hint.textContent = "เลือกได้หลายชิ้น — รันทีละชิ้น";
     }
 
+    grid.classList.add("card-stagger");
     items.forEach((t) => grid.appendChild(createUpgradeCard(t)));
     if (collapsed && overflow > 0) {
       grid.appendChild(createUpgradeOverflowCard(overflow));
@@ -3214,6 +3505,8 @@
       return;
     }
     if (force) upgradeGridExpanded = false;
+    upgradeListLoading = true;
+    paintUpgradeGrid();
     try {
       await ensureApiReady();
       const data = await api(
@@ -3226,10 +3519,12 @@
       upgradeSelected.forEach((id) => {
         if (!valid.has(id)) upgradeSelected.delete(id);
       });
+      upgradeListLoading = false;
       paintUpgradeGrid();
       await refreshUpgradeEstimate();
     } catch (e) {
       upgradeTreasures = [];
+      upgradeListLoading = false;
       paintUpgradeGrid();
       const msg = thError(e.message);
       if (msg) setFarmStatus( msg, "err");
@@ -3405,13 +3700,17 @@
     const hint = $("cookie-grid-hint");
     if (!grid) return;
     grid.innerHTML = "";
+    grid.classList.remove("card-stagger");
+    if (cookieListLoading && !cookieItems.length) {
+      if (hint) hint.textContent = "กำลังโหลดรายการคุกกี้…";
+      renderSkeletonCards(grid, 6);
+      return;
+    }
     if (!cookieItems.length) {
       if (hint) {
-        hint.textContent = cookieListLoading
-          ? "กำลังโหลดรายการคุกกี้…"
-          : isDevPlayConnected()
-            ? "กดโหลดใหม่เพื่อดึงรายการ"
-            : "เชื่อม DevPlay เพื่อดูรายการคุกกี้";
+        hint.textContent = isDevPlayConnected()
+          ? "กดโหลดใหม่เพื่อดึงรายการ"
+          : "เชื่อม DevPlay เพื่อดูรายการคุกกี้";
       }
       return;
     }
@@ -3426,6 +3725,7 @@
         " · เหรียญในไอดี " +
         formatNumTh(cookieCoin);
     }
+    grid.classList.add("card-stagger");
     cookieItems.forEach((c) => {
       const seq = String(c.seq);
       const canBuy = !!c.can_buy;
@@ -3455,6 +3755,8 @@
       const img = document.createElement("img");
       img.className = "cookie-card-img";
       img.alt = c.cookie_name || "";
+      img.width = 72;
+      img.height = 72;
       img.loading = "lazy";
       img.src = cookieImageSrc(c);
       img.onerror = () => {
@@ -3500,8 +3802,7 @@
       return;
     }
     cookieListLoading = true;
-    const hint = $("cookie-grid-hint");
-    if (hint) hint.textContent = "กำลังโหลดรายการคุกกี้…";
+    paintCookieGrid();
     try {
       await ensureApiReady();
       const data = await api(
@@ -3659,6 +3960,457 @@
     }
   }
 
+  /* ---------- Reroll / Quest / Account / DS ---------- */
+  function clampRerollCount(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    return Math.min(Math.max(1, n || 1), REROLL_MAX);
+  }
+
+  function paintRerollMode() {
+    const guest = rerollMode === "guest";
+    $("reroll-mode-guest")?.classList.toggle("is-active", guest);
+    $("reroll-mode-accounts")?.classList.toggle("is-active", !guest);
+    const guestSec = $("reroll-guest-section");
+    const acctSec = $("reroll-accounts-section");
+    if (guestSec) {
+      guestSec.classList.toggle("hidden", !guest);
+      guestSec.hidden = !guest;
+    }
+    if (acctSec) {
+      acctSec.classList.toggle("hidden", guest);
+      acctSec.hidden = guest;
+    }
+    paintRerollStepper();
+    updateFarmAvailability();
+  }
+
+  function paintRerollStepper() {
+    const input = $("reroll-count");
+    if (input) input.value = String(rerollCount);
+    const minus = $("reroll-minus");
+    const plus = $("reroll-plus");
+    const running = isModeActivelyRunning("reroll");
+    if (minus) minus.disabled = running || rerollCount <= 1;
+    if (plus) plus.disabled = running || rerollCount >= REROLL_MAX;
+  }
+
+  function parseRerollAccountsText(raw) {
+    const lines = String(raw || "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+    const accounts = [];
+    for (const line of lines) {
+      let email = "";
+      let password = "";
+      if (line.includes("\t")) {
+        const parts = line.split("\t");
+        email = (parts[0] || "").trim();
+        password = (parts.slice(1).join("\t") || "").trim();
+      } else if (line.includes(":")) {
+        const idx = line.indexOf(":");
+        email = line.slice(0, idx).trim();
+        password = line.slice(idx + 1).trim();
+      } else {
+        const parts = line.split(/\s+/);
+        email = (parts[0] || "").trim();
+        password = parts.slice(1).join(" ").trim();
+      }
+      if (email && password) accounts.push({ email, password });
+    }
+    return accounts;
+  }
+
+  async function runReroll() {
+    if (!hasFarmAccess()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+
+    let body;
+    let target = 1;
+    let label = "รีโรล";
+    if (rerollMode === "accounts") {
+      const accounts = parseRerollAccountsText($("reroll-accounts")?.value || "");
+      if (!accounts.length) {
+        showErrorModal(ERR_TH.reroll_accounts_required, "ยังไม่มีบัญชี");
+        return;
+      }
+      if (accounts.length > REROLL_MAX) {
+        showErrorModal(ERR_TH.reroll_too_many_accounts, "บัญชีเกินกำหนด");
+        return;
+      }
+      body = { mode: "accounts", accounts, draw_count: 8, count: accounts.length };
+      target = accounts.length;
+      label = "รีโรล · " + formatNumTh(accounts.length) + " บัญชี";
+    } else {
+      rerollCount = clampRerollCount($("reroll-count")?.value || rerollCount);
+      paintRerollStepper();
+      body = { mode: "guest", count: rerollCount, draw_count: 8 };
+      target = rerollCount;
+      label = "รีโรล · " + formatNumTh(rerollCount) + " ไอดี";
+    }
+
+    setFarmStatus("กำลังรีโรล…", "muted");
+    if (queueIfBusy("reroll", target, label, () => runReroll())) return;
+
+    try {
+      await submitFarmJob({
+        url: "/api/farm/reroll/run",
+        body,
+        mode: "reroll",
+        target,
+        handlers: {
+          onSuccess: (data) => {
+            refreshMe().catch(() => {});
+            const result = data.result || data;
+            const n =
+              result?.results?.length ||
+              result?.accounts?.length ||
+              result?.count ||
+              target;
+            setFarmStatus("รีโรลสำเร็จ " + formatNumTh(n) + " บัญชี", "ok");
+            clearQueuedRun();
+            stopQueuePoll();
+            refreshGateAndQueueUi().catch(() => {});
+            loadFarmHistory().catch(() => {});
+          },
+          onError: (data) => {
+            const result = data.result || data;
+            setFarmStatus(farmErrorMessage(result, "รีโรลไม่สำเร็จ"), "warn");
+            loadFarmHistory().catch(() => {});
+          },
+        },
+      });
+    } catch (err) {
+      handleFarmRunException(err, "reroll");
+    }
+  }
+
+  function paintQuestList() {
+    const root = $("quest-list");
+    if (!root) return;
+    root.innerHTML = "";
+    if (!questList.length) {
+      root.innerHTML = '<p class="muted account-item-empty">ยังไม่มีรายการ — กดโหลดรายการเควส</p>';
+      return;
+    }
+    questList.forEach((q) => {
+      const seq = String(q.seq);
+      const claimable = !!q.claimable;
+      const label = document.createElement("label");
+      label.className = "quest-item" + (claimable ? "" : " is-disabled");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = seq;
+      cb.disabled = !claimable || isModeActivelyRunning("quest_claim");
+      cb.checked = questSelected.has(seq) && claimable;
+      cb.addEventListener("change", () => {
+        if (cb.checked) questSelected.add(seq);
+        else questSelected.delete(seq);
+        updateFarmAvailability();
+      });
+      const body = document.createElement("div");
+      body.className = "quest-item-body";
+      const title = document.createElement("span");
+      title.className = "quest-item-title";
+      title.textContent = "เควส #" + seq + (q.questType ? " · " + q.questType : "");
+      const meta = document.createElement("span");
+      meta.className = "quest-item-meta";
+      const count = Number(q.count) || 0;
+      const total = Number(q.totalCount) || 0;
+      let status = "ยังไม่ครบ";
+      if (q.rewarded) status = "รับแล้ว";
+      else if (claimable) status = "รับได้";
+      meta.textContent = count + "/" + total + " · " + status;
+      const bar = document.createElement("div");
+      bar.className = "quest-item-bar";
+      const fill = document.createElement("span");
+      const pct = total > 0 ? Math.min(100, Math.round((count / total) * 100)) : 0;
+      fill.style.width = pct + "%";
+      bar.appendChild(fill);
+      body.appendChild(title);
+      body.appendChild(meta);
+      body.appendChild(bar);
+      label.appendChild(cb);
+      label.appendChild(body);
+      root.appendChild(label);
+    });
+  }
+
+  async function loadQuestList() {
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    questLoading = true;
+    updateFarmAvailability();
+    try {
+      const data = await api(
+        "/api/farm/quest/list?devplay_session_id=" + encodeURIComponent(devplaySession.id)
+      );
+      questList = Array.isArray(data.quests) ? data.quests : [];
+      questSelected = new Set(
+        [...questSelected].filter((s) => questList.some((q) => String(q.seq) === s && q.claimable))
+      );
+      paintQuestList();
+      setFarmStatus(
+        "โหลดเควส " + formatNumTh(questList.length) + " รายการ",
+        "ok"
+      );
+    } catch (e) {
+      showErrorModal(thError(e.message || e.data?.detail) || "โหลดเควสไม่สำเร็จ", "เควส");
+    } finally {
+      questLoading = false;
+      updateFarmAvailability();
+    }
+  }
+
+  async function runQuestClaim() {
+    const seqs = [...questSelected]
+      .map((s) => Number(s))
+      .filter((n) => Number.isFinite(n));
+    if (!seqs.length) {
+      showErrorModal("เลือกเควสที่รับรางวัลได้ก่อน", "ยังไม่ได้เลือก");
+      return;
+    }
+    if (!hasFarmAccess()) {
+      showEmptyCoinsModal();
+      return;
+    }
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+
+    setFarmStatus("กำลังรับรางวัลเควส…", "muted");
+    if (
+      queueIfBusy(
+        "quest_claim",
+        seqs.length,
+        "รับเควส · " + formatNumTh(seqs.length) + " รายการ",
+        () => runQuestClaim()
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await submitFarmJob({
+        url: "/api/farm/quest/claim",
+        body: {
+          devplay_session_id: devplaySession.id,
+          seqs,
+        },
+        mode: "quest_claim",
+        target: seqs.length,
+        handlers: {
+          onSuccess: (data) => {
+            refreshMe().catch(() => {});
+            const result = data.result || data;
+            const okN = (result?.results || []).filter((r) => r.ok).length;
+            setFarmStatus(
+              "รับรางวัลเควสสำเร็จ " + formatNumTh(okN || seqs.length) + " รายการ",
+              "ok"
+            );
+            questSelected.clear();
+            clearQueuedRun();
+            stopQueuePoll();
+            refreshGateAndQueueUi().catch(() => {});
+            loadFarmHistory().catch(() => {});
+            loadQuestList().catch(() => {});
+          },
+          onError: (data) => {
+            const result = data.result || data;
+            setFarmStatus(farmErrorMessage(result, "รับรางวัลเควสไม่สำเร็จ"), "warn");
+            loadFarmHistory().catch(() => {});
+          },
+        },
+      });
+    } catch (err) {
+      handleFarmRunException(err, "quest_claim");
+    }
+  }
+
+  function paintAccountItems(elId, items) {
+    const root = $(elId);
+    if (!root) return;
+    root.innerHTML = "";
+    const list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      root.innerHTML = '<p class="account-item-empty muted">ไม่มีรายการ</p>';
+      return;
+    }
+    list.slice(0, 80).forEach((it) => {
+      const card = document.createElement("div");
+      card.className = "account-item-card";
+      const img = document.createElement("img");
+      img.src = it.imageUrl || "assets/score.png";
+      img.alt = "";
+      img.width = 40;
+      img.height = 40;
+      img.loading = "lazy";
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = "assets/score.png";
+      };
+      const name = document.createElement("span");
+      name.className = "account-item-name";
+      name.textContent = it.name || it.seq || "—";
+      card.appendChild(img);
+      card.appendChild(name);
+      if (it.qty != null && Number(it.qty) > 1) {
+        const qty = document.createElement("span");
+        qty.className = "account-item-qty";
+        qty.textContent = "×" + formatNumTh(it.qty);
+        card.appendChild(qty);
+      } else if (it.tag != null && Number(it.tag) > 0) {
+        const qty = document.createElement("span");
+        qty.className = "account-item-qty";
+        qty.textContent = "+" + formatNumTh(it.tag);
+        card.appendChild(qty);
+      }
+      root.appendChild(card);
+    });
+  }
+
+  function paintAccountSummary(data) {
+    const s = data?.summary || {};
+    const set = (id, val) => {
+      const el = $(id);
+      if (el) el.textContent = val == null || val === "" ? "—" : formatNumTh(val);
+    };
+    set("account-stat-level", s.lv);
+    set("account-stat-coin", s.coin);
+    set("account-stat-gem", s.gem);
+    set("account-stat-life", s.lifeCount);
+    set("account-stat-tickets", s.partyRunTicketCount);
+    set("account-stat-keys", s.keyCount);
+    set("account-stat-trophy", s.trophyCount);
+    set("account-stat-exp", s.exp);
+    paintAccountItems("account-cookies", data?.cookies);
+    paintAccountItems("account-pets", data?.pets);
+    paintAccountItems("account-treasures", data?.treasures);
+  }
+
+  async function loadAccountInfo() {
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    accountLoading = true;
+    updateFarmAvailability();
+    try {
+      const data = await api(
+        "/api/farm/account/info?devplay_session_id=" + encodeURIComponent(devplaySession.id)
+      );
+      accountProfile = data;
+      paintAccountSummary(data);
+      setFarmStatus("โหลดข้อมูลไอดีแล้ว", "ok");
+    } catch (e) {
+      const msg =
+        thError(e.message || e.data?.detail) || ERR_TH.account_info_failed;
+      showErrorModal(msg, "ข้อมูลไอดี");
+    } finally {
+      accountLoading = false;
+      updateFarmAvailability();
+    }
+  }
+
+  async function loadDsAllowlist(force) {
+    if (dsAllowlistLoaded && !force) {
+      paintDsPathSelect();
+      return;
+    }
+    try {
+      const data = await api("/api/farm/ds/allowlist");
+      dsAllowlist = Array.isArray(data.paths) ? data.paths : [];
+      dsAllowlistLoaded = true;
+      paintDsPathSelect();
+    } catch (_) {
+      dsAllowlist = [];
+      paintDsPathSelect();
+    }
+  }
+
+  function paintDsPathSelect() {
+    const sel = $("ds-path-select");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    if (!dsAllowlist.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "ยังไม่มีคำสั่งในรายการอนุญาต";
+      sel.appendChild(opt);
+      sel.disabled = true;
+      return;
+    }
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = "เลือกคำสั่ง…";
+    sel.appendChild(placeholder);
+    dsAllowlist.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    });
+    if (prev && dsAllowlist.includes(prev)) sel.value = prev;
+    sel.disabled = !isDevPlayConnected() || dsCalling;
+    updateFarmAvailability();
+  }
+
+  async function runDsCall() {
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    const path = String($("ds-path-select")?.value || "").trim();
+    if (!path) {
+      showErrorModal("เลือกคำสั่งก่อนส่ง", "ยังไม่ได้เลือก");
+      return;
+    }
+    let bodyObj = {};
+    const raw = String($("ds-body")?.value || "").trim() || "{}";
+    try {
+      bodyObj = JSON.parse(raw);
+      if (!bodyObj || typeof bodyObj !== "object" || Array.isArray(bodyObj)) {
+        throw new Error("body must be object");
+      }
+    } catch (_) {
+      showErrorModal("JSON body ไม่ถูกต้อง", "รูปแบบผิด");
+      return;
+    }
+    dsCalling = true;
+    updateFarmAvailability();
+    const out = $("ds-result");
+    if (out) out.textContent = "กำลังส่ง…";
+    try {
+      const data = await api("/api/farm/ds/call", {
+        method: "POST",
+        body: JSON.stringify({
+          devplay_session_id: devplaySession.id,
+          path,
+          body: bodyObj,
+        }),
+      });
+      if (out) out.textContent = JSON.stringify(data, null, 2);
+      setFarmStatus(data?.ok ? "ส่งคำสั่งสำเร็จ" : "คำสั่งตอบกลับพร้อมข้อผิดพลาด", data?.ok ? "ok" : "warn");
+    } catch (e) {
+      const msg = thError(e.message || e.data?.detail) || "ส่งคำสั่งไม่สำเร็จ";
+      if (out) out.textContent = msg;
+      showErrorModal(msg, "ทดสอบเกม");
+    } finally {
+      dsCalling = false;
+      updateFarmAvailability();
+    }
+  }
+
   /* ---------- Heart farm ---------- */
   function clampHeartTarget(value) {
     const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
@@ -3716,6 +4468,15 @@
     const cookieSub = $("cookie-btn-sub");
     const cookieReload = $("cookie-reload-btn");
     const cookieSelectAll = $("cookie-select-all-btn");
+    const rerollBtn = $("reroll-btn");
+    const rerollSub = $("reroll-btn-sub");
+    const questReload = $("quest-reload-btn");
+    const questClaimBtn = $("quest-claim-btn");
+    const questClaimSub = $("quest-claim-btn-sub");
+    const accountReload = $("account-reload-btn");
+    const dsCallBtn = $("ds-call-btn");
+    const dsCallSub = $("ds-call-btn-sub");
+    const dsPathSelect = $("ds-path-select");
     const empty = !hasFarmAccess();
     const credsReady = hasDevPlayCreds();
     const connected = isDevPlayConnected();
@@ -3726,10 +4487,23 @@
     const heartRunning = isModeActivelyRunning("heart");
     const upgradeRunning = isModeActivelyRunning("upgrade");
     const cookieRunning = isModeActivelyRunning("cookie_unlock");
+    const rerollRunning = isModeActivelyRunning("reroll");
+    const questRunning = isModeActivelyRunning("quest_claim");
     const isPowder = farmTab === "powder";
     const isGiftDraw = farmTab === "giftdraw";
     const isHeart = farmTab === "heart";
     const isCookie = farmTab === "cookie";
+    const disableOtherRun = () => {
+      if (btn) btn.disabled = true;
+      if (powderBtn) powderBtn.disabled = true;
+      if (giftdrawBtn) giftdrawBtn.disabled = true;
+      if (heartBtn) heartBtn.disabled = true;
+      if (upgradeBtn) upgradeBtn.disabled = true;
+      if (cookieBtn) cookieBtn.disabled = true;
+      if (rerollBtn && farmTab !== "reroll") rerollBtn.disabled = true;
+      if (questClaimBtn && farmTab !== "quest") questClaimBtn.disabled = true;
+      if (dsCallBtn && farmTab !== "dstool") dsCallBtn.disabled = true;
+    };
 
     if (connectBtn) {
       connectBtn.disabled = connecting || !credsReady || connected;
@@ -3742,6 +4516,7 @@
 
     const applyRunBtn = (el, subEl, running, baseDisabled, idleSubText) => {
       if (!el) return;
+      setBtnLoading(el, !!running);
       if (running) {
         el.disabled = true;
         if (subEl) subEl.textContent = "กำลังรัน…";
@@ -3820,7 +4595,7 @@
       if (upgradeRng) upgradeRng.disabled = !canPick;
       paintUpgradeTargetLevel();
       if (upgradeReload) upgradeReload.disabled = !canPick;
-      document.querySelectorAll(".upgrade-mode-btn").forEach((b) => {
+      document.querySelectorAll("#upgrade-mode-row .upgrade-mode-btn").forEach((b) => {
         b.disabled = !canPick;
       });
       paintUpgradeEstimate();
@@ -3898,14 +4673,65 @@
       if (heartBtn) heartBtn.disabled = true;
       if (upgradeBtn) upgradeBtn.disabled = true;
       if (cookieBtn) cookieBtn.disabled = true;
+    } else if (farmTab === "reroll") {
+      let rrSub =
+        rerollMode === "guest"
+          ? "รีโรล " + formatNumTh(rerollCount) + " ไอดี"
+          : "รีโรลจากรายการบัญชี";
+      if (!connected) rrSub = "เชื่อม DevPlay ก่อน";
+      applyRunBtn(
+        rerollBtn,
+        rerollSub,
+        rerollRunning,
+        empty || !connected || connecting,
+        rrSub
+      );
+      disableOtherRun();
+      paintRerollStepper();
+      document.querySelectorAll("#reroll-mode-row .upgrade-mode-btn").forEach((b) => {
+        b.disabled = !connected || connecting || rerollRunning;
+      });
+      const acctTa = $("reroll-accounts");
+      if (acctTa) acctTa.disabled = !connected || connecting || rerollRunning;
+      const countInput = $("reroll-count");
+      if (countInput) countInput.disabled = !connected || connecting || rerollRunning;
+    } else if (farmTab === "quest") {
+      const selectedN = questSelected.size;
+      let qSub = selectedN ? "รับ " + formatNumTh(selectedN) + " เควส" : "เลือกเควสที่รับได้";
+      if (!connected) qSub = "เชื่อม DevPlay ก่อน";
+      else if (questLoading) qSub = "กำลังโหลด…";
+      applyRunBtn(
+        questClaimBtn,
+        questClaimSub,
+        questRunning,
+        empty || !connected || connecting || questLoading || !selectedN,
+        qSub
+      );
+      disableOtherRun();
+      if (questReload) questReload.disabled = !connected || connecting || questLoading || questRunning;
+    } else if (farmTab === "account") {
+      disableOtherRun();
+      if (accountReload) {
+        accountReload.disabled = !connected || connecting || accountLoading;
+        accountReload.textContent = accountLoading ? "กำลังโหลด…" : "โหลดข้อมูลไอดี";
+      }
+    } else if (farmTab === "dstool") {
+      const path = String(dsPathSelect?.value || "").trim();
+      let dsSub = path ? "พร้อมส่ง" : "เลือกคำสั่งก่อน";
+      if (!connected) dsSub = "เชื่อม DevPlay ก่อน";
+      else if (dsCalling) dsSub = "กำลังส่ง…";
+      applyRunBtn(
+        dsCallBtn,
+        dsCallSub,
+        dsCalling,
+        !connected || connecting || dsCalling || !path,
+        dsSub
+      );
+      disableOtherRun();
+      if (dsPathSelect) dsPathSelect.disabled = !connected || connecting || dsCalling;
     } else {
       // devplay / other tabs — keep run CTAs inert
-      if (btn) btn.disabled = true;
-      if (powderBtn) powderBtn.disabled = true;
-      if (giftdrawBtn) giftdrawBtn.disabled = true;
-      if (heartBtn) heartBtn.disabled = true;
-      if (upgradeBtn) upgradeBtn.disabled = true;
-      if (cookieBtn) cookieBtn.disabled = true;
+      disableOtherRun();
     }
 
     // Lock partyrun score/coin/exp only while partyrun itself is running (or connecting).
@@ -3982,6 +4808,8 @@
     setTopupExpanded(true);
     paintPassStatus();
     syncVaultDoorCopy();
+    const sheet = root.querySelector(".vault-modal-sheet") || root;
+    trapFocus(sheet);
     if (opts.focusVoucher) {
       const voucher = $("topup-voucher");
       if (voucher) setTimeout(() => voucher.focus(), 220);
@@ -3995,6 +4823,7 @@
     unlockBodyScroll("vault-open");
     setTopupExpanded(false);
     syncVaultDoorCopy();
+    releaseFocusTrap();
     animateClose(root);
   }
 
@@ -4124,12 +4953,15 @@
     paintWalletTutorial();
     animateOpen(root);
     lockBodyScroll("tutorial-open");
+    const sheet = root.querySelector(".wallet-tutorial-sheet") || root;
+    trapFocus(sheet);
   }
 
   function closeWalletTutorial() {
     const root = $("wallet-tutorial");
     if (!root) return;
     unlockBodyScroll("tutorial-open");
+    releaseFocusTrap();
     animateClose(root);
   }
 
@@ -4291,6 +5123,17 @@
     if (mode === "cookie") {
       return "ซื้อคุกกี้ · " + escapeHtml(formatNumTh(res.items || res.count || 0)) + " ตัว";
     }
+    if (mode === "reroll") {
+      const n = res.accounts?.length || res.count || res.results?.length || row.ticket_count || 0;
+      return "รีโรล · " + escapeHtml(formatNumTh(n)) + " บัญชี";
+    }
+    if (mode === "quest_claim" || mode === "quest") {
+      return (
+        "รับเควส · " +
+        escapeHtml(formatNumTh(res.claimed || res.results?.filter?.((r) => r.ok)?.length || 0)) +
+        " รายการ"
+      );
+    }
     if (mode === "partyrun" || row.ticket_count) {
       return (
         "Party Run · " +
@@ -4354,16 +5197,6 @@
 
   function renderFarmHistory(items) {
     farmHistoryItems = Array.isArray(items) ? items : [];
-    const countEl = $("farm-history-count");
-    if (countEl) {
-      if (farmHistoryItems.length) {
-        countEl.hidden = false;
-        countEl.textContent = String(Math.min(farmHistoryItems.length, 99));
-      } else {
-        countEl.hidden = true;
-        countEl.textContent = "";
-      }
-    }
   }
 
   async function showFarmHistoryModal() {
@@ -4520,51 +5353,6 @@
     }
   }
 
-  function renderTopupHistory(items) {
-    const root = $("topup-history");
-    if (!root) return;
-    root.innerHTML = "";
-    const list = Array.isArray(items) ? items : [];
-    if (!list.length) {
-      root.innerHTML = '<li class="muted">ยังไม่มีประวัติ</li>';
-      return;
-    }
-    list.slice(0, 8).forEach((row) => {
-      const li = document.createElement("li");
-      const status = row.credit_status === "needs_manual" ? "ต้องตามมือ" : "สำเร็จ";
-      const statusClass =
-        row.credit_status === "needs_manual" ? "hist-warn" : "hist-ok";
-      li.innerHTML =
-        "<span>" +
-        escapeHtml(row.days || row.tokens || row.package_days || "—") +
-        " วัน · " +
-        escapeHtml(formatNumTh(row.amount_baht)) +
-        "฿</span>" +
-        '<span class="' +
-        statusClass +
-        '">' +
-        status +
-        "</span>" +
-        '<span class="hist-meta">' +
-        escapeHtml(formatTopupDay(row.created_at)) +
-        "</span>";
-      root.appendChild(li);
-    });
-  }
-
-  async function loadTopupHistory() {
-    if (!accessToken) {
-      renderTopupHistory([]);
-      return;
-    }
-    try {
-      const data = await api("/api/topup/history");
-      renderTopupHistory(data.items || []);
-    } catch (_) {
-      /* keep previous */
-    }
-  }
-
   async function copyTopupPrice() {
     const pkg = getTopupPackage(selectedTopupTokens);
     if (!pkg) return;
@@ -4581,8 +5369,10 @@
         ta.remove();
       }
       setStatus($("topup-status"), "คัดลอกราคา " + text + "฿ แล้ว", "ok");
+      showToast("คัดลอกราคา " + text + "฿ แล้ว", "ok");
     } catch (_) {
       setStatus($("topup-status"), "คัดลอกไม่สำเร็จ — จำราคา " + text + "฿", "err");
+      showToast("คัดลอกไม่สำเร็จ — จำราคา " + text + "฿", "err");
     }
   }
 
@@ -4801,7 +5591,6 @@
     startActivityPoll();
     showFarmDock();
     renderFarmDock();
-    loadTopupHistory().catch(() => {});
     loadFarmHistory().catch(() => {});
     loadHeartServiceStatus().catch(() => {});
     resumeFarmSession().catch(() => {});
@@ -4937,6 +5726,34 @@
       progressText(current, total) {
         if (total > 0) return "เสร็จแล้ว " + formatNumTh(current) + "/" + formatNumTh(total) + " ตัว";
         return "กำลังปลดล็อกคุกกี้…";
+      },
+    },
+    reroll: {
+      title: "สถานะรีโรล",
+      runningSub: "กำลังรีโรล… ใช้งานหน้าอื่นได้ระหว่างรอ",
+      heroIcon: "assets/gem.png",
+      steps: [
+        { id: "login", label: "เข้าสู่ระบบเกม" },
+        { id: "draw", label: "สุ่มของ" },
+        { id: "done", label: "สรุปผล" },
+      ],
+      progressText(current, total) {
+        if (total > 0) return "บัญชี " + formatNumTh(current) + "/" + formatNumTh(total);
+        return "กำลังรีโรล…";
+      },
+    },
+    quest_claim: {
+      title: "สถานะรับรางวัลเควส",
+      runningSub: "กำลังรับรางวัลเควส…",
+      heroIcon: "assets/icon_giftpoint.png",
+      steps: [
+        { id: "login", label: "เข้าสู่ระบบเกม" },
+        { id: "claim", label: "รับรางวัล" },
+        { id: "done", label: "สรุปผล" },
+      ],
+      progressText(current, total) {
+        if (total > 0) return "รับแล้ว " + formatNumTh(current) + "/" + formatNumTh(total);
+        return "กำลังรับรางวัลเควส…";
       },
     },
   };
@@ -5100,6 +5917,24 @@
         if (/cookie-unlock:\s*refresh|initMember|prepare/i.test(s)) {
           out.stepIdx = Math.max(out.stepIdx, 0);
         }
+      } else if (mode === "reroll") {
+        let m = s.match(/reroll(?:\s+guest)?\s*\[(\d+)\/(\d+)\]/i);
+        if (m) {
+          out.current = Number(m[1]);
+          out.total = Number(m[2]);
+          out.phase = "draw";
+          out.stepIdx = 1;
+        }
+        if (/create_guest|login|reroll:/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 0);
+      } else if (mode === "quest_claim") {
+        let m = s.match(/quest:\s*claimed\s+(\d+)\/(\d+)/i);
+        if (m) {
+          out.current = Number(m[1]);
+          out.total = Number(m[2]);
+          out.phase = "claim";
+          out.stepIdx = 1;
+        }
+        if (/quest:\s*logging in/i.test(s)) out.stepIdx = 0;
       }
     }
 
@@ -5111,6 +5946,8 @@
     const s = String(raw || "").trim();
     if (!s) return "";
     if (/traceback|RpcError|Exception|at 0x/i.test(s)) return "";
+    const translated = translateLog(s);
+    if (translated && translated !== s) return truncateLogLine(translated, 160);
     if (mode === "partyrun" && /\[round\s+(\d+)\/(\d+)\]/i.test(s)) {
       const m = s.match(/\[round\s+(\d+)\/(\d+)\]/i);
       return "รอบ " + m[1] + "/" + m[2] + " — " + truncateLogLine(s.replace(/\[round\s+\d+\/\d+\]\s*/i, ""), 120);
@@ -5211,6 +6048,8 @@
     if (mode === "upgrade") return "ชิ้น";
     if (mode === "cookie_unlock") return "ตัว";
     if (mode === "powder") return "รอบ";
+    if (mode === "reroll") return "บัญชี";
+    if (mode === "quest_claim") return "เควส";
     return "รอบ";
   }
 
@@ -5221,6 +6060,8 @@
     if (mode === "powder") return "ฟาร์มผง";
     if (mode === "upgrade") return "ตีบวกสมบัติ";
     if (mode === "cookie_unlock") return "ปลดล็อกคุกกี้";
+    if (mode === "reroll") return "รีโรล";
+    if (mode === "quest_claim") return "รับรางวัลเควส";
     return "ฟาร์ม";
   }
 
@@ -5748,6 +6589,7 @@
     dockExpanded = true;
     const fab = $("farm-dock-fab");
     if (fab) fab.setAttribute("aria-expanded", "true");
+    trapFocus(sheet);
     loadFarmHistory()
       .then(() => renderFarmDock())
       .catch(() => renderFarmDock());
@@ -5762,6 +6604,8 @@
     dockExpanded = false;
     const fab = $("farm-dock-fab");
     if (fab) fab.setAttribute("aria-expanded", "false");
+    releaseFocusTrap();
+    fab?.focus?.();
   }
 
   function updateFarmDockBar(opts = {}) {
@@ -6326,6 +7170,12 @@
       } else if (m === "upgrade") {
         if (/login|session/i.test(errCode)) failId = "login";
         else failId = "upgrade";
+      } else if (m === "reroll") {
+        if (/login|guest/i.test(errCode)) failId = "login";
+        else failId = "draw";
+      } else if (m === "quest_claim") {
+        if (/login|session/i.test(errCode)) failId = "login";
+        else failId = "claim";
       }
       const alreadyErr = steps.some((s) => pipelineState.kinds[s.id] === "err");
       const errMsg = farmErrorMessage(result, "การฟาร์มไม่สำเร็จ ลองใหม่อีกครั้ง");
@@ -6342,6 +7192,52 @@
       dockPhase = "error";
       dockOk = false;
     }
+  }
+
+  const LOG_TH = [
+    [/^\[round\s+(\d+)\/(\d+)\]/i, (m) => "รอบที่ " + m[1] + " จาก " + m[2]],
+    [/claiming reward/i, () => "กำลังรับรางวัล"],
+    [/REWARD CLAIMED/i, () => "รับรางวัลแล้ว"],
+    [/matchmaking/i, () => "กำลังจับคู่ห้อง"],
+    [/creating guest/i, () => "กำลังสร้างไอดีชั่วคราว"],
+    [/create_guest failed/i, () => "สร้างไอดีชั่วคราวไม่สำเร็จ"],
+    [/sending life/i, () => "กำลังส่งหัวใจ"],
+    [/collected\s+(\d+)\/(\d+)\s+hearts/i, (m) => "เก็บหัวใจได้ " + m[1] + " จาก " + m[2]],
+    [/claim:\s*collected\s+(\d+)\/(\d+)/i, (m) => "รับหัวใจได้ " + m[1] + " จาก " + m[2]],
+    [/claim:\s*collected\s+(\d+)/i, (m) => "รับหัวใจได้ " + m[1]],
+    [/hearts collected/i, () => "เก็บหัวใจแล้ว"],
+    [/\bBUY\b.*\bOK\b/i, () => "ซื้อสมบัติสำเร็จ"],
+    [/\bBUY\b.*\bERR\b/i, () => "ซื้อสมบัติไม่สำเร็จ"],
+    [/\bBREAK\b.*\bOK\b/i, () => "ย่อยสมบัติสำเร็จ"],
+    [/\bBREAK\b.*\bERR\b/i, () => "ย่อยสมบัติไม่สำเร็จ"],
+    [/\[SKIP BREAK\]/i, () => "ข้ามการย่อย — ไม่พบ uuid"],
+    [/reroll guest\s*\[(\d+)\/(\d+)\]/i, (m) => "รีโรลไอดีใหม่ " + m[1] + "/" + m[2]],
+    [/reroll\s*\[(\d+)\/(\d+)\]/i, (m) => "รีโรลบัญชี " + m[1] + "/" + m[2]],
+    [/quest:\s*claimed\s+(\d+)\/(\d+)/i, (m) => "รับรางวัลเควสแล้ว " + m[1] + "/" + m[2]],
+    [/quest:\s*logging in/i, () => "กำลังเข้าสู่ระบบเพื่อรับเควส"],
+    [/quest:\s*auto-selected\s+(\d+)/i, (m) => "เลือกเควสที่รับได้ " + m[1] + " รายการ"],
+    [/powder:\s*login/i, () => "กำลังเข้าสู่ระบบเพื่อฟาร์มผง"],
+    [/cookie_unlock:\s*login/i, () => "กำลังเข้าสู่ระบบเพื่อปลดล็อกคุกกี้"],
+    [/heart:\s*login main account/i, () => "กำลังเข้าสู่ระบบบัญชีหลัก"],
+    [/heart:\s*no friend slots left/i, () => "ช่องเพื่อนเต็มแล้ว"],
+    [/heart:\s*stopped by user/i, () => "หยุดโดยผู้ใช้"],
+    [/TOTAL\s+(\d+)\/(\d+)/i, (m) => "รวมได้หัวใจ " + m[1] + "/" + m[2]],
+  ];
+
+  function translateLog(line) {
+    const s = String(line || "").trim();
+    if (!s) return "";
+    for (const [re, fn] of LOG_TH) {
+      const m = s.match(re);
+      if (m) {
+        try {
+          return fn(m) || s;
+        } catch (_) {
+          return s;
+        }
+      }
+    }
+    return s;
   }
 
   function farmErrorMessage(result, fallback) {
@@ -7025,8 +7921,7 @@
     accessToken = data.session.access_token;
     try {
       await refreshMe();
-      loadTopupHistory().catch(() => {});
-      loadFarmHistory().catch(() => {});
+        loadFarmHistory().catch(() => {});
     } catch (e) {
       if (/session_replaced|account_banned/i.test(String(e.message || ""))) return;
       await sb.auth.signOut();
@@ -7105,10 +8000,15 @@
     const confirmPassword = $("signup-pass2")?.value || "";
 
     if (password !== confirmPassword) {
-      setStatus($("signup-status"), "", "muted");
-      showErrorModal(ERR_TH.password_mismatch, "ยืนยันรหัสผ่านไม่ตรง");
+      const pass2 = $("signup-pass2");
+      if (pass2) {
+        pass2.setAttribute("aria-invalid", "true");
+        pass2.focus();
+      }
+      setStatus($("signup-status"), ERR_TH.password_mismatch, "err");
       return;
     }
+    $("signup-pass2")?.removeAttribute("aria-invalid");
     if (username.includes("@")) {
       setStatus($("signup-status"), "", "muted");
       showErrorModal(ERR_TH.invalid_username, "ชื่อผู้ใช้ไม่ถูกต้อง");
@@ -7331,8 +8231,7 @@
         "ok"
       );
       showTopupSuccessModal(data);
-      loadTopupHistory().catch(() => {});
-      openVaultModal();
+        openVaultModal();
       setTimeout(() => {
         if (hasFarmAccess()) closeVaultModal();
       }, 1800);
@@ -7358,10 +8257,6 @@
 
   $("devplay-logout-btn")?.addEventListener("click", () => {
     logoutDevPlay();
-  });
-
-  $("farm-history-open")?.addEventListener("click", () => {
-    showFarmHistoryModal().catch(() => {});
   });
 
   $("ticket-minus")?.addEventListener("click", () => {
@@ -7484,8 +8379,10 @@
     updateFarmAvailability();
   });
   $("heart-proxy-url")?.addEventListener("blur", (ev) => {
-    saveHeartProxy(ev.target.value);
+    const v = String(ev.target.value || "").trim();
+    saveHeartProxy(v);
     paintHeartProxyHint();
+    if (v) showToast("บันทึก proxy แล้ว", "ok");
   });
 
   $("devplay-shortcuts")?.addEventListener("click", (ev) => {
@@ -7518,11 +8415,53 @@
   $("farm-tab-giftdraw")?.addEventListener("click", () => onFarmTabClick("giftdraw"));
   $("farm-tab-upgrade")?.addEventListener("click", () => onFarmTabClick("upgrade"));
   $("farm-tab-cookie")?.addEventListener("click", () => onFarmTabClick("cookie"));
+  $("farm-tab-reroll")?.addEventListener("click", () => onFarmTabClick("reroll"));
+  $("farm-tab-quest")?.addEventListener("click", () => onFarmTabClick("quest"));
+  $("farm-tab-account")?.addEventListener("click", () => onFarmTabClick("account"));
+  $("farm-tab-dstool")?.addEventListener("click", () => onFarmTabClick("dstool"));
   $("cookie-reload-btn")?.addEventListener("click", () => {
     loadCookieList(true).catch(() => {});
   });
   $("cookie-select-all-btn")?.addEventListener("click", () => {
     selectBuyableCookies();
+  });
+
+  $("reroll-mode-row")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest("[data-reroll-mode]");
+    if (!btn || btn.disabled) return;
+    rerollMode = btn.dataset.rerollMode === "accounts" ? "accounts" : "guest";
+    paintRerollMode();
+  });
+  $("reroll-minus")?.addEventListener("click", () => {
+    rerollCount = clampRerollCount(rerollCount - 1);
+    paintRerollStepper();
+    updateFarmAvailability();
+  });
+  $("reroll-plus")?.addEventListener("click", () => {
+    rerollCount = clampRerollCount(rerollCount + 1);
+    paintRerollStepper();
+    updateFarmAvailability();
+  });
+  $("reroll-count")?.addEventListener("change", () => {
+    rerollCount = clampRerollCount($("reroll-count").value);
+    paintRerollStepper();
+    updateFarmAvailability();
+  });
+  $("reroll-btn")?.addEventListener("click", () => {
+    runReroll().catch(() => {});
+  });
+  $("quest-reload-btn")?.addEventListener("click", () => {
+    loadQuestList().catch(() => {});
+  });
+  $("quest-claim-btn")?.addEventListener("click", () => {
+    runQuestClaim().catch(() => {});
+  });
+  $("account-reload-btn")?.addEventListener("click", () => {
+    loadAccountInfo().catch(() => {});
+  });
+  $("ds-path-select")?.addEventListener("change", () => updateFarmAvailability());
+  $("ds-call-btn")?.addEventListener("click", () => {
+    runDsCall().catch(() => {});
   });
 
   $("upgrade-rng-accept")?.addEventListener("change", (ev) => {
