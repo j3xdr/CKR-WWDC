@@ -1079,34 +1079,34 @@
 
   function resolveDevPlayAvatarUrl(session) {
     if (!session) return DEVPLAY_AVATAR_FALLBACK;
-    if (session.cookieName) {
-      const url = devPlayCookiePortraitUrl(session.cookieName);
-      if (url) return url;
-    }
+    // Cookie CDN is the reliable portrait; local assets_web/profiles is not shipped.
+    const cookieUrl = devPlayCookiePortraitUrl(session.cookieName);
+    if (cookieUrl) return cookieUrl;
     const key = String(session.profileImageKey || "").trim();
-    if (key) return "assets_web/profiles/" + encodeURIComponent(key);
+    if (key) {
+      const file = key.endsWith(".png") ? key : key + ".png";
+      return "assets_web/profiles/" + encodeURIComponent(file).replace(/%2F/gi, "/");
+    }
     return DEVPLAY_AVATAR_FALLBACK;
   }
 
   function paintPlayerHeroAvatar() {
-    const url = resolveDevPlayAvatarUrl(devplaySession);
+    const primary = resolveDevPlayAvatarUrl(devplaySession);
+    const cookieFallback = devPlayCookiePortraitUrl(devplaySession?.cookieName);
     ["player-hero-avatar", "player-head-chip-avatar"].forEach((id) => {
       const img = $(id);
       if (!img) return;
-      if (img.dataset.src === url) return;
-      img.dataset.src = url;
+      if (img.dataset.src === primary && img.getAttribute("src") === primary) return;
+      img.dataset.src = primary;
       img.onerror = () => {
-        if (devplaySession?.profileImageKey && String(img.src).includes("assets_web/profiles/")) {
-          const cookieUrl = devPlayCookiePortraitUrl(devplaySession.cookieName);
-          if (cookieUrl && img.src !== cookieUrl) {
-            img.src = cookieUrl;
-            return;
-          }
+        if (cookieFallback && img.src !== cookieFallback && !String(img.src).includes(cookieFallback)) {
+          img.src = cookieFallback;
+          return;
         }
         img.onerror = null;
         img.src = DEVPLAY_AVATAR_FALLBACK;
       };
-      img.src = url;
+      img.src = primary;
     });
   }
 
@@ -2863,6 +2863,10 @@
     if (!devplaySession) return "—";
     const nick = String(devplaySession.nickname || "").trim();
     if (nick && nick.toLowerCase() !== "player") return nick;
+    const mail = String(devplaySession.email || "").trim();
+    if (mail.includes("@")) return mail.split("@")[0] || mail;
+    if (mail) return mail;
+    if (nick) return nick;
     return "—";
   }
 
@@ -3676,9 +3680,10 @@
     const ticketsKnown =
       data.party_run_tickets != null && Number.isFinite(Number(data.party_run_tickets));
     const ticketsN = ticketsKnown ? Math.max(0, Number(data.party_run_tickets)) : null;
+    const nickRaw = String(data.nickname || data.nick || "").trim();
     devplaySession = {
       id: data.devplay_session_id,
-      nickname: data.nickname || "player",
+      nickname: nickRaw || "player",
       email: loginCreds.email,
       password: loginCreds.password,
       powderReady: data.powder_ready !== false,
@@ -3695,9 +3700,9 @@
       giftBoxes: data.gift_boxes,
       key: data.key,
       pictureStuffSeq: data.picture_stuff_seq,
-      profileImageKey: data.profile_image_key,
+      profileImageKey: data.profile_image_key || data.profileImageKey || null,
       cookieStuffSeq: data.cookie_stuff_seq,
-      cookieName: data.cookie_name,
+      cookieName: data.cookie_name || data.cookieName || null,
       expiresAt: Date.now() + ttlMs,
     };
     ticketMax = ticketsKnown ? Math.max(1, ticketsN || 1) : 99;
