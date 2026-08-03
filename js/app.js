@@ -13,6 +13,9 @@
   const SESSION_KEY = "ckr_session_token";
   const GLOBAL_PROXY_KEY = "ckr_global_proxy_url";
   const HEART_PROXY_KEY = GLOBAL_PROXY_KEY; // compat alias
+  const DEVPLAY_VAULT_MAX = 5;
+  const DEVPLAY_VAULT_PEPPER = "ckr-devplay-vault-v1";
+  let devplayVaultEntries = [];
   const FARM_SIDEBAR_KEY = "ckr_farm_sidebar_open";
   const TELEGRAM_URL = "https://t.me/j3xdr";
   const API = cfg.API_BASE || "";
@@ -474,82 +477,119 @@
     partyrun: {
       title: "Party Run",
       hint: "เลือกจำนวนตั๋วแล้วกดรัน",
+      blurb: "วิ่ง Party Run อัตโนมัติ",
       icon: "pirate_cookie_run.gif",
     },
     heart: {
       title: "ฟาร์มหัวใจ",
       hint: "ใส่ proxy และจำนวนหัวใจแล้วกดรัน",
+      blurb: "ฟาร์มหัวใจผ่านเพื่อน",
       icon: "bbc_stat_iconHeart.png",
     },
     powder: {
       title: "ฟาร์มผง",
       hint: "เลือกสมบัติและจำนวนรอบ",
-      icon: "cookie_run.gif",
+      blurb: "ย่อยกล่องเป็นผงอัตโนมัติ",
+      icon: "magic_powder.png",
     },
     giftdraw: {
       title: "Gift Draw",
       hint: "เปิดกล่องของขวัญ",
+      blurb: "เปิดกล่องของขวัญในไอดี",
       icon: "icon_giftpoint.png",
     },
     upgrade: {
       title: "ตีบวกสมบัติ",
       hint: "เลือกสมบัติในคลัง",
-      icon: "tr_ga170.png",
+      blurb: "ตีบวกสมบัติทีละชุด",
+      icon: "Crystal_Pearl_Earring_2B9.png",
     },
     cookie: {
       title: "ปลดล็อกคุกกี้",
       hint: "เลือกคุกกี้ · รันทีละตัว",
-      icon: "cookie_run.gif",
+      blurb: "ปลดล็อกและอัปเลเวลคุกกี้",
+      icon: "pine_monk_cookie.png",
     },
     reroll: {
       title: "รีโรล",
       hint: "สุ่มของจากตั๋วในไอดีใหม่",
+      blurb: "รีโรลตั๋วหลายไอดี",
       icon: "gem.png",
     },
     quest: {
       title: "เควส",
       hint: "โหลดแล้วเลือกรับรางวัลที่ทำครบ",
+      blurb: "ดูและรับรางวัลเควส",
       icon: "icon_giftpoint.png",
     },
     account: {
       title: "ข้อมูลไอดี",
       hint: "ดูคุกกี้ สัตว์เลี้ยง สมบัติ และทรัพยากร",
+      blurb: "สรุปทรัพยากรในไอดี",
       icon: "notice_b20.png",
     },
     dstool: {
       title: "ทดสอบคำสั่งเกม",
       hint: "สำหรับผู้ใช้ขั้นสูง — เลือกคำสั่งที่อนุญาตเท่านั้น",
+      blurb: "รันคำสั่ง DS ที่อนุญาต",
       icon: "score.png",
     },
   };
+  const FARM_DOCK_TABS = [
+    "partyrun",
+    "heart",
+    "powder",
+    "giftdraw",
+    "upgrade",
+    "cookie",
+    "reroll",
+    "quest",
+    "account",
+    "dstool",
+  ];
+  const DEVPLAY_PORTRAIT_CDN = "https://link.clashofdragons.com/images/cookies";
+  const DEVPLAY_AVATAR_FALLBACK = "assets/notice_b20.png";
   let devplayConnecting = false;
+  let devplayRefreshing = false;
   let devplaySession = null; // { id, nickname, tickets, expiresAt }
   let ticketCount = 1;
   let ticketMax = 1;
   let farmTab = "devplay";
-  let powderTreasures = [];
-  let powderTreasureName = "Revival Boots";
-  let powderPickerFilter = "";
+  let powderPlan = null;
   let powderEstimate = null;
   let powderEstimateLoading = false;
-  // Rounds is the single source of truth; the powder field is derived from it.
-  // null means "untouched" — a fresh estimate then fills in the affordable max.
   let powderRounds = 10;
+  let powderEditLock = "powder"; // powder | coin
+  let powderStuffLabel = "";
+  let powderStuffLookupTimer = null;
+  let powderRefreshTimer = null;
+  const POWDER_YIELD_ESTIMATE = 8;
+  const POWDER_BREAK_FALLBACK = 15;
+  // Fallback until /api/health or powder/plan loads; admin can raise via app_settings.
+  const POWDER_MAX_FALLBACK = 5000;
+  let powderMax = POWDER_MAX_FALLBACK;
+  const POWDER_ESTIMATE_DISCLAIMER =
+    "ผลลัพธ์จริงอาจได้ผงน้อยกว่าหรือมากกว่าที่แสดง เพราะแต่ละกล่องสุ่มสมบัติเกรด B (15 ผง) หรือ C (5 ผง) — ค่าที่แสดงคือค่าเฉลี่ยประมาณ " +
+    POWDER_YIELD_ESTIMATE +
+    " ผง/กล่อง";
   let lastRerollResults = [];
   let giftdrawCount = 1;
   let giftdrawMax = 1;
   let giftdrawEstimate = null;
   let giftdrawEstimateLoading = false;
   let heartTarget = 100;
-  const HEART_MAX = 100_000;
-  let heartMax = HEART_MAX;
+  // Fallback until /api/farm/heart/status loads; admin can raise via app_settings.
+  const HEART_MAX_FALLBACK = 150;
+  let heartMax = HEART_MAX_FALLBACK;
   let upgradeTreasures = [];
-  let upgradeGridExpanded = false;
+  const UPGRADE_MAX_SELECT = 10;
   let upgradeSelected = new Set();
+  let upgradePickerFilter = "";
+  let upgradePickerGradeFilter = "all";
+  let upgradePickerDraft = new Set();
   let upgradeTargetLevel = 9;
   let upgradeEstimate = null;
   let upgradeEstimateLoading = false;
-  let upgradeRngAccepted = false;
   let upgradeCoin = 0;
   let upgradeRunMode = "sequential";
   let cookieItems = [];
@@ -559,13 +599,13 @@
   let cookieEstimateLoading = false;
   let cookieListLoading = false;
   let upgradeListLoading = false;
-  let powderPickerLoading = false;
   let rerollMode = "guest";
   let rerollCount = 1;
   const REROLL_MAX = 50;
   let questList = [];
   let questSelected = new Set();
   let questLoading = false;
+  let questFilter = "all"; // all | claimable | claimed
   let accountProfile = null;
   let accountLoading = false;
   let dsAllowlist = [];
@@ -610,6 +650,20 @@
     },
   ];
   let lastGate = null;
+  let featureLocks = {
+    partyrun: false,
+    heart: false,
+    powder: false,
+    giftdraw: false,
+    upgrade: false,
+    cookie: false,
+    reroll: false,
+    quest: false,
+    account: false,
+    dstool: false,
+  };
+  const FEATURE_LOCK_SVG =
+    '<svg class="farm-nav-lock-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9zm3 4a1.75 1.75 0 0 1 .75 3.33V19a.75.75 0 0 1-1.5 0v-1.67A1.75 1.75 0 0 1 12 14z"/></svg>';
   // Run held back by farm_busy, replayed automatically once our turn comes up.
   let queuedRun = null;
   let queuedJobKind = null;
@@ -621,28 +675,48 @@
   const PENDING_FARM_MAX = 3;
   let runStatusClosable = false;
   let pendingAfterRunStatus = null;
+  let liveStatusOpen = false;
+  let liveStatusLogOpen = false;
+  let jobStatusView = "hidden"; // hidden | minimized | expanded
+  let jobStatusTab = "live"; // live | history | admin
+  let jobStatusAnimTimer = null;
   const FARM_JOB_ID_KEY = "ckr_farm_job_id";
   let activeWatchJobId = null;
+  // Single source of truth for the card shown in "ประวัติ / สถานะ".
+  // { id, mode, target, finished } — pollers may only touch the job whose id matches.
+  let liveJob = null;
+  let lastFinishedJobId = null;
   let watchJobTimer = null;
   let dockPhase = null; // "queued" | "running" | "done" | "error" | null
   let dockOk = null;
   let dockExpanded = false;
   let dockJobStartedAt = null;
+  let dockJobFinishedAt = null;
   let dockElapsedTimer = null;
-  let dockHistoryTab = "all"; // "all" | "active"
+  let dockHistoryTab = "all"; // "all" | "active" | "admin"
+  let dockLiveLogOpen = false;
   let farmActivityData = null;
   let farmDockFlash = { text: "", kind: "muted" };
   let apiReady = false;
+  let adminJobsTab = "live"; // "live" | "history"
+  let adminJobsFilter = "all"; // "all" | "running" | "queued" | "stuck"
+  let adminJobsItems = [];
+  let adminJobsOffset = 0;
+  let adminJobsPollTimer = null;
+  let adminJobsHasMore = false;
+  const ADMIN_JOBS_PAGE = 30;
   const PEEK_COOLDOWN_SEC = 180;
   const PEEK_CD_KEY = "ckr_peek_cd_until";
 
   const ERR_TH = {
-    insufficient_tokens: "หมดอายุเช่าแล้ว — กรุณาเติมวันใช้งาน",
+    insufficient_tokens: "ระบบยังคิดเป็นเหรียญเก่า — รีเฟรชหน้าแล้วลองใหม่ หรือติดต่อแอดมิน",
     rental_required: "ต้องเช่าใช้งานก่อน — กด ต่ออายุ เพื่อซื้อแพ็กวัน",
     rental_expired: "วันเช่าหมดอายุแล้ว — ต่ออายุในเมนู ต่ออายุ",
     insufficient_tokens_for_peek:
-      "ต้องมีสิทธิ์เช่าถึงจะดูสถานะบัญชีเกมได้ (ไม่หักเพิ่ม)",
+      "ต้องมีสิทธิ์เช่าถึงจะดูสถานะบัญชีเกมได้",
     peek_rate_limited: "ดูสถานะถี่เกินไป รอให้ครบเวลาก่อน",
+    refresh_rate_limited: "รีเฟรชถี่เกินไป รอสักครู่แล้วลองใหม่",
+    refresh_failed: "อัปเดตสถานะไม่สำเร็จ ลองใหม่",
     peek_failed: "ดูสถานะบัญชีเกมไม่สำเร็จ ลองใหม่",
     topup_rate_limited: "เติมถี่เกินไป รอสักครู่แล้วลองใหม่",
     topup_voucher_blocked: "ซองนี้ถูกลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่",
@@ -671,6 +745,7 @@
     devplay_rate_limited: "พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่",
     devplay_account_locked: "บัญชี DevPlay ถูกล็อกชั่วคราว — ลองใหม่ภายหลัง",
     maintenance: "ระบบปิดปรับปรุงชั่วคราว ลองใหม่ภายหลัง",
+    feature_locked: "ปิดปรับปรุง ไม่สามารถใช้งานได้",
     value_capped: "เหรียญสูงสุด 449,000 · XP สูงสุด 52,000",
     devplay_session_expired: "เชื่อม DevPlay หมดอายุ — กดเชื่อมต่อใหม่",
     not_enough_tickets: "ตั๋ว Party Run ไม่พอ — ลดจำนวนตั๋วหรือรอรีเซ็ต",
@@ -690,6 +765,7 @@
     proxy_url_invalid: "รูปแบบ proxy ไม่ถูกต้อง — ต้องขึ้นต้นด้วย http:// หรือ https://",
     heart_timeout: "ฟาร์มหัวใจใช้เวลานานเกินกำหนด — ลองลดจำนวนหัวใจแล้วรันใหม่",
     no_hearts_collected: "เก็บหัวใจไม่ได้เลย — ลองใหม่อีกครั้ง",
+    guest_creation_failed: "สร้าง guest ไม่สำเร็จ — ตรวจ proxy หรือลองใหม่ภายหลัง",
     heart_error: "ฟาร์มหัวใจไม่สำเร็จ ลองใหม่อีกครั้ง",
     giftdraw_failed: "เปิดกล่องขวัญไม่สำเร็จ ลองใหม่อีกครั้ง",
     treasure_not_found: "ไม่พบสมบัติที่เลือก",
@@ -890,6 +966,10 @@
             const data = await res.json();
             if (Number.isFinite(data.farm_coin_max)) farmCoinMax = data.farm_coin_max;
             if (Number.isFinite(data.farm_exp_max)) farmExpMax = data.farm_exp_max;
+            if (Number.isFinite(data.powder_max_target)) {
+              powderMax = Math.max(1, Math.floor(Number(data.powder_max_target)));
+              clampPowderTargetInputs();
+            }
             const coinEl = $("farm-coin");
             const expEl = $("farm-exp");
             if (coinEl) {
@@ -908,6 +988,15 @@
               }
             }
             paintMaintenanceBanner(data);
+            if (Number.isFinite(data.workers_alive)) {
+              window.__ckrWorkersAlive = Number(data.workers_alive);
+            }
+            if (Number.isFinite(data.memory_pct)) {
+              window.__ckrMemoryPct = Number(data.memory_pct);
+              window.__ckrMemoryUsedMb = Number(data.memory_used_mb);
+              window.__ckrMemoryTotalMb = Number(data.memory_total_mb);
+            }
+            if (isAdminUser()) renderAdminWorkerChip();
           } catch (_) {
             paintMaintenanceBanner(null);
           }
@@ -926,9 +1015,148 @@
     return false;
   }
 
+  function applyFeatureLocks(locks) {
+    if (!locks || typeof locks !== "object") return;
+    const next = { ...featureLocks };
+    Object.keys(next).forEach((k) => {
+      if (k in locks) next[k] = !!locks[k];
+    });
+    featureLocks = next;
+    paintFeatureLocks();
+    updateFarmAvailability();
+  }
+
+  function isFeatureLocked(tab) {
+    const key = tab === "cookie_unlock" ? "cookie" : tab;
+    return !!featureLocks[key];
+  }
+
+  function showFeatureLockedModal(tab) {
+    const labels = {
+      partyrun: "Party Run",
+      heart: "ฟาร์มหัวใจ",
+      powder: "ฟาร์มผง",
+      giftdraw: "เปิดกล่องขวัญ",
+      upgrade: "ตีบวกสมบัติ",
+      cookie: "ปลดล็อกคุกกี้",
+      reroll: "รีโรล",
+      quest: "เควส",
+      account: "ข้อมูลไอดี",
+      dstool: "ทดสอบเกม",
+    };
+    const name = labels[tab] || tab || "ฟีเจอร์นี้";
+    showErrorModal(
+      "ปิดปรับปรุง ไม่สามารถใช้งานได้\n(" + name + ")",
+      "ปิดปรับปรุง"
+    );
+  }
+
+  function paintFeatureLocks() {
+    FARM_DOCK_TABS.forEach((t) => {
+      const btn = $("farm-tab-" + t);
+      if (!btn) return;
+      const locked = isFeatureLocked(t);
+      btn.classList.toggle("is-feature-locked", locked);
+      btn.classList.toggle("is-feature-hidden", locked);
+      btn.hidden = locked;
+      const pill = btn.querySelector(".farm-nav-pill");
+      if (!pill) return;
+      let badge = pill.querySelector(".farm-nav-lock");
+      if (locked) {
+        if (badge) badge.remove();
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+    paintFeatureDock();
+  }
+
+  function devPlayCookiePortraitUrl(name) {
+    const n = String(name || "").trim();
+    if (!n) return "";
+    return DEVPLAY_PORTRAIT_CDN + "/" + encodeURIComponent(n) + ".png";
+  }
+
+  function resolveDevPlayAvatarUrl(session) {
+    if (!session) return DEVPLAY_AVATAR_FALLBACK;
+    if (session.cookieName) {
+      const url = devPlayCookiePortraitUrl(session.cookieName);
+      if (url) return url;
+    }
+    const key = String(session.profileImageKey || "").trim();
+    if (key) return "assets_web/profiles/" + encodeURIComponent(key);
+    return DEVPLAY_AVATAR_FALLBACK;
+  }
+
+  function paintPlayerHeroAvatar() {
+    const url = resolveDevPlayAvatarUrl(devplaySession);
+    ["player-hero-avatar", "player-head-chip-avatar"].forEach((id) => {
+      const img = $(id);
+      if (!img) return;
+      if (img.dataset.src === url) return;
+      img.dataset.src = url;
+      img.onerror = () => {
+        if (devplaySession?.profileImageKey && String(img.src).includes("assets_web/profiles/")) {
+          const cookieUrl = devPlayCookiePortraitUrl(devplaySession.cookieName);
+          if (cookieUrl && img.src !== cookieUrl) {
+            img.src = cookieUrl;
+            return;
+          }
+        }
+        img.onerror = null;
+        img.src = DEVPLAY_AVATAR_FALLBACK;
+      };
+      img.src = url;
+    });
+  }
+
+  function paintFeatureDock() {
+    const grid = $("feature-dock-grid");
+    const empty = $("feature-dock-empty");
+    if (!grid) return;
+    const connected = isDevPlayConnected();
+    const openTabs = connected ? FARM_DOCK_TABS.filter((t) => !isFeatureLocked(t)) : [];
+    grid.innerHTML = "";
+    if (!openTabs.length) {
+      if (empty) {
+        empty.classList.toggle("hidden", connected);
+        empty.hidden = connected;
+      }
+      return;
+    }
+    if (empty) {
+      empty.classList.add("hidden");
+      empty.hidden = true;
+    }
+    openTabs.forEach((tab) => {
+      const meta = FARM_TAB_META[tab];
+      if (!meta) return;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "feature-dock-card";
+      btn.dataset.shortcutTab = tab;
+      btn.setAttribute("role", "listitem");
+      const icon = document.createElement("img");
+      icon.className = "feature-dock-card-icon";
+      icon.src = "assets/" + meta.icon;
+      icon.alt = "";
+      icon.width = 40;
+      icon.height = 40;
+      const title = document.createElement("span");
+      title.className = "feature-dock-card-title";
+      title.textContent = meta.title;
+      const blurb = document.createElement("p");
+      blurb.className = "feature-dock-card-blurb";
+      blurb.textContent = meta.blurb || meta.hint || "";
+      btn.append(icon, title, blurb);
+      grid.appendChild(btn);
+    });
+  }
+
   function paintMaintenanceBanner(health) {
     const el = $("maintenance-banner");
     if (!el) return;
+    if (health && health.feature_locks) applyFeatureLocks(health.feature_locks);
     const farm = !!(health && health.farm_maintenance);
     const topup = !!(health && health.topup_maintenance);
     if (!farm && !topup) {
@@ -964,13 +1192,21 @@
     return !!(p.rental_is_permanent ?? p.is_permanent);
   }
 
+  function isAdminUser(p) {
+    const row = p || profile;
+    return String(row?.role || "").toLowerCase() === "admin";
+  }
+
   function hasFarmAccess() {
     if (!profile) return false;
+    if (isAdminUser(profile)) return true;
     if (isRentalPermanent(profile)) return true;
-    if (profile.farm_access === true) return true;
-    if (profile.farm_access === false) return false;
+    // Prefer live rental expiry over any sticky client-side farm_access flag
+    // (legacy 402/insufficient_tokens used to force farm_access=false).
     const exp = profile.rental_expires_at ? Date.parse(profile.rental_expires_at) : NaN;
-    return Number.isFinite(exp) && exp > Date.now();
+    if (Number.isFinite(exp) && exp > Date.now()) return true;
+    if (profile.farm_access === true) return true;
+    return false;
   }
 
   function rentalStatusLabel() {
@@ -992,9 +1228,9 @@
     if (!profile) return { text: "—", kind: "" };
     if (isRentalPermanent(profile)) return { text: "สิทธิ์ถาวร · ใช้งานได้ไม่จำกัด", kind: "is-permanent" };
     if (hasFarmAccess()) {
-      const daysLeft = rentalDaysRemaining();
       const parts = ["เช่าถึง " + rentalStatusLabel()];
-      if (daysLeft != null) parts.unshift("เหลือ ~" + formatNumTh(daysLeft) + " วัน");
+      const rem = rentalRemainingParts();
+      if (rem) parts.unshift("เหลือ " + formatRentalRemaining(rem));
       return { text: parts.join(" · "), kind: "is-active" };
     }
     return { text: "หมดอายุแล้ว · กดต่ออายุด้านบน", kind: "is-expired" };
@@ -1032,18 +1268,35 @@
       if (e?.data?.rental_expires_at !== undefined) {
         profile.rental_expires_at = e.data.rental_expires_at;
       }
-      if (e?.data?.farm_access !== undefined) profile.farm_access = e.data.farm_access;
-      else profile.farm_access = false;
+      // Only sticky-deny when the API explicitly says farm_access=false
+      // (or rental_* codes). Never clear access on generic 402 / legacy tokens.
+      if (e?.data?.farm_access !== undefined) {
+        profile.farm_access = e.data.farm_access;
+      } else {
+        const code = String(e?.message || e?.data?.detail || e?.data?.code || "");
+        if (/rental_expired|rental_required/i.test(code)) {
+          profile.farm_access = false;
+        }
+      }
     }
     paintProfile();
     showEmptyCoinsModal();
   }
 
   function isRentalDeniedError(e) {
-    return (
-      e?.status === 402 ||
-      /insufficient_tokens|rental_required|rental_expired/i.test(String(e?.message || ""))
-    );
+    const msg = String(e?.message || "");
+    const detail = e?.data?.detail;
+    const code =
+      (typeof detail === "string" && detail) ||
+      detail?.code ||
+      e?.data?.code ||
+      msg;
+    // Real rental denials only — do NOT treat legacy insufficient_tokens as expiry.
+    if (/rental_required|rental_expired/i.test(String(code)) || /rental_required|rental_expired/i.test(msg)) {
+      return true;
+    }
+    if (e?.status === 402 && e?.data?.farm_access === false) return true;
+    return false;
   }
 
   function tokenBalance() {
@@ -1085,7 +1338,7 @@
     return el;
   }
 
-  function openModal({ mode, title, body, icon, locked, bodyHtml }) {
+  function openModal({ mode, title, body, icon, locked, bodyHtml, cardClass }) {
     modalMode = mode;
     modalTitle.textContent = title;
     if (bodyHtml) {
@@ -1101,9 +1354,10 @@
       closeBtn.disabled = !!locked;
     }
     if (modalCard) {
-      modalCard.classList.remove("is-shake");
+      modalCard.classList.remove("is-shake", "modal-card--picker");
       void modalCard.offsetWidth;
       if (mode === "error") modalCard.classList.add("is-shake");
+      if (cardClass) modalCard.classList.add(cardClass);
     }
     animateOpen(modalRoot);
     const sheet = modalRoot.querySelector(".modal-card") || modalRoot;
@@ -1120,9 +1374,14 @@
     releaseFocusTrap();
     animateClose(modalRoot, () => {
       modalRoot.classList.remove("locked");
-      if (modalCard) modalCard.classList.remove("is-shake");
+      if (modalCard) modalCard.classList.remove("is-shake", "modal-card--picker");
       stopBalancePoll();
     });
+    // A completion modal was the result surface — don't reveal the finished
+    // live-status popup underneath after the user dismisses it.
+    if (jobStatusView === "expanded" && (dockPhase === "done" || dockPhase === "error")) {
+      closeRunStatusPopup();
+    }
   }
 
   function forceCloseModal() {
@@ -1135,7 +1394,7 @@
       modalRoot,
       () => {
         modalRoot.classList.remove("locked");
-        if (modalCard) modalCard.classList.remove("is-shake");
+        if (modalCard) modalCard.classList.remove("is-shake", "modal-card--picker");
         stopBalancePoll();
       },
       { instant: true }
@@ -1309,7 +1568,7 @@
       mode: "result",
       title: "สรุปผลฟาร์มผง",
       bodyHtml: html,
-      icon: "assets/crc_cookie_stone_box.png",
+      icon: "assets/magic_powder.png",
       locked: false,
     });
     $("modal-body")?.classList.add("result-stagger");
@@ -1421,19 +1680,40 @@
 
   function stopQueuePoll() {
     if (queuePollTimer) {
-      clearInterval(queuePollTimer);
+      clearTimeout(queuePollTimer);
       queuePollTimer = null;
     }
   }
 
+  function queuePollDelayMs() {
+    const busy =
+      !!activeWatchJobId ||
+      pendingFarmJobs.length > 0 ||
+      dockPhase === "running" ||
+      dockPhase === "queued";
+    return busy ? 2500 : 8000;
+  }
+
+  function scheduleQueuePollTick() {
+    queuePollTimer = setTimeout(() => {
+      queuePollTimer = null;
+      if (!document.hidden) {
+        refreshGateAndQueueUi().catch(() => {});
+      }
+      scheduleQueuePollTick();
+    }, queuePollDelayMs());
+  }
+
   function startQueuePoll() {
     stopQueuePoll();
-    queuePollTimer = setInterval(() => {
-      refreshGateAndQueueUi().catch(() => {});
-    }, 2500);
+    refreshGateAndQueueUi().catch(() => {});
+    scheduleQueuePollTick();
   }
 
   function jobKindToMode(kind) {
+    // Return null for unknown/missing kinds so callers can decide instead of
+    // silently defaulting to Party Run (the old bug: active-job without job_kind).
+    if (kind == null || kind === "") return null;
     const map = {
       partyrun: "partyrun",
       heart: "heart",
@@ -1446,7 +1726,7 @@
       quest_claim: "quest_claim",
       quest: "quest_claim",
     };
-    return map[kind] || kind || "partyrun";
+    return map[kind] || kind;
   }
 
   function modeToJobKind(mode) {
@@ -1587,13 +1867,69 @@
     if (queuedRun && (me.status === "waiting" || (!me.status && g.farm_busy))) {
       modalActions.appendChild(
         makeBtn("ยกเลิกคิว", "btn-ghost", () => {
-          clearQueuedRun();
-          stopQueuePoll();
-          forceCloseModal();
-          setFarmStatus( "ยกเลิกคิวแล้ว", "muted");
+          leaveServerQueue()
+            .catch(() => {})
+            .finally(() => {
+              forceCloseModal();
+            });
         })
       );
     }
+  }
+
+  async function leaveServerQueue() {
+    try {
+      await api("/api/farm/queue/leave", { method: "POST", body: {} });
+    } catch (_) {
+      /* still clear local state */
+    }
+    clearQueuedRun();
+    stopQueuePoll();
+    if (dockPhase === "queued") resetFarmDockIdle();
+    setFarmStatus("ยกเลิกคิวแล้ว", "muted");
+    refreshGateAndQueueUi().catch(() => {});
+    renderFarmDock();
+  }
+
+  async function cancelServerJob(jobId) {
+    if (!jobId) return null;
+    return api("/api/farm/job/" + encodeURIComponent(jobId) + "/cancel", {
+      method: "POST",
+      body: {},
+    });
+  }
+
+  async function cancelAllMyFarmWork() {
+    clearPendingFarmJobs();
+    const liveId = liveJob?.id || activeWatchJobId;
+    // Optimistic UI first.
+    clearQueuedRun();
+    stopQueuePoll();
+    stopWatchJobPoll();
+    stopDockElapsedTimer();
+    if (liveJob && !liveJob.finished) {
+      liveJob.finished = true;
+      dockPhase = "error";
+      dockOk = false;
+    }
+    setFarmStatus("กำลังยกเลิกทั้งหมด…", "muted");
+    scheduleRenderFarmDock({ immediate: true });
+    try {
+      await api("/api/farm/jobs/cancel-all", { method: "POST", body: {} });
+    } catch (e) {
+      if (liveId) {
+        try {
+          await cancelServerJob(liveId);
+        } catch (_) {}
+      }
+      try {
+        await api("/api/farm/queue/leave", { method: "POST", body: {} });
+      } catch (_) {}
+    }
+    setFarmStatus("ยกเลิกงานทั้งหมดแล้ว", "muted");
+    scheduleRenderFarmDock();
+    updateFarmAvailability();
+    refreshGateAndQueueUi().catch(() => {});
   }
 
   async function joinQueue(jobKind) {
@@ -1651,7 +1987,46 @@
     }
   }
 
-  function enqueueFarmJob({ mode, label, target, runFn }) {
+  /** Hard-reset live dock state so the next job never inherits the previous mode/steps/logs. */
+  function resetDockLiveForJob(mode, target, extras = {}) {
+    const m = mode || "partyrun";
+    clearStageTimer();
+    stopDockElapsedTimer();
+    // New job takes over the single live slot; its id is attached once known (watchFarmJob).
+    liveJob = { id: null, mode: m, target: Number(target) || 0, finished: false };
+    dockPhase = "running";
+    dockOk = null;
+    dockJobStartedAt = Date.now();
+    dockJobFinishedAt = null;
+    dockLiveLogOpen = false;
+    const prevThumbs =
+      statusContext?.mode === m && Array.isArray(statusContext?.cookieThumbs)
+        ? statusContext.cookieThumbs
+        : null;
+    statusContext = {
+      mode: m,
+      target: Number(target) || 0,
+      ...(prevThumbs ? { cookieThumbs: prevThumbs } : {}),
+      ...extras,
+    };
+    pipelineState = freshPipeline(m);
+    startDockElapsedTimer();
+  }
+
+  /** Drop a finished live card so a newly queued job is not buried under stale Party Run/etc. */
+  function clearFinishedLiveCard() {
+    if (dockPhase !== "done" && dockPhase !== "error") return;
+    dockPhase = null;
+    dockOk = null;
+    dockJobStartedAt = null;
+    dockJobFinishedAt = null;
+    stopDockElapsedTimer();
+    pipelineState = null;
+    statusContext = null;
+    if (liveJob?.finished) liveJob = null;
+  }
+
+  function enqueueFarmJob({ mode, label, target, runFn, extras }) {
     if (pendingFarmJobs.length >= PENDING_FARM_MAX) {
       showErrorModal(
         "คิวเต็มแล้ว (สูงสุด " +
@@ -1669,8 +2044,11 @@
       label: label || mode || "งานฟาร์ม",
       target: Number(target) || 0,
       runFn,
+      extras: extras || null,
     });
-    expandFarmDock();
+    // Finished card must not keep showing the previous mode over the new queued job.
+    clearFinishedLiveCard();
+    showFarmDock();
     renderFarmDock();
     updateFarmAvailability();
     setFarmStatus(
@@ -1689,12 +2067,443 @@
     setFarmStatus("ยกเลิกงานในคิวแล้ว", "muted");
   }
 
-  function dequeueAndStartNext() {
+  function cancelLiveFarmJob() {
+    const jobId = liveJob?.id || activeWatchJobId;
+    if (!jobId) return Promise.resolve();
+    // Optimistic: freeze UI immediately so the card doesn't look "stuck running".
+    if (liveJob) liveJob.finished = true;
+    dockPhase = "error";
+    dockOk = false;
+    setFarmStatus("กำลังยกเลิก…", "muted");
+    stopWatchJobPoll();
+    stopDockElapsedTimer();
+    scheduleRenderFarmDock();
+    return cancelServerJob(jobId)
+      .then(() => {
+        setFarmStatus("ส่งคำขอยกเลิกงานแล้ว", "muted");
+        scheduleRenderFarmDock();
+      })
+      .catch((e) => {
+        showErrorModal(thError(e.message) || "ยกเลิกไม่สำเร็จ", "ยกเลิกงาน");
+        resumeFarmSession().catch(() => {});
+      });
+  }
+
+  function stopAdminJobsPoll() {
+    if (adminJobsPollTimer) {
+      clearTimeout(adminJobsPollTimer);
+      adminJobsPollTimer = null;
+    }
+  }
+
+  function adminJobsPollDelayMs() {
+    return jobStatusTab === "admin" && adminJobsTab === "live" ? 8000 : 12000;
+  }
+
+  function scheduleAdminJobsPollTick() {
+    adminJobsPollTimer = setTimeout(() => {
+      adminJobsPollTimer = null;
+      if (!document.hidden && jobStatusTab === "admin" && adminJobsTab === "live") {
+        loadAdminJobs({ reset: true, silent: true }).catch(() => {});
+      }
+      if (isAdminUser()) scheduleAdminJobsPollTick();
+    }, adminJobsPollDelayMs());
+  }
+
+  function startAdminJobsPoll() {
+    if (!isAdminUser()) return;
+    if (adminJobsPollTimer) return;
+    scheduleAdminJobsPollTick();
+  }
+
+  function adminJobsFingerprint(items) {
+    return (items || [])
+      .map((r) =>
+        [
+          r.job_id || "",
+          r.status || "",
+          r.cancel_requested ? "1" : "0",
+          (r.progress && r.progress.current) || "",
+          (r.progress && r.progress.phase) || "",
+          r.error || "",
+          r.heartbeat_at || "",
+          adminJobIsStuck(r) ? "stuck" : "",
+        ].join(":")
+      )
+      .join("|");
+  }
+
+  function adminJobAgeSec(row) {
+    const ts = row.heartbeat_at || row.started_at || row.created_at;
+    if (!ts) return null;
+    const t = Date.parse(ts);
+    if (!Number.isFinite(t)) return null;
+    return Math.max(0, Math.floor((Date.now() - t) / 1000));
+  }
+
+  function adminJobIsStuck(row) {
+    const st = row.status || "";
+    if (st !== "running" && st !== "queued") return false;
+    if (row.cancel_requested) return true;
+    const hb = row.heartbeat_at ? Date.parse(row.heartbeat_at) : NaN;
+    const started = row.started_at ? Date.parse(row.started_at) : Date.parse(row.created_at || "");
+    const now = Date.now();
+    // Running with no heartbeat for >90s, or heartbeat/start older than 10 min.
+    if (st === "running") {
+      if (!Number.isFinite(hb)) {
+        if (Number.isFinite(started) && now - started > 90_000) return true;
+      } else if (now - hb > 90_000) {
+        return true;
+      }
+      if (Number.isFinite(started) && now - started > 600_000) return true;
+    }
+    if (st === "queued" && Number.isFinite(started) && now - started > 600_000) return true;
+    return false;
+  }
+
+  function adminJobToCard(row) {
+    const kind = row.kind || "partyrun";
+    const mode = jobKindToMode(kind);
+    const st = row.status || "";
+    const stuck = adminJobIsStuck(row);
+    const phase = stuck
+      ? "stuck"
+      : st === "succeeded"
+        ? "done"
+        : st === "failed" || st === "cancelled"
+          ? "error"
+          : st === "running"
+            ? "running"
+            : st === "queued"
+              ? "queued"
+              : "idle";
+    let badge =
+      st === "succeeded"
+        ? "สำเร็จ"
+        : st === "failed"
+          ? "ล้มเหลว"
+          : st === "cancelled"
+            ? "ยกเลิก"
+            : st === "running"
+              ? "กำลังรัน"
+              : st === "queued"
+                ? "รอคิว"
+                : st;
+    if (stuck) badge = "ค้าง";
+    const canCancel = st === "queued" || st === "running";
+    const prog = row.progress || {};
+    const progText =
+      prog.total > 0
+        ? String(prog.current || 0) + "/" + String(prog.total) + (prog.phase ? " · " + prog.phase : "")
+        : prog.phase || "";
+    const ageSec = adminJobAgeSec(row);
+    const ageLine = ageSec != null ? "อายุ " + formatDockElapsed(ageSec) : "";
+    const startedLine = formatDockStartedAt(row.started_at || row.created_at || row.finished_at) || "";
+    const timeLine = [startedLine, ageLine, stuck ? "บังคับจบได้" : ""]
+      .filter(Boolean)
+      .join(" · ");
+    return {
+      mode,
+      phase,
+      title: (row.username || "user") + " · " + (JOB_KIND_TH[kind] || kind),
+      badge,
+      detail: row.error || progText || kind,
+      timeLine,
+      live: false,
+      cancelable: canCancel,
+      adminCancelId: canCancel ? row.job_id : "",
+      jobId: row.job_id || "",
+      stuck,
+    };
+  }
+
+  function renderAdminWorkerChip() {
+    const chip = $("farm-dock-admin-worker");
+    const text = $("farm-dock-admin-worker-text");
+    if (!chip || !text) return;
+    const alive = Number(window.__ckrWorkersAlive);
+    const memPct = Number(window.__ckrMemoryPct);
+    const memNote = Number.isFinite(memPct) ? " · RAM " + memPct + "%" : "";
+    chip.classList.remove("is-alive", "is-down");
+    if (!Number.isFinite(alive)) {
+      text.textContent = "กำลังตรวจสอบ worker…";
+    } else if (alive <= 0) {
+      chip.classList.add("is-down");
+      text.textContent = "ไม่มี worker พร้อมทำงาน — งานใหม่จะค้างในคิว" + memNote;
+    } else {
+      chip.classList.add("is-alive");
+      text.textContent =
+        "worker พร้อมทำงาน " + alive + " ตัว" + memNote + " — ระบบรับงานได้ปกติ";
+    }
+    const heartMaxRow = $("farm-dock-admin-heart-max");
+    if (heartMaxRow) heartMaxRow.classList.toggle("hidden", !isAdminUser());
+    const powderMaxRow = $("farm-dock-admin-powder-max");
+    if (powderMaxRow) powderMaxRow.classList.toggle("hidden", !isAdminUser());
+  }
+
+  async function loadAdminHeartMaxSetting() {
+    if (!isAdminUser()) return;
+    const input = $("farm-dock-admin-heart-max-input");
+    const msg = $("farm-dock-admin-heart-max-msg");
+    const powderInput = $("farm-dock-admin-powder-max-input");
+    const powderMsg = $("farm-dock-admin-powder-max-msg");
+    if (!input && !powderInput) return;
+    try {
+      const data = await api("/api/admin/settings");
+      const n = Number(data.heart_max_target);
+      if (Number.isFinite(n) && input) input.value = String(n);
+      const range = data.heart_max_target_range;
+      if (Array.isArray(range) && range.length >= 2 && input) {
+        input.min = String(range[0]);
+        input.max = String(range[1]);
+      }
+      const pn = Number(data.powder_max_target);
+      if (Number.isFinite(pn) && powderInput) {
+        powderInput.value = String(pn);
+        powderMax = Math.max(1, Math.floor(pn));
+        clampPowderTargetInputs();
+      }
+      const pr = data.powder_max_target_range;
+      if (Array.isArray(pr) && pr.length >= 2 && powderInput) {
+        powderInput.min = String(pr[0]);
+        powderInput.max = String(pr[1]);
+      }
+      if (msg) msg.textContent = "";
+      if (powderMsg) powderMsg.textContent = "";
+    } catch (e) {
+      const err = thError(e.message) || "โหลดการตั้งค่าไม่สำเร็จ";
+      if (msg) msg.textContent = err;
+      if (powderMsg) powderMsg.textContent = err;
+    }
+  }
+
+  async function saveAdminHeartMaxSetting() {
+    const input = $("farm-dock-admin-heart-max-input");
+    const msg = $("farm-dock-admin-heart-max-msg");
+    const btn = $("farm-dock-admin-heart-max-save");
+    if (!input || !isAdminUser()) return;
+    const n = Math.floor(Number(input.value) || 0);
+    if (!Number.isFinite(n) || n < 1) {
+      if (msg) msg.textContent = "ใส่จำนวนหัวใจที่ถูกต้อง";
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (msg) msg.textContent = "กำลังบันทึก…";
+    try {
+      const data = await api("/api/admin/settings", {
+        method: "POST",
+        body: { heart_max_target: n },
+      });
+      const saved = Number(data.heart_max_target);
+      if (Number.isFinite(saved)) {
+        heartMax = saved;
+        heartTarget = clampHeartTarget(heartTarget);
+        paintHeartStepper();
+        if (input) input.value = String(saved);
+      }
+      if (msg) msg.textContent = "บันทึกแล้ว — สูงสุด " + formatNumTh(saved || n) + " หัวใจ/job";
+    } catch (e) {
+      if (msg) msg.textContent = thError(e.message) || "บันทึกไม่สำเร็จ";
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function saveAdminPowderMaxSetting() {
+    const input = $("farm-dock-admin-powder-max-input");
+    const msg = $("farm-dock-admin-powder-max-msg");
+    const btn = $("farm-dock-admin-powder-max-save");
+    if (!input || !isAdminUser()) return;
+    const n = Math.floor(Number(input.value) || 0);
+    if (!Number.isFinite(n) || n < 1) {
+      if (msg) msg.textContent = "ใส่จำนวนผงที่ถูกต้อง";
+      return;
+    }
+    if (btn) btn.disabled = true;
+    if (msg) msg.textContent = "กำลังบันทึก…";
+    try {
+      const data = await api("/api/admin/settings", {
+        method: "POST",
+        body: { powder_max_target: n },
+      });
+      const saved = Number(data.powder_max_target);
+      if (Number.isFinite(saved)) {
+        powderMax = Math.max(1, Math.floor(saved));
+        if (input) input.value = String(powderMax);
+        clampPowderTargetInputs();
+        paintPowderGoalControls();
+        refreshPowderEstimate().catch(() => {});
+      }
+      if (msg)
+        msg.textContent =
+          "บันทึกแล้ว — สูงสุด " + formatNumTh(saved || n) + " ผง/รอบ";
+    } catch (e) {
+      if (msg) msg.textContent = thError(e.message) || "บันทึกไม่สำเร็จ";
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  function renderAdminStats() {
+    const statsBox = $("farm-dock-admin-stats");
+    const filters = $("farm-dock-admin-filters");
+    const showLive = adminJobsTab === "live";
+    if (statsBox) statsBox.classList.toggle("hidden", !showLive);
+    if (filters) filters.classList.toggle("hidden", !showLive);
+    if (!showLive) return;
+    let running = 0;
+    let queued = 0;
+    let stuck = 0;
+    for (const r of adminJobsItems) {
+      if (adminJobIsStuck(r)) stuck += 1;
+      if (r.status === "running") running += 1;
+      else if (r.status === "queued") queued += 1;
+    }
+    const set = (id, n) => {
+      const el = $(id);
+      if (el) el.textContent = String(n);
+    };
+    set("farm-dock-admin-stat-running", running);
+    set("farm-dock-admin-stat-queued", queued);
+    set("farm-dock-admin-stat-stuck", stuck);
+    document.querySelectorAll("[data-admin-filter]").forEach((btn) => {
+      btn.classList.toggle(
+        "is-active",
+        btn.getAttribute("data-admin-filter") === adminJobsFilter
+      );
+    });
+  }
+
+  function adminJobsFiltered() {
+    if (adminJobsTab !== "live" || adminJobsFilter === "all") return adminJobsItems;
+    return adminJobsItems.filter((r) => {
+      if (adminJobsFilter === "stuck") return adminJobIsStuck(r);
+      if (adminJobsFilter === "running") return r.status === "running";
+      if (adminJobsFilter === "queued") return r.status === "queued";
+      return true;
+    });
+  }
+
+  function renderAdminJobsList() {
+    const box = $("farm-dock-admin-list");
+    const moreBtn = $("farm-dock-admin-more");
+    const warn = $("farm-dock-admin-warn");
+    renderAdminWorkerChip();
+    renderAdminStats();
+    if (warn) {
+      const alive = Number(window.__ckrWorkersAlive);
+      if (Number.isFinite(alive) && alive <= 0 && adminJobsTab === "live") {
+        warn.textContent = "ไม่มี worker ที่พร้อมทำงาน — งานใหม่อาจค้างในคิว";
+        warn.classList.remove("hidden");
+      } else {
+        warn.textContent = "";
+        warn.classList.add("hidden");
+      }
+    }
+    if (!box) return;
+    box.replaceChildren();
+    const rows = adminJobsFiltered();
+    if (!rows.length) {
+      const empty = document.createElement("p");
+      empty.className = "farm-dock-empty";
+      empty.textContent =
+        adminJobsTab === "live"
+          ? adminJobsItems.length
+            ? "ไม่มีงานในตัวกรองนี้"
+            : "ไม่มีงานที่กำลังรันหรือรอคิว"
+          : "ยังไม่มีประวัติงาน";
+      box.appendChild(empty);
+    } else {
+      for (const row of rows) {
+        box.appendChild(renderTxCard(adminJobToCard(row)));
+      }
+    }
+    if (moreBtn) {
+      moreBtn.classList.toggle("hidden", !(adminJobsTab === "history" && adminJobsHasMore));
+    }
+  }
+
+  let adminJobsLoading = false;
+  let adminJobsFp = "";
+
+  async function loadAdminJobs({ reset = true, silent = false } = {}) {
+    if (!isAdminUser()) return;
+    if (adminJobsLoading) return;
+    adminJobsLoading = true;
+    try {
+      if (reset) adminJobsOffset = 0;
+      const status = adminJobsTab === "history" ? "history" : "active";
+      const data = await api(
+        "/api/admin/jobs?status=" +
+          encodeURIComponent(status) +
+          "&limit=" +
+          ADMIN_JOBS_PAGE +
+          "&offset=" +
+          adminJobsOffset
+      );
+      const items = Array.isArray(data.items) ? data.items : [];
+      const next = reset ? items : adminJobsItems.concat(items);
+      const fp = adminJobsFingerprint(next);
+      const changed = fp !== adminJobsFp || !reset;
+      adminJobsItems = next;
+      adminJobsOffset = adminJobsItems.length;
+      adminJobsHasMore = items.length >= ADMIN_JOBS_PAGE;
+      adminJobsFp = fp;
+      // Silent poll: rebuild DOM only when data actually changed.
+      if (!silent || changed) renderAdminJobsList();
+      if (adminJobsTab === "live") startAdminJobsPoll();
+      else stopAdminJobsPoll();
+    } finally {
+      adminJobsLoading = false;
+    }
+  }
+
+  async function adminCancelJob(jobId) {
+    if (!jobId) return;
+    // Optimistic remove so stuck rows disappear immediately in Admin UI.
+    adminJobsItems = adminJobsItems.filter((r) => r.job_id !== jobId);
+    adminJobsFp = adminJobsFingerprint(adminJobsItems);
+    renderAdminJobsList();
+    try {
+      await api("/api/admin/jobs/" + encodeURIComponent(jobId) + "/cancel", {
+        method: "POST",
+        body: {},
+      });
+      setFarmStatus("ยกเลิกงานของ user แล้ว", "muted");
+    } finally {
+      await loadAdminJobs({ reset: true });
+    }
+  }
+
+  async function adminClearQueueAll() {
+    const ok = window.confirm(
+      "ล้างคิวทั้งระบบและยกเลิกงาน queued/running ทั้งหมด?"
+    );
+    if (!ok) return;
+    adminJobsItems = [];
+    adminJobsFp = "";
+    renderAdminJobsList();
+    const data = await api("/api/admin/queue/clear", { method: "POST", body: {} });
+    setFarmStatus(
+      "ล้างคิวแล้ว — งาน " + (data.cancelled_jobs || 0) + " รายการ",
+      "ok"
+    );
+    await loadAdminJobs({ reset: true });
+  }
+
+  function dequeueAndStartNext(delayMs) {
     if (startingFromPersonalQueue) return;
     if (isFarmExecutorBusy()) return;
     if (queuedRun) return;
     if (!pendingFarmJobs.length) return;
     if (pendingStartTimer) return;
+    // Keep success/error visible briefly before switching to the next queued job.
+    const wait =
+      delayMs != null
+        ? Math.max(0, Number(delayMs) || 0)
+        : dockPhase === "done" || dockPhase === "error"
+          ? 900
+          : 320;
     pendingStartTimer = setTimeout(() => {
       pendingStartTimer = null;
       if (isFarmExecutorBusy() || queuedRun) return;
@@ -1704,7 +2513,8 @@
         updateFarmAvailability();
         return;
       }
-      renderFarmDock();
+      resetDockLiveForJob(next.mode, next.target, next.extras || {});
+      renderFarmDock({ mode: next.mode, target: next.target });
       updateFarmAvailability();
       setFarmStatus("ถึงคิวแล้ว — เริ่ม " + (next.label || next.mode), "ok");
       startingFromPersonalQueue = true;
@@ -1717,14 +2527,14 @@
             dequeueAndStartNext();
           }
         });
-    }, 320);
+    }, wait);
   }
 
   /** If a farm job is already running, enqueue instead of submitting now. */
-  function queueIfBusy(mode, target, label, runFn) {
+  function queueIfBusy(mode, target, label, runFn, extras) {
     if (startingFromPersonalQueue) return false;
     if (!isFarmExecutorBusy()) return false;
-    enqueueFarmJob({ mode, target, label, runFn });
+    enqueueFarmJob({ mode, target, label, runFn, extras });
     return true;
   }
 
@@ -1762,11 +2572,12 @@
     queueResumeAttempts = 0;
   }
 
-  async function refreshGateAndQueueUi() {
+    async function refreshGateAndQueueUi() {
     if (!accessToken) return null;
     try {
       const data = await api("/api/farm/gate");
       lastGate = data;
+      if (data.feature_locks) applyFeatureLocks(data.feature_locks);
       if (data.is_my_turn || data.me?.status === "waiting" || data.me?.status === "active") {
         showFarmDockQueue(data);
         startQueuePoll();
@@ -1791,19 +2602,37 @@
     }
   }
 
-  function startActivityPoll() {
-    stopActivityPoll();
-    activityPollTimer = setInterval(() => {
-      refreshFarmActivity().catch(() => {});
-    }, 3500);
-    refreshFarmActivity().catch(() => {});
-  }
-
   function stopActivityPoll() {
     if (activityPollTimer) {
-      clearInterval(activityPollTimer);
+      clearTimeout(activityPollTimer);
       activityPollTimer = null;
     }
+  }
+
+  function activityPollDelayMs() {
+    const busy =
+      dockPhase === "running" ||
+      dockPhase === "queued" ||
+      !!activeWatchJobId ||
+      pendingFarmJobs.length > 0 ||
+      jobStatusTab === "admin";
+    return busy ? 3500 : 8000;
+  }
+
+  function scheduleActivityPollTick() {
+    activityPollTimer = setTimeout(() => {
+      activityPollTimer = null;
+      if (!document.hidden) {
+        refreshFarmActivity().catch(() => {});
+      }
+      scheduleActivityPollTick();
+    }, activityPollDelayMs());
+  }
+
+  function startActivityPoll() {
+    stopActivityPoll();
+    refreshFarmActivity().catch(() => {});
+    scheduleActivityPollTick();
   }
 
   function paintFarmActivity(data) {
@@ -1849,9 +2678,13 @@
     dockPhase = null;
     dockOk = null;
     dockJobStartedAt = null;
+    dockJobFinishedAt = null;
+    liveJob = null;
+    statusContext = null;
+    pipelineState = null;
+    farmDockFlash = { text: "", kind: "muted" };
     stopDockElapsedTimer();
-    showFarmDock();
-    collapseFarmDock();
+    hideJobStatusShell();
     renderFarmDock();
   }
 
@@ -1883,41 +2716,29 @@
   }
 
   function showPowderConfirmModal(rounds) {
-    // Same summary the desktop script prints before it spends anything: how
-    // many rounds, what it costs, what comes back. A null count means the API
-    // cannot honour one, so say plainly that every coin is going.
-    const coins = Number(powderEstimate?.coin_available || 0);
-    let body;
-    if (rounds == null) {
-      body =
-        "⚠ เซิร์ฟเวอร์ยังไม่รองรับการเลือกจำนวนรอบ\n" +
-        "จะใช้เหรียญทั้งหมดที่มี (" +
-        formatNumTh(coins) +
-        ") จนกว่าจะหมดหรือครบ " +
-        formatNumTh(powderEstimate?.target_powder || 0) +
-        " ผง";
-    } else {
-      const r = Math.max(1, Number(rounds) || 1);
-      const cost = r * powderPricePerRound();
-      body =
-        "รัน " +
-        formatNumTh(r) +
-        " รอบ\n" +
-        "เสียเหรียญ " +
-        formatNumTh(cost) +
-        " (เหลือ " +
-        formatNumTh(Math.max(0, coins - cost)) +
-        ")\n" +
-        "ได้ผง +" +
-        formatNumTh(r * powderYield());
-    }
+    const plan = powderPlan || {};
+    const coins = Number(plan.coin_available ?? devplaySession?.coin ?? 0);
+    const r = Math.max(1, Number(rounds) || Number(plan.rounds) || 1);
+    const cost = Number(plan.coin_cost) || r * powderPricePerRound();
+    const gain = Number(plan.powder_gain) || r * powderYieldPerRound();
+    const body =
+      "รัน " +
+      formatNumTh(r) +
+      " กล่อง\n" +
+      "ใช้เหรียญ " +
+      formatNumTh(cost) +
+      " (เหลือประมาณ " +
+      formatNumTh(Math.max(0, coins - cost)) +
+      ")\n" +
+      "ได้ผงประมาณ +" +
+      formatNumTh(gain);
     return new Promise((resolve) => {
       clearModalActions();
       openModal({
         mode: "confirm",
         title: "ยืนยันฟาร์มผง?",
         body,
-        icon: "assets/crc_cookie_stone_box.png",
+        icon: "assets/magic_powder.png",
         locked: false,
       });
       modalActions.classList.add("row");
@@ -2022,9 +2843,301 @@
   }
 
   function hasDevPlayCreds() {
+    const { email, password } = getDevPlayCreds();
+    return !!(email && password);
+  }
+
+  function getDevPlayCreds() {
+    if (devplaySession?.email && devplaySession?.password) {
+      return {
+        email: String(devplaySession.email).trim(),
+        password: String(devplaySession.password),
+      };
+    }
     const mail = ($("dp-acct-mail")?.value || "").trim();
     const secret = $("dp-acct-secret")?.value || "";
-    return !!(mail && secret);
+    return { email: mail, password: secret };
+  }
+
+  function getDevPlayAccountDisplayName() {
+    if (!devplaySession) return "—";
+    const nick = String(devplaySession.nickname || "").trim();
+    if (nick && nick.toLowerCase() !== "player") return nick;
+    return "—";
+  }
+
+  function devplayVaultStorageKey() {
+    const uid = profile?.id;
+    if (!uid) return null;
+    return "ckr_devplay_vault_v1_" + uid;
+  }
+
+  function vaultBytesToB64(bytes) {
+    let bin = "";
+    const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    for (let i = 0; i < arr.length; i++) bin += String.fromCharCode(arr[i]);
+    return btoa(bin);
+  }
+
+  function vaultB64ToBytes(str) {
+    const bin = atob(String(str || ""));
+    const out = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function deriveDevPlayVaultKey(userId) {
+    const enc = new TextEncoder();
+    const keyMaterial = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(String(userId) + "|" + DEVPLAY_VAULT_PEPPER),
+      "PBKDF2",
+      false,
+      ["deriveKey"]
+    );
+    return crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: enc.encode("ckr-devplay-vault-salt"),
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      keyMaterial,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"]
+    );
+  }
+
+  async function encryptDevPlayVault(entries) {
+    const uid = profile?.id;
+    if (!uid) return null;
+    const key = await deriveDevPlayVaultKey(uid);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const plaintext = new TextEncoder().encode(JSON.stringify(entries));
+    const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+    return JSON.stringify({ v: 1, iv: vaultBytesToB64(iv), data: vaultBytesToB64(cipher) });
+  }
+
+  async function decryptDevPlayVault(blob) {
+    const uid = profile?.id;
+    if (!uid) return [];
+    const parsed = JSON.parse(blob);
+    if (!parsed || parsed.v !== 1 || !parsed.iv || !parsed.data) return [];
+    const key = await deriveDevPlayVaultKey(uid);
+    const iv = vaultB64ToBytes(parsed.iv);
+    const cipher = vaultB64ToBytes(parsed.data);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, cipher);
+    const entries = JSON.parse(new TextDecoder().decode(plain));
+    return Array.isArray(entries) ? entries : [];
+  }
+
+  async function loadLocalDevPlayVaultEntries() {
+    const storageKey = devplayVaultStorageKey();
+    if (!storageKey) return [];
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return [];
+    try {
+      const entries = await decryptDevPlayVault(raw);
+      return Array.isArray(entries) ? entries : [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function clearLocalDevPlayVault() {
+    const storageKey = devplayVaultStorageKey();
+    if (storageKey) localStorage.removeItem(storageKey);
+  }
+
+  async function migrateLocalDevPlayVaultToCloud(localEntries) {
+    if (!Array.isArray(localEntries) || !localEntries.length) return;
+    for (const entry of localEntries) {
+      const email = String(entry?.email || "").trim();
+      const password = String(entry?.password || "");
+      if (!email || !password) continue;
+      try {
+        await api("/api/devplay/vault", {
+          method: "PUT",
+          body: {
+            email,
+            password,
+            nickname: entry.nickname || "player",
+            cookieName: entry.cookieName || null,
+            profileImageKey: entry.profileImageKey || null,
+          },
+        });
+      } catch (_) {
+        /* keep local; retry next login */
+        return;
+      }
+    }
+    clearLocalDevPlayVault();
+  }
+
+  async function loadDevPlayVault() {
+    devplayVaultEntries = [];
+    if (!profile?.id || !accessToken) {
+      paintDevPlayAccountPicker();
+      return;
+    }
+    try {
+      await ensureApiReady();
+      const data = await api("/api/devplay/vault");
+      const remote = Array.isArray(data.entries) ? data.entries : [];
+      if (remote.length) {
+        devplayVaultEntries = remote.slice(0, DEVPLAY_VAULT_MAX);
+        clearLocalDevPlayVault();
+      } else {
+        const localEntries = await loadLocalDevPlayVaultEntries();
+        if (localEntries.length) {
+          await migrateLocalDevPlayVaultToCloud(localEntries);
+          const again = await api("/api/devplay/vault");
+          devplayVaultEntries = Array.isArray(again.entries)
+            ? again.entries.slice(0, DEVPLAY_VAULT_MAX)
+            : [];
+        }
+      }
+    } catch (_) {
+      const localEntries = await loadLocalDevPlayVaultEntries();
+      devplayVaultEntries = localEntries.slice(0, DEVPLAY_VAULT_MAX);
+    }
+    paintDevPlayAccountPicker();
+  }
+
+  async function upsertDevPlayVaultEntry(creds, meta = {}) {
+    const emailRaw = String(creds?.email || "").trim();
+    const password = String(creds?.password || "");
+    if (!emailRaw || !password) return;
+    const emailKey = emailRaw.toLowerCase();
+    const next = {
+      email: emailRaw,
+      password,
+      nickname: meta.nickname || "player",
+      cookieName: meta.cookieName || null,
+      profileImageKey: meta.profileImageKey || null,
+      lastUsedAt: Date.now(),
+    };
+    // Optimistic local update for snappy UI
+    devplayVaultEntries = devplayVaultEntries.filter(
+      (e) => String(e.email || "").trim().toLowerCase() !== emailKey
+    );
+    devplayVaultEntries.unshift(next);
+    if (devplayVaultEntries.length > DEVPLAY_VAULT_MAX) {
+      devplayVaultEntries = devplayVaultEntries.slice(0, DEVPLAY_VAULT_MAX);
+    }
+    paintDevPlayAccountPicker();
+    try {
+      await ensureApiReady();
+      await api("/api/devplay/vault", {
+        method: "PUT",
+        body: {
+          email: emailRaw,
+          password,
+          nickname: next.nickname,
+          cookieName: next.cookieName,
+          profileImageKey: next.profileImageKey,
+        },
+      });
+      const data = await api("/api/devplay/vault");
+      if (Array.isArray(data.entries)) {
+        devplayVaultEntries = data.entries.slice(0, DEVPLAY_VAULT_MAX);
+        paintDevPlayAccountPicker();
+      }
+    } catch (_) {
+      /* keep optimistic list; next load will reconcile */
+    }
+  }
+
+  async function removeDevPlayVaultEntry(email) {
+    const norm = String(email || "").trim().toLowerCase();
+    devplayVaultEntries = devplayVaultEntries.filter(
+      (e) => String(e.email || "").trim().toLowerCase() !== norm
+    );
+    paintDevPlayAccountPicker();
+    try {
+      await ensureApiReady();
+      await api("/api/devplay/vault?email=" + encodeURIComponent(email || ""), {
+        method: "DELETE",
+      });
+    } catch (_) {
+      /* list already updated locally */
+    }
+  }
+
+  function maskDevPlayEmail(email) {
+    const s = String(email || "").trim();
+    const at = s.indexOf("@");
+    if (at <= 1) return s;
+    const name = s.slice(0, at);
+    const domain = s.slice(at);
+    const mask = name.length > 2 ? "***" : "*";
+    return name.slice(0, 1) + mask + domain;
+  }
+
+  function resolveVaultAvatarUrl(entry) {
+    return resolveDevPlayAvatarUrl({
+      cookieName: entry?.cookieName,
+      profileImageKey: entry?.profileImageKey,
+    });
+  }
+
+  function paintDevPlayAccountPicker() {
+    const picker = $("devplay-account-picker");
+    const list = $("devplay-account-picker-list");
+    const newWrap = $("devplay-new-account-wrap");
+    if (!picker || !list) return;
+
+    const show = !isDevPlayConnected() && devplayVaultEntries.length > 0;
+    picker.classList.toggle("hidden", !show);
+    picker.hidden = !show;
+    if (newWrap) {
+      newWrap.classList.toggle("hidden", !show);
+      newWrap.hidden = !show;
+    }
+
+    list.innerHTML = "";
+    if (!show) return;
+
+    devplayVaultEntries.forEach((entry) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "devplay-vault-card";
+      row.dataset.vaultEmail = entry.email;
+      row.disabled = !!(devplayConnecting || farmRunning);
+      row.setAttribute("role", "listitem");
+
+      const img = document.createElement("img");
+      img.className = "devplay-vault-card-avatar";
+      img.src = resolveVaultAvatarUrl(entry);
+      img.alt = "";
+      img.width = 48;
+      img.height = 48;
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = DEVPLAY_AVATAR_FALLBACK;
+      };
+
+      const body = document.createElement("div");
+      body.className = "devplay-vault-card-body";
+      const name = document.createElement("span");
+      name.className = "devplay-vault-card-name";
+      name.textContent = entry.nickname || "player";
+      const mail = document.createElement("span");
+      mail.className = "devplay-vault-card-email muted";
+      mail.textContent = maskDevPlayEmail(entry.email);
+      body.append(name, mail);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "devplay-vault-card-remove";
+      removeBtn.dataset.vaultRemove = entry.email;
+      removeBtn.setAttribute("aria-label", "ลบบัญชี " + entry.email);
+      removeBtn.textContent = "×";
+
+      row.append(img, body, removeBtn);
+      list.appendChild(row);
+    });
   }
 
   function isDevPlayConnected() {
@@ -2127,19 +3240,22 @@
     ticketCount = 1;
     upgradeTreasures = [];
     upgradeSelected.clear();
-    upgradeGridExpanded = false;
+    upgradePickerDraft.clear();
+    upgradePickerFilter = "";
     upgradeEstimate = null;
     upgradeCoin = 0;
     cookieItems = [];
     cookieSelected.clear();
     cookieEstimate = null;
     cookieCoin = 0;
+    powderPlan = null;
     powderEstimate = null;
     clearDevPlayCreds();
     switchFarmTab("devplay", { silent: true });
     paintDevPlayConnectStatus("ออกจาก DevPlay แล้ว — เข้าด้วยบัญชีอื่นได้", "muted");
     paintDevPlayHub();
-    paintUpgradeGrid();
+    paintDevPlayAccountPicker();
+    paintUpgradeSelectedSummary();
     paintTicketStepper();
     updateFarmAvailability();
     setFarmStatus( "ออกจาก DevPlay แล้ว — พร้อมสลับไอดี", "muted");
@@ -2150,40 +3266,68 @@
     devplaySession = null;
     ticketMax = 99;
     ticketCount = 1;
-    const reconnect = $("devplay-reconnect-btn");
-    if (reconnect) {
-      reconnect.hidden = true;
-      reconnect.classList.add("hidden");
-    }
     paintDevPlayConnectStatus("ยังไม่ได้เชื่อมบัญชีเกม", "muted");
     paintDevPlayHub();
+    paintDevPlayAccountPicker();
     paintTicketStepper();
   }
 
   function paintFarmNavLock() {
     const connected = isDevPlayConnected();
-    ["partyrun", "heart", "powder", "giftdraw", "upgrade", "cookie", "reroll", "quest", "account", "dstool"].forEach((t) => {
+    FARM_DOCK_TABS.forEach((t) => {
       const btn = $("farm-tab-" + t);
-      if (!btn) return;
-      btn.classList.toggle("is-locked", !connected);
-      btn.setAttribute("aria-disabled", connected ? "false" : "true");
+      if (!btn || btn.hidden) return;
+      const featureLocked = isFeatureLocked(t);
+      // DevPlay-not-connected lock vs admin feature lock are separate classes.
+      btn.classList.toggle("is-locked", !connected && !featureLocked);
+      btn.classList.toggle("is-feature-locked", featureLocked);
+      btn.setAttribute(
+        "aria-disabled",
+        connected && !featureLocked ? "false" : "true"
+      );
     });
+    paintFeatureLocks();
   }
 
   function paintDevPlayHub() {
     const connected = isDevPlayConnected();
+    const onDevPlayTab = farmTab === "devplay";
     const loginCard = $("devplay-login-card");
-    const accountCard = $("devplay-account-card");
+    const hero = $("player-hero");
+    const headChip = $("player-head-chip");
+    const dock = $("feature-dock");
     const hub = document.querySelector("#farm-panel-devplay .devplay-hub");
+    const run = $("run");
     loginCard?.classList.toggle("hidden", connected);
-    accountCard?.classList.toggle("hidden", !connected);
     hub?.classList.toggle("is-connected", connected);
+    if (hero) {
+      const showHero = connected && onDevPlayTab;
+      hero.classList.toggle("hidden", !showHero);
+      hero.hidden = !showHero;
+      hero.classList.remove("player-hero--compact");
+    }
+    if (headChip) {
+      const showChip = connected && !onDevPlayTab;
+      headChip.classList.toggle("hidden", !showChip);
+      headChip.hidden = !showChip;
+    }
+    if (dock) {
+      const showDock = connected && onDevPlayTab;
+      dock.classList.toggle("hidden", !showDock);
+      dock.hidden = !showDock;
+    }
+    if (run) {
+      run.classList.toggle("has-player-hero", connected && onDevPlayTab);
+      run.classList.toggle("has-player-chip", connected && !onDevPlayTab);
+    }
     paintFarmNavLock();
     syncOvenDevPlayLayout();
+    paintFeatureDock();
+    paintDevPlayAccountPicker();
 
     if (!devplaySession) return;
 
-    const nick = devplaySession.nickname || "player";
+    const nick = getDevPlayAccountDisplayName();
     const lvl = devplaySession.level == null ? "—" : "Lv " + devplaySession.level;
     const coin = devplaySession.coin == null ? "—" : formatNumTh(devplaySession.coin);
     const exp = devplaySession.exp == null ? "—" : formatNumTh(devplaySession.exp);
@@ -2198,22 +3342,42 @@
     else if (devplaySession.tickets != null)
       ticketsLabel = formatNumTh(devplaySession.tickets);
 
-    if ($("devplay-account-name")) $("devplay-account-name").textContent = nick;
-    if ($("devplay-account-sub"))
-      $("devplay-account-sub").textContent = "เชื่อม DevPlay แล้ว · พร้อมใช้งาน";
-    if ($("devplay-stat-level")) $("devplay-stat-level").textContent = lvl;
-    if ($("devplay-stat-coin")) $("devplay-stat-coin").textContent = coin;
-    if ($("devplay-stat-xp")) $("devplay-stat-xp").textContent = exp;
-    if ($("devplay-stat-powder")) $("devplay-stat-powder").textContent = powder;
-    if ($("devplay-stat-gem")) $("devplay-stat-gem").textContent = gem;
-    if ($("devplay-stat-life")) $("devplay-stat-life").textContent = life;
-    if ($("devplay-stat-boxes")) $("devplay-stat-boxes").textContent = boxes;
-    if ($("devplay-stat-tickets")) $("devplay-stat-tickets").textContent = ticketsLabel;
+    if ($("player-hero-name")) $("player-hero-name").textContent = nick;
+    if ($("player-head-chip-name")) $("player-head-chip-name").textContent = nick;
+    if ($("player-hero-level")) $("player-hero-level").textContent = lvl;
+    if ($("player-stat-coin")) $("player-stat-coin").textContent = coin;
+    if ($("player-stat-xp")) $("player-stat-xp").textContent = exp;
+    if ($("player-stat-powder")) $("player-stat-powder").textContent = powder;
+    if ($("player-stat-gem")) $("player-stat-gem").textContent = gem;
+    if ($("player-stat-life")) $("player-stat-life").textContent = life;
+    if ($("player-stat-boxes")) $("player-stat-boxes").textContent = boxes;
+    if ($("player-stat-tickets")) $("player-stat-tickets").textContent = ticketsLabel;
+    paintPlayerHeroAvatar();
 
-    const reconnect = $("devplay-reconnect-btn");
-    if (reconnect) {
-      reconnect.hidden = !connected;
-      reconnect.classList.toggle("hidden", !connected);
+    if (farmTab === "devplay") {
+      const titleEl = $("farm-panel-title");
+      const hintEl = $("farm-panel-hint");
+      if (connected) {
+        if (titleEl) titleEl.textContent = "ศูนย์ฟีเจอร์";
+        if (hintEl) hintEl.textContent = "เลือกโหมดที่ต้องการใช้งาน";
+      } else {
+        const meta = FARM_TAB_META.devplay;
+        if (titleEl && meta) titleEl.textContent = meta.title;
+        if (hintEl && meta) hintEl.textContent = meta.hint;
+      }
+    }
+
+    const refreshBtn = $("devplay-refresh-btn");
+    const proxyBtn = $("devplay-proxy-btn");
+    if (refreshBtn) {
+      refreshBtn.hidden = !connected;
+      refreshBtn.classList.toggle("hidden", !connected);
+      refreshBtn.disabled = !!(devplayRefreshing || devplayConnecting || farmRunning);
+    }
+    if (proxyBtn) {
+      proxyBtn.hidden = !connected;
+      proxyBtn.classList.toggle("hidden", !connected);
+      proxyBtn.textContent = hasUsableProxy() ? "แก้ Proxy" : "ตั้ง Proxy";
     }
     paintDevPlayConnectStatus("", "ok");
   }
@@ -2363,7 +3527,10 @@
       sidebar.dataset.open = isOpen ? "true" : "false";
       sidebar.setAttribute("aria-hidden", isOpen ? "false" : "true");
     }
-    if (userView) userView.classList.toggle("farm-sidebar-collapsed", compact && !isOpen);
+    if (userView) {
+      if (compact) userView.classList.toggle("farm-sidebar-collapsed", !isOpen);
+      else userView.classList.remove("farm-sidebar-collapsed");
+    }
     document.body.classList.toggle("farm-sidebar-compact", compact);
     document.body.classList.toggle("farm-sidebar-open", isOpen);
     if (scrim) {
@@ -2476,6 +3643,12 @@
     } catch (_) {
       heartServiceStatus = { ready: false, enabled: false, proxy_configured: false };
     }
+    const mt = Number(heartServiceStatus?.max_target);
+    if (Number.isFinite(mt) && mt >= 1) {
+      heartMax = Math.floor(mt);
+      heartTarget = clampHeartTarget(heartTarget);
+    }
+    paintHeartStepper();
     paintHeartServiceBanner();
     paintHeartProxyHint();
   }
@@ -2497,7 +3670,8 @@
     }
   }
 
-  function applyDevPlayConnect(data) {
+  function applyDevPlayConnect(data, creds) {
+    const loginCreds = creds || getDevPlayCreds();
     const ttlMs = (Number(data.expires_in) || 900) * 1000;
     const ticketsKnown =
       data.party_run_tickets != null && Number.isFinite(Number(data.party_run_tickets));
@@ -2505,6 +3679,8 @@
     devplaySession = {
       id: data.devplay_session_id,
       nickname: data.nickname || "player",
+      email: loginCreds.email,
+      password: loginCreds.password,
       powderReady: data.powder_ready !== false,
       proxyConfigured: !!data.proxy_configured,
       proxyUrl: data.proxy_configured ? getSavedProxyDraft() : "",
@@ -2518,6 +3694,10 @@
       life: data.life,
       giftBoxes: data.gift_boxes,
       key: data.key,
+      pictureStuffSeq: data.picture_stuff_seq,
+      profileImageKey: data.profile_image_key,
+      cookieStuffSeq: data.cookie_stuff_seq,
+      cookieName: data.cookie_name,
       expiresAt: Date.now() + ttlMs,
     };
     ticketMax = ticketsKnown ? Math.max(1, ticketsN || 1) : 99;
@@ -2525,11 +3705,6 @@
       ? Math.min(Math.max(1, ticketsN || 1), ticketMax)
       : Math.min(5, ticketMax);
     paintDevPlaySessionLine();
-    const reconnect = $("devplay-reconnect-btn");
-    if (reconnect) {
-      reconnect.hidden = false;
-      reconnect.classList.remove("hidden");
-    }
     paintTicketStepper();
     if (!ticketsKnown && data.devplay_session_id) {
       refreshDevPlayTickets(data.devplay_session_id);
@@ -2576,7 +3751,7 @@
       paintDevPlaySessionLine();
       paintTicketStepper();
       updateFarmAvailability();
-      setFarmStatus(
+      showToast(
         "ตั๋ว Party Run " + formatNumTh(ticketsN) + " ใบ",
         "ok"
       );
@@ -2589,9 +3764,70 @@
     }
   }
 
-  async function connectDevPlay() {
+  async function refreshDevPlayAccount() {
+    if (!isDevPlayConnected() || devplayRefreshing || devplayConnecting || farmRunning) return;
+    const sid = devplaySession?.id;
+    if (!sid) {
+      showToast("ไม่พบ session — สลับไอดีแล้วเชื่อมใหม่", "err");
+      return;
+    }
+    const refreshBtn = $("devplay-refresh-btn");
+    devplayRefreshing = true;
+    setBtnLoading(refreshBtn, true);
+    paintDevPlayConnectStatus("กำลังอัปเดตสถานะ…", "muted");
+    updateFarmAvailability();
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/devplay/refresh", {
+        method: "POST",
+        body: { devplay_session_id: sid },
+      });
+      if (!devplaySession || devplaySession.id !== sid) return;
+      if (data.coin != null) devplaySession.coin = data.coin;
+      if (data.exp != null) devplaySession.exp = data.exp;
+      if (data.level != null) devplaySession.level = data.level;
+      if (data.powder != null) devplaySession.powder = data.powder;
+      if (data.gem != null) devplaySession.gem = data.gem;
+      if (data.life != null) devplaySession.life = data.life;
+      if (data.gift_boxes != null) devplaySession.giftBoxes = data.gift_boxes;
+      if (data.key != null) devplaySession.key = data.key;
+      paintDevPlayHub();
+      const creds = getDevPlayCreds();
+      if (creds.email) {
+        upsertDevPlayVaultEntry(creds, {
+          nickname: devplaySession.nickname,
+          cookieName: devplaySession.cookieName,
+          profileImageKey: devplaySession.profileImageKey,
+        }).catch(() => {});
+      }
+      if (!devplaySession.ticketsLoading) {
+        devplaySession.ticketsLoading = true;
+        paintDevPlayHub();
+        refreshDevPlayTickets(sid);
+      }
+      setFarmStatus("อัปเดตสถานะไอดีแล้ว", "ok");
+      showToast("อัปเดตสถานะไอดีแล้ว", "ok");
+      paintDevPlayConnectStatus("", "ok");
+    } catch (e) {
+      const reason =
+        thError(e.message) || e.userMessage || ERR_TH.refresh_failed || "รีเฟรชไม่สำเร็จ";
+      paintDevPlayConnectStatus(reason, "err");
+      showToast(reason, "err");
+    } finally {
+      devplayRefreshing = false;
+      setBtnLoading(refreshBtn, false);
+      updateFarmAvailability();
+      paintDevPlayHub();
+    }
+  }
+
+  async function connectDevPlay(opts = {}) {
     if (devplayConnecting || farmRunning) return;
-    if (!hasDevPlayCreds()) {
+    const creds = {
+      email: String(opts.email ?? $("dp-acct-mail")?.value ?? "").trim(),
+      password: String(opts.password ?? $("dp-acct-secret")?.value ?? ""),
+    };
+    if (!creds.email || !creds.password) {
       showErrorModal("กรอกอีเมลและรหัสผ่าน DevPlay ให้ครบ", "ข้อมูลไม่ครบ");
       return;
     }
@@ -2599,19 +3835,32 @@
     devplayConnecting = true;
     setBtnLoading(connectBtn, true);
     paintDevPlayConnectStatus("กำลังเชื่อมต่อ…", "muted");
+    paintDevPlayAccountPicker();
     updateFarmAvailability();
     try {
       await ensureApiReady();
       const data = await api("/api/farm/devplay/connect", {
         method: "POST",
         body: {
-          email: $("dp-acct-mail").value.trim(),
-          password: $("dp-acct-secret").value,
+          email: creds.email,
+          password: creds.password,
         },
       });
-      applyDevPlayConnect(data);
+      applyDevPlayConnect(data, creds);
+      await upsertDevPlayVaultEntry(creds, {
+        nickname: data.nickname,
+        cookieName: data.cookie_name,
+        profileImageKey: data.profile_image_key,
+      });
       switchFarmTab("devplay", { silent: true });
-      if (!devplaySession.proxyConfigured) {
+      const savedProxy = getSavedProxyDraft();
+      if (savedProxy && isValidProxyUrl(savedProxy)) {
+        try {
+          await saveProxyToServer(savedProxy, { required: false });
+        } catch (_) {
+          /* proxy attach failed — user can set manually */
+        }
+      } else if (!devplaySession.proxyConfigured) {
         await promptProxyModal({ locked: true, title: "ใส่ Proxy ก่อนใช้งาน" });
       }
       const powderHint =
@@ -2645,6 +3894,7 @@
       devplayConnecting = false;
       setBtnLoading(connectBtn, false);
       updateFarmAvailability();
+      paintDevPlayAccountPicker();
     }
   }
 
@@ -2670,6 +3920,10 @@
       "dstool",
     ];
     let next = tabs.includes(tab) ? tab : "devplay";
+    if (next !== "devplay" && isFeatureLocked(next)) {
+      if (!opts.silent) showFeatureLockedModal(next);
+      return;
+    }
     if (next !== "devplay" && !isDevPlayConnected()) {
       if (!opts.silent) showDevPlayRequiredModal();
       next = "devplay";
@@ -2732,7 +3986,6 @@
     if (ticketStepper) ticketStepper.hidden = farmTab !== "partyrun";
     updateFarmAvailability();
     if (farmTab === "powder") {
-      loadPowderTreasures().catch(() => {});
       refreshPowderEstimate().catch(() => {});
     }
     if (farmTab === "giftdraw") {
@@ -2750,31 +4003,515 @@
     if (farmTab === "dstool") {
       loadDsAllowlist(false).catch(() => {});
     }
-    if (farmTab === "devplay") {
-      paintDevPlayHub();
-    }
+    paintDevPlayHub();
     syncOvenDevPlayLayout();
   }
 
-  async function loadPowderTreasures() {
-    const hadList = powderTreasures.length > 0;
-    if (!hadList) {
-      try {
-        await ensureApiReady();
-        const data = await api("/api/farm/powder/treasures");
-        powderTreasures = Array.isArray(data.treasures) ? data.treasures : [];
-        if (data.default) powderTreasureName = data.default;
-      } catch (_) {
-        powderTreasures = [];
+  function powderParams() {
+    return {
+      stuff_seq: Math.max(1, Number($("powder-stuff-seq")?.value) || 811),
+      price: Math.max(0, Number($("powder-price")?.value) || 5000),
+      powder_qty: Math.max(1, Number($("powder-qty")?.value) || POWDER_BREAK_FALLBACK),
+      powder_yield_estimate: POWDER_YIELD_ESTIMATE,
+      do_break: $("powder-do-break")?.checked !== false,
+    };
+  }
+
+  function parsePowderNumInput(value) {
+    return Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+  }
+
+  function formatPowderInputValue(value) {
+    const n = Math.max(0, Math.floor(Number(value) || 0));
+    return n > 0 ? String(n) : "";
+  }
+
+  function setPowderInputValue(id, value) {
+    const el = $(id);
+    if (!el || document.activeElement === el) return;
+    el.value = formatPowderInputValue(value);
+  }
+
+  function powderYieldPerRound() {
+    if ($("powder-do-break")?.checked === false) return 0;
+    return POWDER_YIELD_ESTIMATE;
+  }
+
+  function formatPowderApprox(n) {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    return v > 0 ? "≈" + formatNumTh(v) : "—";
+  }
+
+  function powderPricePerRound() {
+    return Math.max(0, Number($("powder-price")?.value) || 5000);
+  }
+
+  function powderMaxRounds() {
+    const fromPlan = Number(powderPlan?.max_rounds);
+    if (Number.isFinite(fromPlan) && fromPlan >= 0) return fromPlan;
+    const price = Math.max(1, powderPricePerRound() || 1);
+    const coin = Number(powderPlan?.coin_available ?? devplaySession?.coin ?? 0);
+    return Math.max(0, Math.floor(coin / price));
+  }
+
+  function powderJobMaxRounds() {
+    const y = Math.max(1, powderYieldPerRound());
+    return Math.max(1, Math.ceil(powderMax / y));
+  }
+
+  function powderJobMaxCoin() {
+    return powderJobMaxRounds() * Math.max(1, powderPricePerRound() || 1);
+  }
+
+  function clampPowderTarget(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    return Math.min(Math.max(1, n || 1), powderMax);
+  }
+
+  function clampPowderCoinBudget(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    const maxCoin = powderJobMaxCoin();
+    return Math.min(Math.max(1, n || 1), maxCoin);
+  }
+
+  function clampPowderTargetInputs() {
+    const powderEl = $("powder-target-powder");
+    if (powderEl) {
+      const next = clampPowderTarget(parsePowderNumInput(powderEl.value) || powderMax);
+      powderEl.value = formatPowderInputValue(next);
+    }
+    const coinEl = $("powder-target-coin");
+    if (coinEl) {
+      const next = clampPowderCoinBudget(
+        parsePowderNumInput(coinEl.value) || powderJobMaxCoin()
+      );
+      coinEl.value = formatPowderInputValue(next);
+    }
+  }
+
+  function clampPowderRounds(value) {
+    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
+    const max = Math.min(powderMaxRounds() || n || 1, powderJobMaxRounds());
+    if (max <= 0) return Math.max(1, n || 1);
+    return Math.min(Math.max(1, n || 1), max);
+  }
+
+  function powderPlanBody() {
+    const p = powderParams();
+    if (powderEditLock === "coin") {
+      const budget = clampPowderCoinBudget(parsePowderNumInput($("powder-target-coin")?.value));
+      return { ...p, coin_budget: Math.max(1, budget || 1) };
+    }
+    const target = clampPowderTarget(parsePowderNumInput($("powder-target-powder")?.value));
+    return { ...p, target_powder: Math.max(1, target || 1) };
+  }
+
+  function computePowderPlanLocal(coin, opts) {
+    const price = Math.max(0, Number(opts?.price) || powderPricePerRound());
+    const doBreak = opts?.do_break !== false;
+    const y = doBreak
+      ? Math.max(1, Number(opts?.powder_yield_estimate) || powderYieldPerRound())
+      : 0;
+    const maxRoundsCoin = price > 0 ? Math.floor(Math.max(0, coin) / price) : 0;
+    const maxRoundsJob = powderJobMaxRounds();
+    const maxRounds = Math.min(maxRoundsCoin, maxRoundsJob);
+    let chosen = 1;
+    if (opts?.rounds != null) chosen = Math.max(1, Number(opts.rounds));
+    else if (opts?.target_powder != null && y > 0) {
+      chosen = Math.ceil(Math.max(1, Number(opts.target_powder)) / y);
+    } else if (opts?.coin_budget != null && price > 0) {
+      chosen = Math.max(1, Math.floor(Number(opts.coin_budget) / price));
+    }
+    const capped = chosen > maxRounds;
+    const rounds = maxRounds > 0 ? Math.min(chosen, maxRounds) : 0;
+    const coinCost = rounds * price;
+    const powderGain = doBreak ? rounds * y : 0;
+    return {
+      ok: true,
+      coin_available: Math.max(0, coin),
+      price,
+      powder_yield: y,
+      do_break: doBreak,
+      max_rounds: maxRoundsCoin,
+      rounds,
+      coin_cost: coinCost,
+      powder_gain: powderGain,
+      coin_after: Math.max(0, coin - coinCost),
+      can_run: rounds >= 1,
+      capped,
+      job_capped: chosen > maxRoundsJob,
+      max_target: powderMax,
+    };
+  }
+
+  function syncPowderLinkedFields(plan) {
+    if (!plan) return;
+    const coinCost = Number(plan.coin_cost) || 0;
+    const powderGain = Number(plan.powder_gain) || 0;
+    const lock = powderEditLock;
+    const setIfIdle = (id, value) => {
+      const lock = powderEditLock;
+      if (lock === "powder" && id === "powder-target-powder") return;
+      if (lock === "coin" && id === "powder-target-coin") return;
+      setPowderInputValue(id, value);
+    };
+    setIfIdle("powder-target-powder", powderGain);
+    setIfIdle("powder-target-coin", coinCost);
+    powderRounds = Number(plan.rounds) || 0;
+  }
+
+  function paintPowderPlan(plan) {
+    powderPlan = plan;
+    powderEstimate = plan;
+    if (plan && Number.isFinite(Number(plan.max_target))) {
+      powderMax = Math.max(1, Math.floor(Number(plan.max_target)));
+    }
+    const targetEl = $("powder-estimate-target");
+    const noteEl = $("powder-estimate-note");
+    const hintEl = $("powder-rounds-hint");
+    const setTxt = (id, v) => {
+      const el = $(id);
+      if (el) el.textContent = v;
+    };
+
+    if (!plan) {
+      if (targetEl) {
+        targetEl.textContent = "เชื่อม DevPlay เพื่อดูแผนฟาร์ม";
+        targetEl.classList.remove("is-warn");
+      }
+      setTxt("powder-stat-coin-balance", "—");
+      setTxt("powder-stat-powder-target", "—");
+      setTxt("powder-stat-rounds", "—");
+      setTxt("powder-stat-coin", "—");
+      setTxt("powder-stat-powder", "—");
+      setTxt("powder-stat-coin-after", "—");
+      if (noteEl) noteEl.textContent = "";
+      if (hintEl) hintEl.textContent = "เชื่อม DevPlay เพื่อดูแผน";
+      paintPowderGoalControls();
+      return;
+    }
+
+    syncPowderLinkedFields(plan);
+    if (plan.coin != null && devplaySession) devplaySession.coin = plan.coin;
+    if (plan.powder != null && devplaySession) devplaySession.powder = plan.powder;
+    paintDevPlaySessionLine();
+
+    const coinBal = Number(plan.coin_available ?? plan.coin ?? 0);
+    const rounds = Number(plan.rounds) || 0;
+    const coinCost = Number(plan.coin_cost) || 0;
+    const powderGain = Number(plan.powder_gain) || 0;
+
+    const coinAfter = Number(plan.coin_after ?? Math.max(0, coinBal - coinCost));
+    const powderTargetDisplay =
+      powderEditLock === "powder"
+        ? clampPowderTarget(parsePowderNumInput($("powder-target-powder")?.value))
+        : powderGain;
+    const jobCapped = !!plan.job_capped;
+
+    setTxt("powder-stat-coin-balance", formatNumTh(coinBal));
+    setTxt("powder-stat-powder-target", formatNumTh(powderTargetDisplay));
+    setTxt("powder-stat-rounds", formatNumTh(rounds) + " กล่อง");
+    setTxt("powder-stat-coin", formatNumTh(coinCost));
+    setTxt("powder-stat-powder", formatPowderApprox(powderGain));
+    setTxt("powder-stat-coin-after", formatNumTh(coinAfter));
+
+    if (targetEl) {
+      targetEl.classList.toggle("is-warn", !!plan.capped || jobCapped);
+      if (!isDevPlayConnected()) {
+        targetEl.textContent = "เชื่อม DevPlay เพื่อดูแผนฟาร์ม";
+      } else if (jobCapped) {
+        targetEl.textContent =
+          "เกินเพดานต่อรอบ (" +
+          formatNumTh(powderMax) +
+          " ผง) — จะรันได้สูงสุด " +
+          formatNumTh(rounds) +
+          " กล่อง · ได้ประมาณ " +
+          formatPowderApprox(powderGain) +
+          " ผง";
+      } else if (plan.capped) {
+        targetEl.textContent =
+          "เหรียญไม่พอครบเป้า — จะรันได้สูงสุด " +
+          formatNumTh(rounds) +
+          " กล่อง · ได้ประมาณ " +
+          formatPowderApprox(powderGain) +
+          " ผง";
+      } else if (powderEditLock === "coin") {
+        targetEl.textContent =
+          "ใช้ " +
+          formatNumTh(coinCost) +
+          " เหรียญ · ได้ประมาณ " +
+          formatPowderApprox(powderGain) +
+          " ผง · " +
+          formatNumTh(rounds) +
+          " กล่อง";
+      } else {
+        targetEl.textContent =
+          "เป้า " +
+          formatNumTh(powderTargetDisplay) +
+          " ผง · ใช้ " +
+          formatNumTh(coinCost) +
+          " เหรียญ · " +
+          formatNumTh(rounds) +
+          " กล่อง";
       }
     }
-    if (!powderTreasures.some((t) => t.name === powderTreasureName)) {
-      const fallback =
-        powderTreasures.find((t) => t.name === "Revival Boots") || powderTreasures[0];
-      if (fallback) powderTreasureName = fallback.name;
+
+    if (hintEl) {
+      if (!isDevPlayConnected()) {
+        hintEl.textContent = "เชื่อม DevPlay เพื่อดูแผน";
+      } else if (powderEstimateLoading) {
+        hintEl.textContent = "กำลังคำนวณ…";
+      } else if (Number(plan.max_rounds) <= 0) {
+        hintEl.textContent = "เหรียญไม่พอแม้ 1 กล่อง (มี " + formatNumTh(coinBal) + ")";
+      } else {
+        hintEl.textContent =
+          "1 กล่อง = " +
+          formatNumTh(plan.price ?? powderPricePerRound()) +
+          " เหรียญ · ประมาณ " +
+          formatNumTh(plan.powder_yield ?? powderYieldPerRound()) +
+          " ผง/กล่อง (สุ่ม B/C) · สูงสุดต่อรอบ " +
+          formatNumTh(powderMax) +
+          " ผง";
+      }
     }
-    paintPowderSelectedTreasure();
-    paintPowderEstimateStatic();
+
+    if (noteEl) {
+      const parts = [];
+      if (plan.do_break !== false) parts.push(POWDER_ESTIMATE_DISCLAIMER);
+      if (plan.do_break === false) parts.push("โหมดซื้ออย่างเดียว — ไม่ย่อยเป็นผง");
+      if (rounds >= 100) parts.push("อาจใช้เวลาหลายนาที");
+      if (!plan.can_run) parts.push("เหรียญไม่พอแม้ 1 รอบ");
+      noteEl.textContent = parts.join(" · ");
+    }
+
+    const nameEl = $("powder-stuff-name");
+    if (nameEl) {
+      const seq = Number($("powder-stuff-seq")?.value) || 811;
+      nameEl.textContent = powderStuffLabel
+        ? powderStuffLabel + " (" + seq + ")"
+        : seq === 811
+          ? "กล่องสมบัติธรรมดา (811)"
+          : "ไอเทม seq " + seq;
+    }
+
+    paintPowderGoalControls();
+    updateFarmAvailability();
+  }
+
+  function paintPowderGoalControls() {
+    const connected = isDevPlayConnected();
+    const busy = isModeActivelyRunning("powder") || !!devplayConnecting || powderEstimateLoading;
+    const canEdit = connected && !busy;
+    const powderStep = Math.max(1, powderYieldPerRound());
+    const coinStep = Math.max(1, powderPricePerRound());
+    const powderVal = parsePowderNumInput($("powder-target-powder")?.value);
+    const coinVal = parsePowderNumInput($("powder-target-coin")?.value);
+
+    [
+      "powder-target-powder-minus",
+      "powder-target-powder-plus",
+      "powder-target-coin-minus",
+      "powder-target-coin-plus",
+    ].forEach((id) => {
+      const btn = $(id);
+      if (btn) btn.disabled = !canEdit;
+    });
+    if ($("powder-target-powder-minus")) {
+      $("powder-target-powder-minus").disabled =
+        !canEdit || powderVal <= powderStep;
+    }
+    if ($("powder-target-powder-plus")) {
+      $("powder-target-powder-plus").disabled =
+        !canEdit || powderVal >= powderMax;
+    }
+    if ($("powder-target-coin-minus")) {
+      $("powder-target-coin-minus").disabled = !canEdit || coinVal <= coinStep;
+    }
+    if ($("powder-target-coin-plus")) {
+      $("powder-target-coin-plus").disabled =
+        !canEdit || coinVal >= powderJobMaxCoin();
+    }
+    if ($("powder-target-powder")) $("powder-target-powder").disabled = !canEdit;
+    if ($("powder-target-coin")) $("powder-target-coin").disabled = !canEdit;
+  }
+
+  function bumpPowderTarget(delta) {
+    powderEditLock = "powder";
+    const step = Math.max(1, powderYieldPerRound());
+    const el = $("powder-target-powder");
+    if (!el) return;
+    const next = clampPowderTarget(parsePowderNumInput(el.value) + delta * step);
+    el.value = formatPowderInputValue(Math.max(step, next));
+    refreshPowderEstimate().catch(() => {});
+  }
+
+  function bumpPowderCoinBudget(delta) {
+    powderEditLock = "coin";
+    const step = Math.max(1, powderPricePerRound());
+    const el = $("powder-target-coin");
+    if (!el) return;
+    const next = clampPowderCoinBudget(parsePowderNumInput(el.value) + delta * step);
+    el.value = formatPowderInputValue(Math.max(step, next));
+    refreshPowderEstimate().catch(() => {});
+  }
+
+  function commitPowderTargetPowderFromInput() {
+    powderEditLock = "powder";
+    const el = $("powder-target-powder");
+    if (!el) return;
+    const v = clampPowderTarget(parsePowderNumInput(el.value) || 1);
+    el.value = formatPowderInputValue(v);
+    refreshPowderEstimate().catch(() => {});
+  }
+
+  function commitPowderTargetCoinFromInput() {
+    powderEditLock = "coin";
+    const el = $("powder-target-coin");
+    if (!el) return;
+    const v = clampPowderCoinBudget(parsePowderNumInput(el.value) || 1);
+    el.value = formatPowderInputValue(v);
+    refreshPowderEstimate().catch(() => {});
+  }
+
+  async function lookupPowderStuffSeq() {
+    const seq = Math.max(1, Number($("powder-stuff-seq")?.value) || 811);
+    powderStuffLabel = "";
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/powder/stuff/" + seq);
+      if (data?.item?.name) {
+        powderStuffLabel = String(data.item.name);
+        const price = Number(data.item.price_coin);
+        if (price > 0 && $("powder-price") && document.activeElement !== $("powder-price")) {
+          $("powder-price").value = String(price);
+        }
+      }
+    } catch (_) {
+      powderStuffLabel = "";
+    }
+    paintPowderPlan(powderPlan);
+  }
+
+  function schedulePowderStuffLookup() {
+    if (powderStuffLookupTimer) clearTimeout(powderStuffLookupTimer);
+    powderStuffLookupTimer = setTimeout(() => {
+      lookupPowderStuffSeq().catch(() => {});
+    }, 350);
+  }
+
+  function showPowderStuffSearchModal() {
+    clearModalActions();
+    openModal({
+      mode: "pick",
+      title: "ค้นหาไอเทม (Stuff Seq)",
+      bodyHtml:
+        '<div class="powder-picker-modal">' +
+        '<input type="search" id="powder-stuff-search" class="powder-picker-search" placeholder="พิมพ์ชื่อไอเทม…" autocomplete="off" />' +
+        '<div class="powder-picker-grid" id="powder-stuff-search-grid" aria-live="polite"></div>' +
+        "</div>",
+      icon: "assets/magic_powder.png",
+      locked: false,
+    });
+    const grid = $("powder-stuff-search-grid");
+    const search = $("powder-stuff-search");
+    let searchTimer = null;
+
+    async function runSearch(q) {
+      if (!grid) return;
+      grid.innerHTML = '<p class="muted powder-picker-empty">กำลังค้นหา…</p>';
+      try {
+        await ensureApiReady();
+        const data = await api(
+          "/api/farm/powder/stuff/search?q=" + encodeURIComponent(q || "") + "&limit=40"
+        );
+        const items = Array.isArray(data.items) ? data.items : [];
+        grid.innerHTML = "";
+        if (!items.length) {
+          grid.innerHTML = '<p class="muted powder-picker-empty">ไม่พบไอเทม</p>';
+          return;
+        }
+        items.forEach((item) => {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = "powder-pick-card";
+          const name = document.createElement("div");
+          name.className = "powder-pick-card-name";
+          name.textContent = item.name || "Item " + item.seq;
+          const meta = document.createElement("div");
+          meta.className = "powder-pick-card-meta";
+          meta.textContent =
+            "seq " +
+            item.seq +
+            (item.price_coin ? " · " + formatNumTh(item.price_coin) + " เหรียญ" : "");
+          card.append(name, meta);
+          card.addEventListener("click", () => {
+            const seqEl = $("powder-stuff-seq");
+            if (seqEl) seqEl.value = String(item.seq);
+            powderStuffLabel = item.name || "";
+            if (item.price_coin > 0 && $("powder-price")) {
+              $("powder-price").value = String(item.price_coin);
+            }
+            forceCloseModal();
+            refreshPowderEstimate().catch(() => {});
+          });
+          grid.appendChild(card);
+        });
+      } catch (_) {
+        grid.innerHTML = '<p class="muted powder-picker-empty">ค้นหาไม่สำเร็จ</p>';
+      }
+    }
+
+    if (search) {
+      search.value = "";
+      search.addEventListener("input", () => {
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => runSearch(search.value || ""), 300);
+      });
+      requestAnimationFrame(() => {
+        search.focus();
+        runSearch("");
+      });
+    }
+    modalActions.appendChild(makeBtn("ปิด", "btn-ghost", () => forceCloseModal()));
+  }
+
+  function schedulePowderRefresh() {
+    if (powderRefreshTimer) clearTimeout(powderRefreshTimer);
+    powderRefreshTimer = setTimeout(() => {
+      refreshPowderEstimate().catch(() => {});
+    }, 400);
+  }
+
+  async function refreshPowderEstimate() {
+    if (farmTab !== "powder") return;
+    if (!isDevPlayConnected()) {
+      powderEstimateLoading = false;
+      paintPowderPlan(null);
+      return;
+    }
+    powderEstimateLoading = true;
+    paintPowderGoalControls();
+    const body = {
+      devplay_session_id: devplaySession.id,
+      ...powderPlanBody(),
+    };
+    try {
+      await ensureApiReady();
+      const data = await api("/api/farm/powder/plan", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      powderEstimateLoading = false;
+      paintPowderPlan(data);
+    } catch (_) {
+      powderEstimateLoading = false;
+      const coin = Number(devplaySession?.coin ?? 0);
+      paintPowderPlan(computePowderPlanLocal(coin, powderPlanBody()));
+    }
+  }
+
+  function powderYield() {
+    return powderYieldPerRound();
   }
 
   const TREASURE_IMAGE_CDN = "https://link.clashofdragons.com/images/treasures";
@@ -2809,7 +4546,8 @@
     const useFrame =
       wrap.classList.contains("powder-treasure-img-wrap") ||
       wrap.classList.contains("powder-pick-card-img-wrap") ||
-      wrap.classList.contains("upgrade-card-img-wrap");
+      wrap.classList.contains("upgrade-card-img-wrap") ||
+      wrap.classList.contains("upgrade-selected-chip-img");
 
     if (useFrame) {
       const frame = document.createElement("div");
@@ -2821,6 +4559,9 @@
       frameBg.height = 96;
       frameBg.referrerPolicy = "no-referrer";
       frameBg.src = gradeFrameSrc(grade);
+      frameBg.onerror = () => {
+        frameBg.remove();
+      };
       const inner = document.createElement("div");
       inner.className = "treasure-frame-inner";
       const src = treasureImageSrc(t);
@@ -2886,292 +4627,6 @@
       fb.textContent = grade;
       wrap.appendChild(fb);
     }
-  }
-
-  function getPowderTreasure() {
-    return (
-      powderTreasures.find((x) => x.name === powderTreasureName) || {
-        name: powderTreasureName,
-        grade: "C",
-      }
-    );
-  }
-
-  function paintPowderSelectedTreasure() {
-    const t = getPowderTreasure();
-    const nameEl = $("powder-treasure-name");
-    const metaEl = $("powder-treasure-meta");
-    const wrap = $("powder-treasure-img-wrap");
-    if (nameEl) nameEl.textContent = t.name || powderTreasureName;
-    if (metaEl) {
-      metaEl.textContent =
-        t.price != null && t.powder_yield_lv1 != null
-          ? formatNumTh(t.price) + " · +" + formatNumTh(t.powder_yield_lv1) + " ผง/รอบ"
-          : "—";
-    }
-    appendTreasureImage(wrap, t);
-  }
-
-  function selectPowderTreasure(name) {
-    if (!name || name === powderTreasureName) return;
-    powderTreasureName = name;
-    powderRounds = null;
-    paintPowderSelectedTreasure();
-    paintPowderEstimateStatic();
-    refreshPowderEstimate().catch(() => {});
-    updateFarmAvailability();
-  }
-
-  function paintPowderPickerGrid() {
-    const grid = $("powder-picker-grid");
-    if (!grid) return;
-    grid.innerHTML = "";
-    grid.classList.remove("card-stagger");
-    if (powderPickerLoading) {
-      renderSkeletonCards(grid, 6);
-      return;
-    }
-    const q = powderPickerFilter.trim().toLowerCase();
-    const list = (powderTreasures.length ? powderTreasures : [getPowderTreasure()]).filter(
-      (t) => !q || (t.name || "").toLowerCase().includes(q)
-    );
-    if (!list.length) {
-      grid.innerHTML = '<p class="muted powder-picker-empty">ไม่พบสมบัติ</p>';
-      return;
-    }
-    grid.classList.add("card-stagger");
-    list.slice(0, 300).forEach((t) => {
-      const card = document.createElement("button");
-      card.type = "button";
-      card.className =
-        "powder-pick-card grade-" +
-        (t.grade || "C").toUpperCase() +
-        (t.name === powderTreasureName ? " is-selected" : "");
-      const imgWrap = document.createElement("div");
-      imgWrap.className = "powder-pick-card-img-wrap";
-      appendTreasureImage(imgWrap, t);
-      const name = document.createElement("div");
-      name.className = "powder-pick-card-name";
-      name.textContent = t.name || "Treasure";
-      const meta = document.createElement("div");
-      meta.className = "powder-pick-card-meta";
-      meta.textContent =
-        formatNumTh(t.price || 0) + " · +" + formatNumTh(t.powder_yield_lv1 || 0);
-      card.append(imgWrap, name, meta);
-      card.addEventListener("click", () => {
-        selectPowderTreasure(t.name);
-        forceCloseModal();
-      });
-      grid.appendChild(card);
-    });
-  }
-
-  function showPowderTreasurePickerModal() {
-    powderPickerFilter = "";
-    clearModalActions();
-    openModal({
-      mode: "pick",
-      title: "เลือกสมบัติฟาร์มผง",
-      bodyHtml:
-        '<div class="powder-picker-modal">' +
-        '<input type="search" id="powder-picker-search" class="powder-picker-search" placeholder="ค้นหาชื่อสมบัติ…" autocomplete="off" />' +
-        '<div class="powder-picker-grid" id="powder-picker-grid" aria-live="polite"></div>' +
-        "</div>",
-      icon: "assets/crc_cookie_stone_box.png",
-      locked: false,
-    });
-    if (!powderTreasures.length) {
-      powderPickerLoading = true;
-      paintPowderPickerGrid();
-      loadPowderTreasures()
-        .then(() => {
-          powderPickerLoading = false;
-          paintPowderPickerGrid();
-        })
-        .catch(() => {
-          powderPickerLoading = false;
-          paintPowderPickerGrid();
-        });
-    } else {
-      paintPowderPickerGrid();
-    }
-    const search = $("powder-picker-search");
-    if (search) {
-      search.value = "";
-      search.addEventListener("input", () => {
-        powderPickerFilter = search.value || "";
-        paintPowderPickerGrid();
-      });
-      requestAnimationFrame(() => search.focus());
-    }
-    modalActions.appendChild(makeBtn("ปิด", "btn-ghost", () => forceCloseModal()));
-  }
-
-  function paintPowderEstimateStatic() {
-    const t = powderTreasures.find((x) => x.name === powderTreasureName);
-    const priceEl = $("powder-stat-price");
-    const yieldEl = $("powder-stat-yield");
-    if (priceEl) priceEl.textContent = t ? formatNumTh(t.price) : "—";
-    if (yieldEl) yieldEl.textContent = t ? formatNumTh(t.powder_yield_lv1) : "—";
-  }
-
-  function powderMaxRounds() {
-    const fromEst = Number(powderEstimate?.max_rounds);
-    if (Number.isFinite(fromEst) && fromEst > 0) return Math.min(9999, fromEst);
-    const price = Math.max(1, Number($("powder-price")?.value) || 5000);
-    const coin = Number(devplaySession?.coin || 0);
-    if (coin > 0) return Math.min(9999, Math.max(1, Math.floor(coin / price)));
-    return 9999;
-  }
-
-  function powderYield() {
-    return Math.max(1, Number(powderEstimate?.powder_yield_lv1 ?? $("powder-qty")?.value) || 15);
-  }
-
-  function powderPricePerRound() {
-    return Math.max(0, Number(powderEstimate?.price ?? $("powder-price")?.value) || 5000);
-  }
-
-  function clampPowderRounds(value) {
-    const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
-    return Math.min(Math.max(1, n || 1), powderMaxRounds());
-  }
-
-  function powderRoundsSupported() {
-    return true;
-  }
-
-  function paintPowderStepper() {
-    const roundsEl = $("powder-rounds");
-    const minus = $("powder-minus");
-    const plus = $("powder-plus");
-    const connected = isDevPlayConnected();
-    const rounds = clampPowderRounds(powderRounds ?? (Number(roundsEl?.value) || 10));
-    powderRounds = rounds;
-    if (roundsEl && document.activeElement !== roundsEl) roundsEl.value = String(rounds);
-    const busy = isModeActivelyRunning("powder") || !!devplayConnecting;
-    if (minus) minus.disabled = !connected || busy || rounds <= 1;
-    if (plus) plus.disabled = !connected || busy || rounds >= powderMaxRounds();
-    if (roundsEl) roundsEl.disabled = !connected || busy;
-    paintPowderExamEstimate();
-  }
-
-  function commitPowderRoundsFromInput() {
-    const el = $("powder-rounds");
-    if (!el) return;
-    powderRounds = clampPowderRounds(el.value);
-    paintPowderStepper();
-    updateFarmAvailability();
-  }
-
-  function commitPowderTargetFromInput() {
-    const el = $("powder-target-input");
-    if (!el) return;
-    const wanted = Math.floor(Number(String(el.value || "").replace(/[^\d]/g, "")) || 0);
-    // Round up: asking for 1,700 powder at 160/round means 11 rounds, not 10.
-    powderRounds = clampPowderRounds(Math.ceil(wanted / powderYield()) || 1);
-    paintPowderStepper();
-    updateFarmAvailability();
-  }
-
-  function paintPowderEstimateFromApi(est) {
-    powderEstimate = est;
-    const targetEl = $("powder-estimate-target");
-    const roundsEl = $("powder-stat-rounds");
-    const coinEl = $("powder-stat-coin");
-    const noteEl = $("powder-estimate-note");
-    paintPowderEstimateStatic();
-    if (!est) {
-      if (targetEl) targetEl.textContent = "เชื่อม DevPlay เพื่อดูเป้าหมาย";
-      if (roundsEl) roundsEl.textContent = "—";
-      if (coinEl) coinEl.textContent = "—";
-      if (noteEl) noteEl.textContent = "";
-      paintPowderStepper();
-      return;
-    }
-    const target = est.target_powder || 0;
-    if (targetEl) {
-      targetEl.textContent = est.capped
-        ? "สูงสุดจากเหรียญที่มี ≈ " + formatNumTh(target) + " ผง"
-        : "เป้าหมาย " + formatNumTh(target) + " ผง";
-    }
-    if (roundsEl) {
-      roundsEl.textContent = formatNumTh(est.rounds_planned || est.rounds || 0);
-    }
-    const price = est.price || powderTreasures.find((x) => x.name === powderTreasureName)?.price || 0;
-    const rounds = est.rounds_planned || 0;
-    const coinUse = est.coin_needed != null ? est.coin_needed : rounds * price;
-    if (coinEl) coinEl.textContent = formatNumTh(coinUse || "—");
-    if (noteEl) {
-      const parts = [];
-      if (rounds >= 100) parts.push("อาจใช้เวลาหลายนาที");
-      if (!est.can_run) parts.push("เหรียญไม่พอแม้ 1 รอบ");
-      noteEl.textContent = parts.join(" · ");
-    }
-    if (est.coin != null && devplaySession) devplaySession.coin = est.coin;
-    if (est.powder != null && devplaySession) devplaySession.powder = est.powder;
-    paintDevPlaySessionLine();
-    paintPowderStepper();
-  }
-
-
-  function paintPowderExamEstimate() {
-    const rounds = Math.max(1, Math.min(9999, Number($("powder-rounds")?.value) || powderRounds || 10));
-    powderRounds = rounds;
-    const price = Math.max(0, Number($("powder-price")?.value) || 5000);
-    const yieldP = Math.max(1, Number($("powder-qty")?.value) || 15);
-    const coin = Number(devplaySession?.coin || 0);
-    const cost = rounds * price;
-    const can = !!devplaySession && coin >= price;
-    powderEstimate = {
-      can_run: can,
-      max_rounds: price > 0 ? Math.max(1, Math.floor(coin / price)) : 1,
-      coin_available: coin,
-      price,
-      powder_yield_lv1: yieldP,
-      target_powder: rounds * yieldP,
-      capped: false,
-    };
-    const setTxt = (id, v) => {
-      const el = $(id);
-      if (el) el.textContent = v;
-    };
-    setTxt("powder-stat-price", formatNumTh(price));
-    setTxt("powder-stat-yield", formatNumTh(yieldP));
-    setTxt("powder-stat-rounds", formatNumTh(rounds));
-    setTxt("powder-stat-coin", formatNumTh(cost));
-    const line = $("powder-cost-line");
-    if (line) {
-      if (!devplaySession) line.textContent = "เชื่อม DevPlay เพื่อดูประมาณการ";
-      else if (!can) line.textContent = "เหรียญไม่พอ (มี " + formatNumTh(coin) + ")";
-      else
-        line.textContent =
-          "จะใช้ " +
-          formatNumTh(cost) +
-          " เหรียญ · เหลือประมาณ " +
-          formatNumTh(Math.max(0, coin - cost)) +
-          " · ได้ประมาณ " +
-          formatNumTh(rounds * yieldP) +
-          " ผง";
-    }
-    const note = $("powder-estimate-note");
-    if (note) {
-      note.textContent = $("powder-do-break")?.checked
-        ? "โหมด: ซื้อแล้วย่อยทันที (break after buying)"
-        : "โหมด: ซื้ออย่างเดียว ไม่ย่อย";
-    }
-    const nameEl = $("powder-stuff-name");
-    if (nameEl) {
-      const seq = Number($("powder-stuff-seq")?.value) || 811;
-      nameEl.textContent =
-        seq === 811 ? "→ Normal Treasure Box (811)" : "→ stuffSeq " + seq;
-    }
-    updateFarmAvailability();
-  }
-
-  async function refreshPowderEstimate() {
-    powderEstimateLoading = false;
-    paintPowderExamEstimate();
   }
 
   /* ---------- Gift Draw ---------- */
@@ -3379,7 +4834,7 @@
     const targetEl = $("upgrade-estimate-target");
     const noteEl = $("upgrade-estimate-note");
     if (coinEl) coinEl.textContent = formatNumTh(upgradeCoin);
-    if (selEl) selEl.textContent = formatNumTh(selected.length) + " ชิ้น";
+    if (selEl) selEl.textContent = formatNumTh(selected.length) + "/" + formatNumTh(UPGRADE_MAX_SELECT) + " ชิ้น";
     if (tokEl) tokEl.textContent = formatNumTh(selected.length);
     if (!selected.length) {
       if (targetEl) targetEl.textContent = "เลือกสมบัติเพื่อดูประมาณการ";
@@ -3412,190 +4867,425 @@
     }
   }
 
-  function upgradeCollapsedSlotCount() {
-    const grid = $("upgrade-grid");
-    const w = grid?.clientWidth || 360;
-    const cardW = 132;
-    const gap = 14;
-    return Math.max(3, Math.min(8, Math.floor((w + gap) / (cardW + gap))));
+  function upgradeTreasureLevel(t) {
+    const level = t.enhancement ?? t.level ?? t.tag;
+    return level != null ? level : "—";
   }
 
-  function upgradeGridDisplayList(collapsed) {
-    if (!collapsed || upgradeTreasures.length <= upgradeCollapsedSlotCount()) {
-      return { items: upgradeTreasures, overflow: 0 };
-    }
-    const slots = upgradeCollapsedSlotCount();
-    const showCount = Math.max(1, slots - 1);
-    const selected = upgradeTreasures.filter((t) => upgradeSelected.has(t.uuid));
-    const unselected = upgradeTreasures.filter((t) => !upgradeSelected.has(t.uuid));
-    const ordered = [...selected, ...unselected];
-    return {
-      items: ordered.slice(0, showCount),
-      overflow: Math.max(0, upgradeTreasures.length - showCount),
-    };
+  function upgradeTreasureSortKey(t) {
+    return [
+      (t.grade || "Z").toUpperCase(),
+      (t.name || "").toLowerCase(),
+      Number(upgradeTreasureLevel(t)) || 0,
+    ];
   }
 
-  function createUpgradeCard(t) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className =
-      "upgrade-card grade-" +
-      escapeHtml((t.grade || "S").toUpperCase()) +
-      (upgradeSelected.has(t.uuid) ? " is-selected" : "") +
-      (t.can_upgrade ? "" : " is-maxed");
-    card.disabled = !t.can_upgrade || isModeActivelyRunning("upgrade") || devplayConnecting;
-    card.dataset.uuid = t.uuid;
-    const check = document.createElement("span");
-    check.className = "upgrade-card-check";
-    check.textContent = upgradeSelected.has(t.uuid) ? "✓" : "";
-    const imgWrap = document.createElement("div");
-    imgWrap.className = "upgrade-card-img-wrap";
-    appendTreasureImage(imgWrap, t);
-    const name = document.createElement("div");
-    name.className = "upgrade-card-name";
-    name.textContent = t.name || "Treasure";
-    const meta = document.createElement("div");
-    meta.className = "upgrade-card-meta";
-    const level = t.enhancement ?? t.tag;
-    meta.textContent =
-      (t.grade || "S") +
-      " · ปัจจุบัน +" +
-      (level != null ? level : "—");
-    card.append(check, imgWrap, name, meta);
-    card.addEventListener("click", () => {
-      if (!t.can_upgrade) return;
-      if (upgradeSelected.has(t.uuid)) upgradeSelected.delete(t.uuid);
-      else upgradeSelected.add(t.uuid);
-      paintUpgradeGrid();
-      refreshUpgradeEstimate().catch(() => {});
-      updateFarmAvailability();
+  function sortedUpgradeTreasures(list) {
+    return [...list].sort((a, b) => {
+      const ka = upgradeTreasureSortKey(a);
+      const kb = upgradeTreasureSortKey(b);
+      for (let i = 0; i < ka.length; i++) {
+        if (ka[i] < kb[i]) return -1;
+        if (ka[i] > kb[i]) return 1;
+      }
+      return 0;
     });
-    return card;
   }
 
-  function createUpgradeOverflowCard(hiddenCount) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "upgrade-card upgrade-card-overflow grade-S";
-    card.disabled = isModeActivelyRunning("upgrade") || devplayConnecting;
-    const imgWrap = document.createElement("div");
-    imgWrap.className = "upgrade-card-img-wrap";
-    appendTreasureImage(imgWrap, { grade: "S", name: "" });
-    const inner = imgWrap.querySelector(".treasure-frame-inner");
-    if (inner) {
-      inner.innerHTML = "";
-      const count = document.createElement("span");
-      count.className = "upgrade-overflow-count";
-      count.textContent = "+" + formatNumTh(hiddenCount);
-      inner.appendChild(count);
-    }
-    const name = document.createElement("div");
-    name.className = "upgrade-card-name";
-    name.textContent = "สมบัติเพิ่มเติม";
-    const meta = document.createElement("div");
-    meta.className = "upgrade-card-meta";
-    meta.textContent = "กดเพื่อดูทั้งหมด";
-    card.append(imgWrap, name, meta);
-    card.addEventListener("click", () => {
-      upgradeGridExpanded = true;
-      paintUpgradeGrid();
-    });
-    return card;
+  function paintUpgradePickCount() {
+    const countEl = $("upgrade-pick-count");
+    const selected = getSelectedUpgradeItems();
+    if (countEl) countEl.textContent = formatNumTh(selected.length) + "/" + formatNumTh(UPGRADE_MAX_SELECT);
   }
 
-  function paintUpgradeGridToggle(hasOverflow, total) {
-    const btn = $("upgrade-grid-toggle");
-    if (!btn) return;
-    if (!hasOverflow && upgradeGridExpanded) {
-      btn.classList.remove("hidden");
-      btn.textContent = "แสดงแถวเดียว";
-      btn.setAttribute("aria-expanded", "true");
-      return;
-    }
-    if (!hasOverflow) {
-      btn.classList.add("hidden");
-      return;
-    }
-    btn.classList.remove("hidden");
-    if (upgradeGridExpanded) {
-      btn.textContent = "แสดงแถวเดียว";
-      btn.setAttribute("aria-expanded", "true");
-    } else {
-      btn.textContent = "ดูสมบัติทั้งหมด (" + formatNumTh(total) + ")";
-      btn.setAttribute("aria-expanded", "false");
-    }
-  }
+  function paintUpgradeSelectedSummary() {
+    const pickBtn = $("upgrade-pick-btn");
+    const targetEl = $("upgrade-estimate-target");
+    paintUpgradePickCount();
 
-  function paintUpgradeGrid() {
-    const grid = $("upgrade-grid");
-    const hint = $("upgrade-grid-hint");
-    if (!grid) return;
-    grid.innerHTML = "";
-    grid.classList.remove("is-collapsed", "is-expanded", "card-stagger");
     if (upgradeListLoading) {
-      if (hint) hint.textContent = "กำลังโหลดสมบัติ…";
-      renderSkeletonCards(grid, 6);
-      paintUpgradeGridToggle(false, 0);
+      if (targetEl) targetEl.textContent = "กำลังโหลดสมบัติ…";
+      if (pickBtn) pickBtn.disabled = true;
+      paintUpgradeEstimate();
       return;
     }
     if (!isDevPlayConnected()) {
-      if (hint) hint.textContent = "เชื่อม DevPlay เพื่อดูสมบัติในตัว";
-      paintUpgradeGridToggle(false, 0);
+      if (targetEl) targetEl.textContent = "เชื่อม DevPlay เพื่อเลือกสมบัติ";
+      if (pickBtn) pickBtn.disabled = true;
+      paintUpgradeEstimate();
       return;
     }
     if (!upgradeTreasures.length) {
-      if (hint) hint.textContent = "ไม่พบสมบัติในคลัง (หรือยังไม่ได้โหลด)";
-      paintUpgradeGridToggle(false, 0);
+      if (targetEl) targetEl.textContent = "ไม่พบสมบัติในคลัง — กดโหลดคลังใหม่";
+      if (pickBtn) pickBtn.disabled = isModeActivelyRunning("upgrade") || devplayConnecting;
+      paintUpgradeEstimate();
       return;
     }
 
-    const collapsed = !upgradeGridExpanded && upgradeTreasures.length > upgradeCollapsedSlotCount();
-    const { items, overflow } = upgradeGridDisplayList(collapsed);
+    const canPick = !isModeActivelyRunning("upgrade") && !devplayConnecting;
+    if (pickBtn) pickBtn.disabled = !canPick;
 
-    if (collapsed) {
-      grid.classList.add("is-collapsed");
-      if (hint) {
-        hint.textContent =
-          "แสดง " +
-          formatNumTh(items.length) +
-          " ชิ้น · เหลืออีก " +
-          formatNumTh(overflow) +
-          " ชิ้น — กดดูทั้งหมดเพื่อเลือกเพิ่ม";
+    const selected = getSelectedUpgradeItems();
+    if (targetEl) {
+      if (!selected.length) {
+        targetEl.textContent = "กดเลือกสมบัติเพื่อดูประมาณการ";
+      } else {
+        targetEl.textContent =
+          "เลือกแล้ว " +
+          formatNumTh(selected.length) +
+          "/" +
+          formatNumTh(UPGRADE_MAX_SELECT) +
+          " ชิ้น · เป้าหมาย +" +
+          upgradeTargetLevel;
       }
-    } else if (upgradeGridExpanded && upgradeTreasures.length > upgradeCollapsedSlotCount()) {
-      grid.classList.add("is-expanded");
-      if (hint) hint.textContent = "เลือกได้หลายชิ้น — รันทีละชิ้น";
-    } else {
-      if (hint) hint.textContent = "เลือกได้หลายชิ้น — รันทีละชิ้น";
     }
-
-    grid.classList.add("card-stagger");
-    items.forEach((t) => grid.appendChild(createUpgradeCard(t)));
-    if (collapsed && overflow > 0) {
-      grid.appendChild(createUpgradeOverflowCard(overflow));
-    }
-
-    paintUpgradeGridToggle(
-      upgradeTreasures.length > upgradeCollapsedSlotCount(),
-      upgradeTreasures.length
-    );
     paintUpgradeEstimate();
+  }
+
+  function paintUpgradePickerCounter() {
+    const el = $("upgrade-picker-counter");
+    const n = upgradePickerDraft.size;
+    if (el) {
+      el.textContent = formatNumTh(n) + "/" + formatNumTh(UPGRADE_MAX_SELECT);
+      el.classList.toggle("is-full", n >= UPGRADE_MAX_SELECT);
+    }
+    const confirmBtn = $("upgrade-picker-confirm");
+    if (confirmBtn) {
+      confirmBtn.textContent =
+        n > 0
+          ? "ยืนยันตีบวก " + formatNumTh(n)
+          : "ยืนยัน";
+      confirmBtn.disabled = n < 1;
+    }
+    paintUpgradePickerTray();
+  }
+
+  function paintUpgradePickerTray() {
+    const tray = $("upgrade-picker-tray");
+    if (!tray) return;
+    const items = upgradeTreasures.filter(
+      (t) => upgradePickerDraft.has(t.uuid) && t.can_upgrade
+    );
+    tray.classList.toggle("is-empty", !items.length);
+    tray.replaceChildren();
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.className = "upgrade-picker-tray-empty muted";
+      empty.textContent = "แตะการ์ดเพื่อเลือกสมบัติ";
+      tray.appendChild(empty);
+      return;
+    }
+    items.forEach((t) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "upgrade-picker-tray-chip grade-" + (t.grade || "C").toUpperCase();
+      chip.dataset.uuid = t.uuid;
+      chip.title = "เอาออก: " + (t.name || "Treasure");
+      chip.setAttribute("aria-label", "เอาออก " + (t.name || "Treasure"));
+
+      const media = document.createElement("span");
+      media.className = "upgrade-picker-tray-media";
+      appendUpgradePickerIcon(media, t);
+
+      const label = document.createElement("span");
+      label.className = "upgrade-picker-tray-label";
+      label.textContent = "+" + upgradeTreasureLevel(t);
+
+      const x = document.createElement("span");
+      x.className = "upgrade-picker-tray-x";
+      x.setAttribute("aria-hidden", "true");
+      x.textContent = "×";
+
+      chip.append(media, label, x);
+      chip.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        toggleUpgradePicker(t.uuid);
+      });
+      tray.appendChild(chip);
+    });
+  }
+
+  function toggleUpgradePicker(uuid) {
+    if (upgradePickerDraft.has(uuid)) {
+      upgradePickerDraft.delete(uuid);
+      const note = $("upgrade-picker-limit-note");
+      if (note) note.textContent = "";
+    } else {
+      if (upgradePickerDraft.size >= UPGRADE_MAX_SELECT) {
+        const note = $("upgrade-picker-limit-note");
+        if (note) note.textContent = "เลือกได้สูงสุด " + formatNumTh(UPGRADE_MAX_SELECT) + " ชิ้นต่อรัน";
+        return;
+      }
+      upgradePickerDraft.add(uuid);
+      const note = $("upgrade-picker-limit-note");
+      if (note) note.textContent = "";
+    }
+    // Update selection state only — avoid full re-render so scroll stays put.
+    refreshUpgradePickerCardStates();
+    paintUpgradePickerCounter();
+  }
+
+  function appendUpgradePickerIcon(wrap, t) {
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    const grade = (t?.grade || "C").toUpperCase();
+    const frame = document.createElement("div");
+    frame.className = "treasure-frame upgrade-pick-frame grade-" + grade;
+
+    const frameBg = document.createElement("img");
+    frameBg.className = "treasure-frame-bg";
+    frameBg.alt = "";
+    frameBg.width = 128;
+    frameBg.height = 128;
+    frameBg.decoding = "async";
+    frameBg.referrerPolicy = "no-referrer";
+    frameBg.src = gradeFrameSrc(grade);
+    frameBg.onerror = () => {
+      frameBg.remove();
+    };
+
+    const inner = document.createElement("div");
+    inner.className = "treasure-frame-inner";
+    const src = treasureImageSrc(t);
+    if (src) {
+      const img = document.createElement("img");
+      img.className = "treasure-frame-icon";
+      img.alt = "";
+      img.width = 72;
+      img.height = 72;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.referrerPolicy = "no-referrer";
+      img.onerror = () => {
+        img.remove();
+        const fb = document.createElement("span");
+        fb.className = "treasure-frame-fallback";
+        fb.textContent = grade;
+        inner.appendChild(fb);
+      };
+      setTreasureImg(img, src);
+      inner.appendChild(img);
+    } else {
+      const fb = document.createElement("span");
+      fb.className = "treasure-frame-fallback";
+      fb.textContent = grade;
+      inner.appendChild(fb);
+    }
+
+    frame.append(frameBg, inner);
+    wrap.appendChild(frame);
+  }
+
+  function syncUpgradePickerCardState(card, selected, atLimit) {
+    if (!card) return;
+    card.classList.toggle("is-selected", selected);
+    card.classList.toggle("is-at-limit", !selected && atLimit);
+    card.disabled = !selected && atLimit;
+    card.setAttribute("aria-pressed", selected ? "true" : "false");
+    const check = card.querySelector(".upgrade-pick-check");
+    if (check) check.textContent = selected ? "✓" : "";
+  }
+
+  function refreshUpgradePickerCardStates() {
+    const grid = $("upgrade-picker-grid");
+    if (!grid) return;
+    const atLimit = upgradePickerDraft.size >= UPGRADE_MAX_SELECT;
+    grid.querySelectorAll(".upgrade-pick-card").forEach((card) => {
+      const uuid = card.dataset.uuid;
+      syncUpgradePickerCardState(card, upgradePickerDraft.has(uuid), atLimit);
+    });
+  }
+
+  function paintUpgradePickerGrid() {
+    const grid = $("upgrade-picker-grid");
+    if (!grid) return;
+    const scrollTop = grid.scrollTop;
+
+    if (upgradeListLoading) {
+      grid.innerHTML = "";
+      renderSkeletonCards(grid, 6);
+      return;
+    }
+
+    const q = upgradePickerFilter.trim().toLowerCase();
+    const gradeFilter = (upgradePickerGradeFilter || "all").toUpperCase();
+    const atLimit = upgradePickerDraft.size >= UPGRADE_MAX_SELECT;
+    const list = sortedUpgradeTreasures(
+      upgradeTreasures.filter((t) => {
+        if (!t.can_upgrade) return false;
+        if (q && !(t.name || "").toLowerCase().includes(q)) return false;
+        if (gradeFilter !== "ALL") {
+          if ((t.grade || "").toUpperCase() !== gradeFilter) return false;
+        }
+        return true;
+      })
+    );
+
+    const existing = [...grid.querySelectorAll(".upgrade-pick-card")];
+    const sameList =
+      existing.length === list.length &&
+      list.every((t, i) => existing[i]?.dataset.uuid === t.uuid);
+
+    if (sameList && list.length) {
+      list.forEach((t, i) => {
+        syncUpgradePickerCardState(existing[i], upgradePickerDraft.has(t.uuid), atLimit);
+      });
+      paintUpgradePickerCounter();
+      return;
+    }
+
+    grid.innerHTML = "";
+    if (!list.length) {
+      grid.innerHTML = '<p class="muted upgrade-picker-empty">ไม่พบสมบัติที่ตีบวกได้</p>';
+      requestAnimationFrame(() => {
+        grid.scrollTop = scrollTop;
+      });
+      return;
+    }
+
+    list.forEach((t) => {
+      const selected = upgradePickerDraft.has(t.uuid);
+      const grade = (t.grade || "S").toUpperCase();
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "upgrade-pick-card";
+      card.dataset.uuid = t.uuid;
+      card.setAttribute("aria-label", (t.name || "Treasure") + " " + grade + " +" + upgradeTreasureLevel(t));
+
+      const mediaWrap = document.createElement("div");
+      mediaWrap.className = "upgrade-pick-card-media";
+      appendUpgradePickerIcon(mediaWrap, t);
+
+      const check = document.createElement("span");
+      check.className = "upgrade-pick-check";
+      check.setAttribute("aria-hidden", "true");
+      mediaWrap.appendChild(check);
+
+      const name = document.createElement("div");
+      name.className = "upgrade-pick-card-name";
+      name.textContent = t.name || "Treasure";
+
+      const meta = document.createElement("div");
+      meta.className = "upgrade-pick-card-meta";
+      const badge = document.createElement("span");
+      badge.className = "upgrade-pick-grade grade-" + grade;
+      badge.textContent = grade;
+      const lvl = document.createElement("span");
+      lvl.className = "upgrade-pick-level";
+      lvl.textContent = "+" + upgradeTreasureLevel(t);
+      meta.append(badge, lvl);
+
+      syncUpgradePickerCardState(card, selected, atLimit);
+      card.append(mediaWrap, name, meta);
+      card.addEventListener("click", () => toggleUpgradePicker(t.uuid));
+      grid.appendChild(card);
+    });
+
+    requestAnimationFrame(() => {
+      grid.scrollTop = scrollTop;
+    });
+  }
+
+  function confirmUpgradePicker() {
+    upgradeSelected = new Set(upgradePickerDraft);
+    forceCloseModal();
+    paintUpgradeSelectedSummary();
+    refreshUpgradeEstimate().catch(() => {});
+    updateFarmAvailability();
+  }
+
+  function showUpgradePickerModal() {
+    if (!isDevPlayConnected()) {
+      showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
+      return;
+    }
+    upgradePickerFilter = "";
+    upgradePickerGradeFilter = "all";
+    upgradePickerDraft = new Set(upgradeSelected);
+    clearModalActions();
+    openModal({
+      mode: "pick",
+      title: "เลือกสมบัติตีบวก",
+      bodyHtml:
+        '<div class="upgrade-picker-modal">' +
+        '<div class="upgrade-picker-toolbar">' +
+        '<input type="search" id="upgrade-picker-search" class="upgrade-picker-search" placeholder="ค้นหาชื่อสมบัติ…" autocomplete="off" enterkeyhint="search" />' +
+        '<div class="upgrade-picker-filters" id="upgrade-picker-filters" role="group" aria-label="กรองเกรด">' +
+        '<button type="button" class="upgrade-picker-filter is-active" data-grade="all">ทั้งหมด</button>' +
+        '<button type="button" class="upgrade-picker-filter" data-grade="S">S</button>' +
+        '<button type="button" class="upgrade-picker-filter" data-grade="A">A</button>' +
+        '<button type="button" class="upgrade-picker-filter" data-grade="B">B</button>' +
+        '<button type="button" class="upgrade-picker-filter" data-grade="C">C</button>' +
+        "</div>" +
+        '<div class="upgrade-picker-meta-row">' +
+        '<p class="upgrade-picker-counter" id="upgrade-picker-counter">0/10</p>' +
+        '<p class="upgrade-picker-limit-note" id="upgrade-picker-limit-note"></p>' +
+        "</div>" +
+        "</div>" +
+        '<div class="upgrade-picker-grid" id="upgrade-picker-grid" role="listbox" aria-multiselectable="true" aria-label="สมบัติที่ตีบวกได้"></div>' +
+        '<div class="upgrade-picker-tray" id="upgrade-picker-tray" aria-label="สมบัติที่เลือก"></div>' +
+        "</div>",
+      icon: "assets/Crystal_Pearl_Earring_2B9.png",
+      locked: false,
+      cardClass: "modal-card--picker",
+    });
+
+    const loadAndPaint = () => {
+      paintUpgradePickerGrid();
+      paintUpgradePickerCounter();
+    };
+
+    if (!upgradeTreasures.length || upgradeListLoading) {
+      loadUpgradeTreasures(true)
+        .then(loadAndPaint)
+        .catch(loadAndPaint);
+    } else {
+      loadAndPaint();
+    }
+
+    const search = $("upgrade-picker-search");
+    if (search) {
+      search.value = "";
+      search.addEventListener("input", () => {
+        upgradePickerFilter = search.value || "";
+        paintUpgradePickerGrid();
+      });
+      requestAnimationFrame(() => search.focus());
+    }
+
+    $("upgrade-picker-filters")?.addEventListener("click", (ev) => {
+      const btn = ev.target.closest("[data-grade]");
+      if (!btn) return;
+      upgradePickerGradeFilter = btn.dataset.grade || "all";
+      $("upgrade-picker-filters")
+        ?.querySelectorAll(".upgrade-picker-filter")
+        .forEach((el) => el.classList.toggle("is-active", el === btn));
+      paintUpgradePickerGrid();
+    });
+
+    modalActions.classList.add("row");
+    const confirmBtn = makeBtn("ยืนยัน", "btn-candy", () => confirmUpgradePicker());
+    confirmBtn.id = "upgrade-picker-confirm";
+    confirmBtn.disabled = upgradePickerDraft.size < 1;
+    modalActions.appendChild(confirmBtn);
+    modalActions.appendChild(makeBtn("ยกเลิก", "btn-ghost", () => forceCloseModal()));
+    paintUpgradePickerCounter();
   }
 
   async function loadUpgradeTreasures(force) {
     if (!isDevPlayConnected()) {
       upgradeTreasures = [];
       upgradeSelected.clear();
-      paintUpgradeGrid();
+      upgradePickerDraft.clear();
+      paintUpgradeSelectedSummary();
       return;
     }
     if (upgradeTreasures.length && !force) {
-      paintUpgradeGrid();
+      paintUpgradeSelectedSummary();
       return;
     }
-    if (force) upgradeGridExpanded = false;
     upgradeListLoading = true;
-    paintUpgradeGrid();
+    paintUpgradeSelectedSummary();
     try {
       await ensureApiReady();
       const data = await api(
@@ -3608,20 +5298,27 @@
       upgradeSelected.forEach((id) => {
         if (!valid.has(id)) upgradeSelected.delete(id);
       });
+      upgradePickerDraft.forEach((id) => {
+        if (!valid.has(id)) upgradePickerDraft.delete(id);
+      });
       upgradeListLoading = false;
-      paintUpgradeGrid();
+      paintUpgradeSelectedSummary();
+      if ($("upgrade-picker-grid")) {
+        paintUpgradePickerGrid();
+        paintUpgradePickerCounter();
+      }
       await refreshUpgradeEstimate();
     } catch (e) {
       upgradeTreasures = [];
       upgradeListLoading = false;
-      paintUpgradeGrid();
+      paintUpgradeSelectedSummary();
       const msg = thError(e.message);
-      if (msg) setFarmStatus( msg, "err");
+      if (msg) setFarmStatus(msg, "err");
     }
   }
 
   async function refreshUpgradeEstimate() {
-    const selected = getSelectedUpgradeItems();
+    const selected = getSelectedUpgradeItems().slice(0, UPGRADE_MAX_SELECT);
     if (!selected.length || !isDevPlayConnected()) {
       upgradeEstimate = null;
       paintUpgradeEstimate();
@@ -3669,7 +5366,7 @@
           "⚠️ โหมด Fast ยิง API เกมพร้อมกันหลายชิ้น\n" +
           "อาจทำให้ DevPlay ID ถูกระงับชั่วคราวหรือถาวร\n" +
           "คุณยอมรับความเสี่ยงนี้หรือไม่?",
-        icon: "assets/tr_ga170.png",
+        icon: "assets/Crystal_Pearl_Earring_2B9.png",
         locked: false,
       });
       modalActions.classList.add("row");
@@ -3708,7 +5405,7 @@
           "\ncoin สูงสุด (worst): " +
           worst +
           "\n⚠ แห้วได้ — coin หายแม้ไม่ติดระดับ",
-        icon: "assets/tr_ga170.png",
+        icon: "assets/Crystal_Pearl_Earring_2B9.png",
         locked: false,
       });
       modalActions.classList.add("row");
@@ -3953,7 +5650,7 @@
           "\ncoin ในไอดี: " +
           formatNumTh(cookieCoin) +
           (expensive ? "\n⚠ มีตัวราคาสูง — ตรวจยอดเหรียญให้ดี" : ""),
-        icon: "assets/crc_cookie_stone_box.png",
+        icon: "assets/pine_monk_cookie.png",
         locked: false,
       });
       modalActions.classList.add("row");
@@ -3987,6 +5684,18 @@
       return;
     }
 
+    const cookieThumbs = items.map((c) => ({
+      seq: String(c.seq),
+      name: String(c.cookie_name || c.artifact_name || c.seq),
+      url: String(c.image_url || "").trim(),
+    }));
+    const cookieExtras = {
+      cookieThumbs,
+      itemName: cookieThumbs[0]?.name || "",
+      itemTotal: items.length,
+      itemIndex: 1,
+    };
+
     setFarmStatus(
       "กำลังปลดล็อกคุกกี้ " + formatNumTh(items.length) + " ตัว…",
       "muted"
@@ -3997,7 +5706,8 @@
         "cookie_unlock",
         items.length,
         "ปลดล็อกคุกกี้ · " + formatNumTh(items.length) + " ตัว",
-        () => runCookieUnlock()
+        () => runCookieUnlock(),
+        cookieExtras
       )
     ) {
       return;
@@ -4012,6 +5722,7 @@
         },
         mode: "cookie_unlock",
         target: items.length,
+        extras: cookieExtras,
         handlers: {
           onSuccess: (data) => {
             refreshMe().catch(() => {});
@@ -4346,15 +6057,62 @@
     }
   }
 
+  function questFilterCounts() {
+    let all = 0;
+    let claimable = 0;
+    let claimed = 0;
+    for (const q of questList) {
+      all += 1;
+      if (q.rewarded) claimed += 1;
+      else if (q.claimable) claimable += 1;
+    }
+    return { all, claimable, claimed };
+  }
+
+  function paintQuestFilterTabs() {
+    const counts = questFilterCounts();
+    const map = {
+      all: counts.all,
+      claimable: counts.claimable,
+      claimed: counts.claimed,
+    };
+    document.querySelectorAll("[data-quest-filter]").forEach((btn) => {
+      const key = btn.getAttribute("data-quest-filter");
+      const on = key === questFilter;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      const countEl = $(`quest-filter-${key}-count`);
+      if (countEl) countEl.textContent = "(" + (map[key] || 0) + ")";
+    });
+  }
+
+  function filteredQuestList() {
+    if (questFilter === "claimable") return questList.filter((q) => !!q.claimable);
+    if (questFilter === "claimed") return questList.filter((q) => !!q.rewarded);
+    return questList;
+  }
+
   function paintQuestList() {
     const root = $("quest-list");
     if (!root) return;
     root.innerHTML = "";
+    paintQuestFilterTabs();
     if (!questList.length) {
       root.innerHTML = '<p class="muted account-item-empty">ยังไม่มีรายการ — กดโหลดรายการเควส</p>';
       return;
     }
-    questList.forEach((q) => {
+    const visible = filteredQuestList();
+    if (!visible.length) {
+      const emptyLabel =
+        questFilter === "claimable"
+          ? "ไม่มีเควสที่รับได้"
+          : questFilter === "claimed"
+            ? "ยังไม่มีเควสที่รับแล้ว"
+            : "ยังไม่มีรายการ";
+      root.innerHTML = '<p class="muted account-item-empty">' + emptyLabel + "</p>";
+      return;
+    }
+    visible.forEach((q) => {
       const seq = String(q.seq);
       const claimable = !!q.claimable;
       const label = document.createElement("label");
@@ -4669,7 +6427,7 @@
   /* ---------- Heart farm ---------- */
   function clampHeartTarget(value) {
     const n = Math.floor(Number(String(value ?? "").replace(/[^\d]/g, "")) || 0);
-    return Math.min(Math.max(1, n || 1), HEART_MAX);
+    return Math.min(Math.max(1, n || 1), heartMax);
   }
 
   function paintHeartStepper() {
@@ -4687,13 +6445,13 @@
         hint.textContent = "ใส่ rotating proxy ก่อนรัน";
       } else {
         hint.textContent =
-          "ใส่ได้ 1–" + formatNumTh(HEART_MAX);
+          "ใส่ได้ 1–" + formatNumTh(heartMax) + " · ต้องการมากกว่านี้ให้ส่งหลายครั้ง";
       }
     }
     const canStep = !isModeActivelyRunning("heart") && !devplayConnecting && hasDevPlayCreds() && hasUsableHeartProxy();
     if (input) input.disabled = !canStep;
     if (minus) minus.disabled = !canStep || heartTarget <= 1;
-    if (plus) plus.disabled = !canStep || heartTarget >= HEART_MAX;
+    if (plus) plus.disabled = !canStep || heartTarget >= heartMax;
   }
 
   function commitHeartTargetFromInput() {
@@ -4717,7 +6475,6 @@
     const heartSub = $("heart-btn-sub");
     const upgradeBtn = $("upgrade-btn");
     const upgradeSub = $("upgrade-btn-sub");
-    const upgradeRng = $("upgrade-rng-accept");
     const upgradeReload = $("upgrade-reload-btn");
     const cookieBtn = $("cookie-btn");
     const cookieSub = $("cookie-btn-sub");
@@ -4826,12 +6583,15 @@
       const blocked =
         !connected ||
         upgradeEstimateLoading ||
-        !selected.length ||
-        !upgradeRngAccepted;
-      let upSub = formatNumTh(needTokens) + " ชิ้น · รันทีละชิ้น";
+        !selected.length;
+      let upSub =
+        formatNumTh(needTokens) +
+        "/" +
+        formatNumTh(UPGRADE_MAX_SELECT) +
+        " ชิ้น · " +
+        (upgradeRunMode === "fast" ? "Fast" : "เรียงทีละชิ้น");
       if (!connected) upSub = "เชื่อม DevPlay ก่อน";
       else if (!selected.length) upSub = "เลือกสมบัติก่อน";
-      else if (!upgradeRngAccepted) upSub = "ยอมรับความเสี่ยง RNG ก่อน";
       else if (upgradeEstimateLoading) upSub = "กำลังคำนวณ…";
       applyRunBtn(
         upgradeBtn,
@@ -4847,9 +6607,10 @@
       if (cookieBtn) cookieBtn.disabled = true;
       // Allow picking next upgrade job while another mode runs.
       const canPick = connected && !connecting && !upgradeRunning;
-      if (upgradeRng) upgradeRng.disabled = !canPick;
       paintUpgradeTargetLevel();
       if (upgradeReload) upgradeReload.disabled = !canPick;
+      const pickBtn = $("upgrade-pick-btn");
+      if (pickBtn) pickBtn.disabled = !canPick;
       document.querySelectorAll("#upgrade-mode-row .upgrade-mode-btn").forEach((b) => {
         b.disabled = !canPick;
       });
@@ -4888,14 +6649,18 @@
       paintCookieEstimate();
     } else if (isPowder) {
       const powderBlocked =
-        !connected || powderEstimateLoading || !powderEstimate?.can_run;
-      let pwSub = "เป้า 100,000 ผง";
+        !connected || powderEstimateLoading || !powderPlan?.can_run;
+      const rounds = Number(powderPlan?.rounds) || powderRounds || 0;
+      const gain = Number(powderPlan?.powder_gain) || rounds * powderYieldPerRound();
+      let pwSub =
+        rounds > 0
+          ? formatNumTh(rounds) + " กล่อง · ≈+" + formatNumTh(gain) + " ผง"
+          : "ตั้งเป้าผงหรืองบเหรียญ";
       if (!connected) pwSub = "เชื่อม DevPlay ก่อน";
       else if (powderEstimateLoading) pwSub = "กำลังคำนวณ…";
-      else if (!powderEstimate?.can_run) pwSub = "เหรียญไม่พอ";
-      else if (powderEstimate?.capped) {
-        pwSub =
-          "เป้า " + formatNumTh(powderEstimate.target_powder) + " ผง (จำกัดเหรียญ)";
+      else if (!powderPlan?.can_run) pwSub = "เหรียญไม่พอ";
+      else if (powderPlan?.capped) {
+        pwSub = "จำกัดเหรียญ · " + formatNumTh(rounds) + " กล่อง";
       }
       applyRunBtn(
         powderBtn,
@@ -4909,10 +6674,7 @@
       if (heartBtn) heartBtn.disabled = true;
       if (upgradeBtn) upgradeBtn.disabled = true;
       if (cookieBtn) cookieBtn.disabled = true;
-      paintPowderStepper();
-      paintPowderExamEstimate();
-      const pickBtn = $("powder-pick-btn");
-      if (pickBtn) pickBtn.disabled = connecting || powderRunning;
+      paintPowderGoalControls();
     } else if (farmTab === "partyrun") {
       let prSub = "รัน " + ticketCount + " ตั๋ว";
       if (!connected) prSub = "เชื่อม DevPlay ก่อน";
@@ -4989,6 +6751,31 @@
       // devplay / other tabs — keep run CTAs inert
       disableOtherRun();
     }
+
+    // Admin feature locks override — disable CTAs and show maintenance label.
+    const applyFeatureLockBtn = (el, subEl, locked) => {
+      if (!el || !locked) return;
+      el.disabled = true;
+      if (subEl) subEl.textContent = "ปิดปรับปรุง";
+    };
+    applyFeatureLockBtn(btn, sub, isFeatureLocked("partyrun"));
+    applyFeatureLockBtn(powderBtn, powderSub, isFeatureLocked("powder"));
+    applyFeatureLockBtn(giftdrawBtn, giftdrawSub, isFeatureLocked("giftdraw"));
+    applyFeatureLockBtn(heartBtn, heartSub, isFeatureLocked("heart"));
+    applyFeatureLockBtn(upgradeBtn, upgradeSub, isFeatureLocked("upgrade"));
+    applyFeatureLockBtn(cookieBtn, cookieSub, isFeatureLocked("cookie"));
+    applyFeatureLockBtn(rerollBtn, rerollSub, isFeatureLocked("reroll"));
+    applyFeatureLockBtn(questClaimBtn, questClaimSub, isFeatureLocked("quest"));
+    applyFeatureLockBtn(dsCallBtn, dsCallSub, isFeatureLocked("dstool"));
+    if (isFeatureLocked("upgrade")) {
+      if (upgradeReload) upgradeReload.disabled = true;
+    }
+    if (isFeatureLocked("cookie")) {
+      if (cookieReload) cookieReload.disabled = true;
+      if (cookieSelectAll) cookieSelectAll.disabled = true;
+    }
+    if (isFeatureLocked("quest") && questReload) questReload.disabled = true;
+    if (isFeatureLocked("account") && accountReload) accountReload.disabled = true;
 
     // Lock partyrun score/coin/exp only while partyrun itself is running (or connecting).
     setFarmInputsLocked(empty || !connected || connecting || partyRunning);
@@ -5083,11 +6870,35 @@
     animateClose(root);
   }
 
-  function rentalDaysRemaining() {
+  function rentalRemainingParts() {
     if (!profile || isRentalPermanent(profile)) return null;
     const exp = profile.rental_expires_at ? Date.parse(profile.rental_expires_at) : NaN;
-    if (!Number.isFinite(exp) || exp <= Date.now()) return 0;
-    return Math.max(1, Math.ceil((exp - Date.now()) / 86400000));
+    if (!Number.isFinite(exp) || exp <= Date.now()) return { totalMs: 0, days: 0, hours: 0, minutes: 0 };
+    const totalMs = exp - Date.now();
+    const totalMin = Math.max(0, Math.ceil(totalMs / 60000));
+    const days = Math.floor(totalMin / (60 * 24));
+    const hours = Math.floor((totalMin % (60 * 24)) / 60);
+    const minutes = totalMin % 60;
+    return { totalMs, days, hours, minutes };
+  }
+
+  function formatRentalRemaining(parts) {
+    if (!parts) return "—";
+    if (parts.totalMs <= 0) return "หมดอายุ";
+    const bits = [];
+    if (parts.days) bits.push(formatNumTh(parts.days) + " วัน");
+    if (parts.hours) bits.push(formatNumTh(parts.hours) + " ชม.");
+    if (parts.minutes && !parts.days) bits.push(formatNumTh(parts.minutes) + " นาที");
+    if (!bits.length) bits.push("น้อยกว่า 1 นาที");
+    return bits.join(" ");
+  }
+
+  function rentalDaysRemaining() {
+    const parts = rentalRemainingParts();
+    if (!parts) return null;
+    if (parts.totalMs <= 0) return 0;
+    // Keep numeric helper for any callers that still expect day ceil.
+    return Math.max(1, Math.ceil(parts.totalMs / 86400000));
   }
 
   function paintPassStatus() {
@@ -5108,20 +6919,20 @@
       root?.classList.remove("is-expired");
       return;
     }
-    const daysLeft = rentalDaysRemaining();
+    const parts = rentalRemainingParts();
     if (hasFarmAccess()) {
       label.textContent = "ใช้งานได้";
-      const parts = [];
-      if (daysLeft != null) parts.push("เหลือประมาณ " + formatNumTh(daysLeft) + " วัน");
-      parts.push("หมด " + rentalStatusLabel());
-      if (detail) detail.textContent = parts.join(" · ");
+      const bits = [];
+      if (parts) bits.push("เหลือ " + formatRentalRemaining(parts));
+      bits.push("หมด " + rentalStatusLabel());
+      if (detail) detail.textContent = bits.join(" · ");
       root?.classList.add("is-active");
       root?.classList.remove("is-expired");
     } else {
       label.textContent = "หมดอายุแล้ว";
       if (detail) detail.textContent = "เลือกแพ็กด้านล่างเพื่อต่ออายุ";
-      root?.classList.add("is-expired");
       root?.classList.remove("is-active");
+      root?.classList.add("is-expired");
     }
   }
 
@@ -5376,8 +7187,16 @@
     if (mode === "upgrade") {
       return "ตีบวกสมบัติ · " + escapeHtml(formatNumTh(res.items || res.count || 0)) + " ชิ้น";
     }
-    if (mode === "cookie") {
-      return "ซื้อคุกกี้ · " + escapeHtml(formatNumTh(res.items || res.count || 0)) + " ตัว";
+    if (mode === "cookie" || mode === "cookie_unlock") {
+      const done = res.items_done ?? res.items ?? res.count ?? 0;
+      const total = res.items_total ?? 0;
+      const base =
+        "ปลดล็อกคุกกี้ · " +
+        escapeHtml(formatNumTh(done)) +
+        (total ? "/" + escapeHtml(formatNumTh(total)) : "") +
+        " ตัว";
+      if (res.partial) return base + " (บางส่วน)";
+      return base;
     }
     if (mode === "reroll") {
       const n = res.accounts?.length || res.count || res.results?.length || row.ticket_count || 0;
@@ -5752,6 +7571,9 @@
       if (detail.code === "peek_rate_limited" || detail.message === "peek_rate_limited") {
         return "peek_rate_limited";
       }
+      if (detail.code === "refresh_rate_limited" || detail.message === "refresh_rate_limited") {
+        return "refresh_rate_limited";
+      }
       if (detail.code === "insufficient_tokens_for_peek") {
         return "insufficient_tokens_for_peek";
       }
@@ -5857,6 +7679,8 @@
     stopQueuePoll();
     stopActivityPoll();
     stopWatchJobPoll();
+    stopAdminJobsPoll();
+    stopDockElapsedTimer();
     clearQueuedRun();
     forceCloseModal();
     forceCloseRunStatusPopup();
@@ -5874,8 +7698,13 @@
   function paintProfile() {
     const menuWho = $("menu-who-user");
     const menuRental = $("menu-rental-label");
+    const menuMono = $("menu-user-mono");
     const whoName = profile?.username || profile?.display_name || "—";
     if (menuWho) menuWho.textContent = whoName;
+    if (menuMono) {
+      const ch = String(whoName || "").trim().charAt(0);
+      menuMono.textContent = ch ? ch.toUpperCase() : "—";
+    }
     const rental = sidebarRentalMeta();
     if (menuRental) {
       menuRental.textContent = rental.text;
@@ -5888,7 +7717,9 @@
   async function refreshMe() {
     const data = await api("/api/me");
     profile = data.profile;
+    await loadDevPlayVault();
     paintProfile();
+    paintDevPlayAccountPicker();
     showApp();
   }
 
@@ -5944,7 +7775,7 @@
     powder: {
       title: "สถานะฟาร์มผง",
       runningSub: "กำลังฟาร์มผง… ใช้งานหน้าอื่นได้ระหว่างรอ",
-      heroIcon: "assets/crc_cookie_stone_box.png",
+      heroIcon: "assets/magic_powder.png",
       steps: [
         { id: "login", label: "เข้าสู่ระบบเกม" },
         { id: "buy", label: "ซื้อสมบัติ" },
@@ -5959,7 +7790,7 @@
     upgrade: {
       title: "สถานะตีบวกสมบัติ",
       runningSub: "กำลังตีบวก… ใช้งานหน้าอื่นได้ระหว่างรอ",
-      heroIcon: "assets/tr_ga170.png",
+      heroIcon: "assets/Crystal_Pearl_Earring_2B9.png",
       steps: [
         { id: "login", label: "เข้าสู่ระบบเกม" },
         { id: "upgrade", label: "ตีบวกสมบัติ" },
@@ -5973,7 +7804,7 @@
     cookie_unlock: {
       title: "สถานะปลดล็อกคุกกี้",
       runningSub: "กำลังปลดล็อก… ใช้งานหน้าอื่นได้ระหว่างรอ",
-      heroIcon: "assets/crc_cookie_stone_box.png",
+      heroIcon: "assets/pine_monk_cookie.png",
       steps: [
         { id: "login", label: "เข้าสู่ระบบเกม" },
         { id: "unlock", label: "ปลดล็อกคุกกี้" },
@@ -6024,10 +7855,12 @@
     return modeConfig(mode).steps;
   }
 
+  const LOG_PANEL_MAX = 280;
+
   function truncateLogLine(text, maxLen) {
     const s = String(text || "").trim();
     if (!s) return "";
-    const limit = maxLen || 200;
+    const limit = maxLen || LOG_PANEL_MAX;
     if (s.length <= limit) return s;
     return s.slice(0, limit - 1) + "…";
   }
@@ -6086,30 +7919,50 @@
         }
         if (/login|initMember/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 0);
       } else if (mode === "heart") {
-        let m = s.match(/TOTAL\s+(\d+)\/(\d+)/i);
+        // Real backend: "session N done: +H  total X/Y" and ctx.progress(total,target,"collect").
+        let m = s.match(/session\s+\d+\s+done:\s*\+(\d+)\s+total\s+(\d+)\/(\d+)/i);
+        if (m) {
+          out.current = Number(m[2]);
+          out.total = Number(m[3]);
+          out.phase = "collect";
+          out.stepIdx = 3;
+        }
+        m = s.match(/\btotal\s+(\d+)\/(\d+)/i);
         if (m) {
           out.current = Number(m[1]);
           out.total = Number(m[2]);
-          out.phase = "claim";
+          out.phase = "collect";
+          out.stepIdx = Math.max(out.stepIdx, 3);
+        }
+        m = s.match(/TOTAL\s+(\d+)\/(\d+)/i);
+        if (m) {
+          out.current = Number(m[1]);
+          out.total = Number(m[2]);
+          out.phase = "collect";
           out.stepIdx = 3;
         }
-        m = s.match(/SESSION\s+\d+\s+done:\s+collected\s+(\d+)\/(\d+)/i);
-        if (m) {
-          out.phase = "send";
-          out.stepIdx = 2;
-        }
-        if (/guest|friend|SendLife|AcceptLife/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
-        if (/heart:\s*target=/i.test(s)) out.stepIdx = 0;
+        if (/prefetch|guests already|no guests available/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
+        if (/session\s+\d+:\s*target=/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 2);
+        if (/SendLife|AcceptLife|sending life/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 2);
+        if (/login main account/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 0);
       } else if (mode === "powder") {
-        const m = s.match(/\[(\d+)\]\s+\+\d+\s+powder\s+gained=(\d+)\/(\d+)/i);
+        // Real backend: "[i/count] BUY <name> code=X" then "  BREAK OK powder+P".
+        let m = s.match(/\[(\d+)\/(\d+)\]\s+BUY\b/i);
+        if (m) {
+          out.current = Number(m[1]);
+          out.total = Number(m[2]);
+          out.phase = "buy";
+          out.stepIdx = 1;
+        }
+        m = s.match(/\[(\d+)\]\s+\+\d+\s+powder\s+gained=(\d+)\/(\d+)/i);
         if (m) {
           out.current = Number(m[1]);
           out.total = Number(m[3]);
           out.phase = "extract";
           out.stepIdx = 2;
         }
-        if (/powder:\s*loading/i.test(s)) out.stepIdx = 0;
-        if (/ซื้อ|buy/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
+        if (/BREAK\s+OK|powder\+/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 2);
+        if (/powder:\s*login|loading/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 0);
       } else if (mode === "upgrade") {
         let line = s;
         let m = s.match(/^\[(\d+)\/(\d+)\]\s+(.+?)\s+—\s+(.+)$/);
@@ -6150,16 +8003,23 @@
       } else if (mode === "cookie_unlock") {
         let m = s.match(/cookie-unlock batch:\s*item\s+(\d+)\/(\d+)\s+—\s+(.+)/i);
         if (m) {
+          const name = m[3].trim();
           out.current = Math.max(0, Number(m[1]) - 1);
           out.total = Number(m[2]);
-          out.phase = "items";
-          out.stepIdx = 1;
-          if (statusContext) {
+          out.phase = name.toLowerCase() === "prepare" ? "start" : "items";
+          out.stepIdx = name.toLowerCase() === "prepare" ? 0 : 1;
+          if (statusContext && name.toLowerCase() !== "prepare") {
             statusContext.itemIndex = Number(m[1]);
             statusContext.itemTotal = Number(m[2]);
-            statusContext.itemName = m[3].trim();
+            statusContext.itemName = name;
             statusContext.itemsCompleted = Math.max(0, Number(m[1]) - 1);
           }
+        }
+        m = s.match(/cookie-unlock:\s*start\s+(.+?)(?:\s+\(|$)/i);
+        if (m && statusContext) {
+          statusContext.itemName = m[1].trim();
+          out.phase = "items";
+          out.stepIdx = Math.max(out.stepIdx, 1);
         }
         if (/cookie-unlock:\s*done\s+/i.test(s)) {
           out.stepIdx = Math.max(out.stepIdx, 1);
@@ -6169,6 +8029,8 @@
             out.phase = "items";
             if (statusContext) statusContext.itemsCompleted = doneCount;
           }
+          m = s.match(/cookie-unlock:\s*done\s+(.+)/i);
+          if (m && statusContext) statusContext.itemName = m[1].trim();
         }
         if (/cookie-unlock:\s*refresh|initMember|prepare/i.test(s)) {
           out.stepIdx = Math.max(out.stepIdx, 0);
@@ -6203,25 +8065,89 @@
     if (!s) return "";
     if (/traceback|RpcError|Exception|at 0x/i.test(s)) return "";
     const translated = translateLog(s);
+    if (mode === "cookie_unlock" && /cookie-unlock/i.test(s)) {
+      const text = truncateLogLine(translated || s, 160);
+      if (/failed|skip.+coin/i.test(s)) return { text, kind: "err" };
+      if (/skip/i.test(s)) return { text, kind: "warn" };
+      if (/done|OK/i.test(s)) return { text, kind: "ok" };
+      return { text, kind: "ok" };
+    }
     if (translated && translated !== s) return truncateLogLine(translated, 160);
     if (mode === "partyrun" && /\[round\s+(\d+)\/(\d+)\]/i.test(s)) {
       const m = s.match(/\[round\s+(\d+)\/(\d+)\]/i);
-      return "รอบ " + m[1] + "/" + m[2] + " — " + truncateLogLine(s.replace(/\[round\s+\d+\/\d+\]\s*/i, ""), 120);
+      const tail = s.replace(/\[round\s+\d+\/\d+\]\s*/i, "");
+      let detail = truncateLogLine(tail, 200);
+      const coinM = tail.match(/coin[=:]?\s*([+\-]?\d+)/i);
+      const expM = tail.match(/exp[=:]?\s*([+\-]?\d+)/i);
+      if (coinM || expM) {
+        detail =
+          (coinM ? "เหรียญ " + coinM[1] : "") +
+          (coinM && expM ? " · " : "") +
+          (expM ? "EXP " + expM[1] : "");
+      }
+      return "รอบ " + m[1] + "/" + m[2] + (detail ? " — " + detail : "");
     }
     if (mode === "giftdraw" && /giftdraw\s+\[(\d+)\/(\d+)\]/i.test(s)) {
       const m = s.match(/giftdraw\s+\[(\d+)\/(\d+)\]:\s*(.+)/i);
-      if (m) return "กล่อง " + m[1] + "/" + m[2] + " — " + truncateLogLine(m[3], 100);
+      if (m) return "กล่อง " + m[1] + "/" + m[2] + " — " + truncateLogLine(m[3], 220);
+    }
+    if (mode === "giftdraw" && /gift|box|reward|item/i.test(s)) {
+      return truncateLogLine(translated || s, LOG_PANEL_MAX);
     }
     if (mode === "heart") {
       if (/TOTAL\s+(\d+)\/(\d+)/i.test(s)) {
         const m = s.match(/TOTAL\s+(\d+)\/(\d+)/i);
         return "รวมได้หัวใจ " + formatNumTh(m[1]) + "/" + formatNumTh(m[2]);
       }
-      if (/SESSION\s+\d+\s+done/i.test(s)) return truncateLogLine(s, 160);
+      if (/heart[s]?\s*\+(\d+)/i.test(s)) {
+        const m = s.match(/heart[s]?\s*\+(\d+)/i);
+        return "ได้หัวใจ +" + formatNumTh(m[1]);
+      }
+      if (/SESSION\s+\d+\s+done/i.test(s)) return truncateLogLine(s, LOG_PANEL_MAX);
     }
-    if (mode === "powder" && /\[(\d+)\]\s+\+\d+\s+powder/i.test(s)) {
-      const m = s.match(/\[(\d+)\]\s+\+(\d+)\s+powder\s+gained=(\d+)\/(\d+)/i);
-      if (m) return "รอบ " + m[1] + " +" + formatNumTh(m[2]) + " ผง (" + formatNumTh(m[3]) + "/" + formatNumTh(m[4]) + ")";
+    if (mode === "powder") {
+      if (/\[(\d+)\]\s+\+(\d+)\s+powder\s+gained=(\d+)\/(\d+)/i.test(s)) {
+        const m = s.match(/\[(\d+)\]\s+\+(\d+)\s+powder\s+gained=(\d+)\/(\d+)/i);
+        if (m) {
+          return (
+            "รอบ " +
+            m[1] +
+            " +" +
+            formatNumTh(m[2]) +
+            " ผง (รวม " +
+            formatNumTh(m[3]) +
+            "/" +
+            formatNumTh(m[4]) +
+            ")"
+          );
+        }
+      }
+      if (/BUY\s+OK/i.test(s)) return { text: truncateLogLine(translated || s, LOG_PANEL_MAX), kind: "ok" };
+      if (/BREAK\s+OK|powder\+/i.test(s)) {
+        return { text: truncateLogLine(translated || s, LOG_PANEL_MAX), kind: "ok" };
+      }
+      if (/BUY\s+ERR|BREAK\s+ERR/i.test(s)) {
+        return { text: truncateLogLine(translated || s, LOG_PANEL_MAX), kind: "err" };
+      }
+    }
+    if (mode === "reroll") {
+      const rm = s.match(/reroll(?:\s+guest)?\s*\[(\d+)\/(\d+)\]/i);
+      if (rm) {
+        return (
+          "บัญชี " +
+          rm[1] +
+          "/" +
+          rm[2] +
+          " — " +
+          truncateLogLine(s.replace(/reroll(?:\s+guest)?\s*\[\d+\/\d+\]\s*/i, ""), 200)
+        );
+      }
+      if (/reroll:/i.test(s)) return truncateLogLine(translated || s, LOG_PANEL_MAX);
+    }
+    if (mode === "quest_claim") {
+      const qm = s.match(/quest:\s*claimed\s+(\d+)\/(\d+)/i);
+      if (qm) return "รับเควส " + qm[1] + "/" + qm[2];
+      if (/quest:/i.test(s)) return truncateLogLine(translated || s, LOG_PANEL_MAX);
     }
     if (mode === "upgrade") {
       let line = s;
@@ -6266,8 +8192,8 @@
       }
       if (/upgrade\s+\[/i.test(line)) return { text: prefix + truncateLogLine(line, 140), kind: "warn" };
     }
-    if (s.length > 160 || /[{}\[\]]/.test(s)) return "";
-    return truncateLogLine(s, 160);
+    if (s.length > LOG_PANEL_MAX + 40 || /^\{/.test(s)) return "";
+    return truncateLogLine(s, LOG_PANEL_MAX);
   }
 
   function formatNumTh(n) {
@@ -6294,7 +8220,7 @@
     if (phase === "running") return "กำลังดำเนินการ";
     if (phase === "done") return "สำเร็จ";
     if (phase === "error") return "ล้มเหลว";
-    if (phase === "idle") return "พร้อม";
+    if (phase === "idle") return "ว่าง";
     return "—";
   }
 
@@ -6327,6 +8253,39 @@
     const m = Math.floor(n / 60);
     const s = n % 60;
     return m + " นาที " + s + " วิ";
+  }
+
+  function dockJobStartedMs() {
+    if (!dockJobStartedAt) return null;
+    const ms =
+      typeof dockJobStartedAt === "number"
+        ? dockJobStartedAt
+        : Date.parse(dockJobStartedAt);
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  function freezeDockJobElapsedIfTerminal(phase) {
+    if ((phase === "done" || phase === "error") && dockJobStartedMs() && !dockJobFinishedAt) {
+      dockJobFinishedAt = Date.now();
+      stopDockElapsedTimer();
+    }
+  }
+
+  function computeDockElapsedSec(phase) {
+    const startedMs = dockJobStartedMs();
+    if (!startedMs) return 0;
+    if (
+      phase !== "running" &&
+      phase !== "done" &&
+      phase !== "error" &&
+      phase !== "queued"
+    ) {
+      return 0;
+    }
+    freezeDockJobElapsedIfTerminal(phase);
+    const terminal = phase === "done" || phase === "error";
+    const endMs = terminal && dockJobFinishedAt ? dockJobFinishedAt : Date.now();
+    return Math.max(0, Math.floor((endMs - startedMs) / 1000));
   }
 
   function formatDockStartedAt(ts) {
@@ -6369,11 +8328,37 @@
   function startDockElapsedTimer() {
     stopDockElapsedTimer();
     dockElapsedTimer = setInterval(() => {
+      if (document.hidden) return;
       if (dockPhase !== "running" && dockPhase !== "queued") {
         stopDockElapsedTimer();
         return;
       }
-      renderFarmDock();
+      // Patch elapsed text only — avoid full dock rebuild every second.
+      const el = document.querySelector(
+        "#farm-dock-list .farm-dock-tx[data-live='1'] .farm-dock-tx-time"
+      );
+      if (dockJobStartedAt) {
+        const startedMs = dockJobStartedMs();
+        const startedFmt = formatDockStartedAt(dockJobStartedAt) || "";
+        if (startedMs) {
+          const sec = computeDockElapsedSec(dockPhase || "running");
+          const line = startedFmt
+            ? startedFmt + " · " + formatDockElapsed(sec)
+            : formatDockElapsed(sec);
+          if (el) el.textContent = line;
+          // Keep the centered popup's live timer ticking too.
+          if (liveStatusOpen) {
+            const popTime = $("live-status-time");
+            const popPhase = $("live-status-phase");
+            if (popTime) popTime.textContent = line;
+            if (popPhase && dockPhase === "running") {
+              popPhase.textContent = "กำลังดำเนินการ · " + formatDockElapsed(sec);
+            }
+          }
+          if (el || liveStatusOpen) return;
+        }
+      }
+      scheduleRenderFarmDock({ reason: "elapsed" });
     }, 1000);
   }
 
@@ -6383,10 +8368,80 @@
     return hero.replace(/^assets\//, "") || "cookie_run.gif";
   }
 
+  function resolveMediaSrc(urlOrFile) {
+    const raw = String(urlOrFile || "").trim();
+    if (!raw) return "";
+    if (/^https?:\/\//i.test(raw) || raw.startsWith("data:") || raw.startsWith("blob:")) {
+      return raw;
+    }
+    if (raw.startsWith("assets/")) return raw;
+    return "assets/" + raw.replace(/^assets\//, "");
+  }
+
+  function currentCookieThumb(mode) {
+    if (mode !== "cookie_unlock") return null;
+    const thumbs = Array.isArray(statusContext?.cookieThumbs)
+      ? statusContext.cookieThumbs
+      : [];
+    if (!thumbs.length) return null;
+    const want = String(statusContext?.itemName || "").trim().toLowerCase();
+    if (want) {
+      const hit = thumbs.find(
+        (t) => String(t.name || "").trim().toLowerCase() === want
+      );
+      if (hit) return hit;
+    }
+    const idx = Math.max(0, (Number(statusContext?.itemIndex) || 1) - 1);
+    return thumbs[Math.min(idx, thumbs.length - 1)] || thumbs[0];
+  }
+
   function buildDockSnapshot(opts = {}) {
-    const mode = opts.mode || pipelineState?.mode || statusContext?.mode || "partyrun";
-    const cfg = modeConfig(mode);
+    // Prefer the explicitly-tracked live job, then the executing pipeline mode.
+    // Never invent Party Run when nothing is actually running.
     const phase = opts.phase || dockPhase || "idle";
+    const activeMode =
+      opts.mode ||
+      (liveJob && !liveJob.finished && liveJob.mode) ||
+      (phase !== "idle" && pipelineState?.mode) ||
+      (phase !== "idle" && liveJob && liveJob.mode) ||
+      (phase !== "idle" && statusContext?.mode) ||
+      (pendingFarmJobs[0] && pendingFarmJobs[0].mode) ||
+      null;
+    const idleEmpty = phase === "idle" && !activeMode;
+    const mode = activeMode || (idleEmpty ? null : "partyrun");
+
+    if (idleEmpty) {
+      const nick = devplaySession?.nickname
+        ? " · ไอดี " + devplaySession.nickname
+        : "";
+      return {
+        phase: "idle",
+        mode: null,
+        ok: null,
+        panelSub: "เลือกฟีเจอร์แล้วกดรันเมื่อพร้อม",
+        progress: { current: 0, total: 0, pct: 0 },
+        queue: Array.isArray(lastGate?.queue_items) ? lastGate.queue_items : [],
+        jobTitle: "ไม่มีงาน",
+        jobDetail: "ไม่มีงานที่กำลังรัน" + nick,
+        timeLine: "",
+        statusBadge: "ว่าง",
+        statusLineText: "ไม่มีงาน",
+        fractionText: "—",
+        unit: "",
+        progressLabel: "",
+        elapsedSec: 0,
+        steps: [],
+        stepKinds: {},
+        logLines: [],
+        iconUrl: resolveMediaSrc("notice_b20.png"),
+        cookieThumbs: [],
+        currentCookieName: "",
+        showLive: false,
+        idleEmpty: true,
+      };
+    }
+
+    const cfg = modeConfig(mode);
     const ok = opts.ok !== undefined ? opts.ok : dockOk;
 
     const prog = pipelineState?.progress || {};
@@ -6406,22 +8461,47 @@
           ? 100
           : 0;
     const unit = progressUnit(mode);
-    const elapsedSec =
-      dockJobStartedAt &&
-      (phase === "running" || phase === "done" || phase === "error" || phase === "queued")
-        ? Math.max(0, Math.floor((Date.now() - dockJobStartedAt) / 1000))
-        : 0;
+    const elapsedSec = computeDockElapsedSec(phase);
     const startedAtFormatted = formatDockStartedAt(dockJobStartedAt);
-    const progressLabel = cfg.progressText(cur, tot);
+    const progressLabel =
+      phase === "idle"
+        ? ""
+        : cfg.progressText(cur, tot);
     const jobTitle = jobTitleForMode(mode);
     const statusBadge = dockPhaseLabel(phase === "idle" ? "idle" : phase);
     const queue = Array.isArray(lastGate?.queue_items) ? lastGate.queue_items : [];
 
-    let jobDetail = progressLabel;
-    if (devplaySession?.nickname) {
+    const phaseKey = String(pipelineState?.progressPhase || "").toLowerCase();
+    const phaseLabelTh = dockPhaseLabelTh(phaseKey, mode);
+
+    let jobDetail = progressLabel || jobTitle;
+    if (phase === "running" && phaseLabelTh) {
+      jobDetail = phaseLabelTh + (tot > 0 ? " · " + progressLabel : "");
+    } else if (
+      phase === "running" &&
+      mode === "cookie_unlock" &&
+      statusContext?.itemName
+    ) {
+      jobDetail =
+        "กำลังปลดล็อก " +
+        statusContext.itemName +
+        (tot > 0 ? " · " + progressLabel : "");
+    } else if (phase === "idle") {
+      jobDetail = "พร้อมเริ่ม · " + jobTitle;
+    } else if (phase === "done" && ok !== false) {
+      jobDetail = "สำเร็จ · " + jobTitle;
+    } else if (phase === "queued") {
+      jobDetail = "รอคิว · " + jobTitle;
+    }
+    if (devplaySession?.nickname && phase !== "error") {
       jobDetail = (jobDetail || jobTitle) + " · " + devplaySession.nickname;
     }
     if (phase === "error" && opts.errorMsg) jobDetail = opts.errorMsg;
+
+    const cookieThumb = currentCookieThumb(mode);
+    const iconUrl = cookieThumb?.url
+      ? resolveMediaSrc(cookieThumb.url)
+      : resolveMediaSrc(dockModeIcon(mode));
 
     let statusLineText = statusBadge;
     if (phase === "running" && elapsedSec > 0) {
@@ -6449,11 +8529,21 @@
           : "—";
 
     let panelSub = "งานที่กำลังรันและประวัติล่าสุด";
-    if (phase === "running") panelSub = cfg.runningSub || "กำลังฟาร์ม…";
-    else if (phase === "queued") panelSub = "รอคิว — ถึงคิวแล้วจะเริ่มอัตโนมัติ";
+    if (phase === "running") {
+      panelSub = phaseLabelTh
+        ? phaseLabelTh + (tot > 0 ? " · " + formatNumTh(cur) + "/" + formatNumTh(tot) + " " + unit : "")
+        : cfg.runningSub || "กำลังฟาร์ม…";
+    } else if (phase === "queued") panelSub = "รอคิว — ถึงคิวแล้วจะเริ่มอัตโนมัติ";
     else if (phase === "done") panelSub = ok !== false ? "สำเร็จแล้ว" : "ไม่สำเร็จ";
     else if (phase === "error") panelSub = opts.errorMsg || "การฟาร์มล้มเหลว";
     else if (farmDockFlash.text) panelSub = farmDockFlash.text;
+
+    const steps = Array.isArray(pipelineState?.steps) ? pipelineState.steps : modeConfig(mode).steps || [];
+    const stepKinds = pipelineState?.kinds || {};
+    const logLines = Array.isArray(pipelineState?.logLines) ? pipelineState.logLines.slice(-120) : [];
+    const cookieThumbs = Array.isArray(statusContext?.cookieThumbs)
+      ? statusContext.cookieThumbs
+      : [];
 
     return {
       phase,
@@ -6471,12 +8561,50 @@
       unit,
       progressLabel,
       elapsedSec,
+      steps,
+      stepKinds,
+      logLines,
+      iconUrl,
+      cookieThumbs,
+      currentCookieName: statusContext?.itemName || cookieThumb?.name || "",
       showLive:
         phase === "running" ||
         phase === "done" ||
         phase === "error" ||
         phase === "queued",
+      idleEmpty: false,
     };
+  }
+
+  function dockPhaseLabelTh(phaseKey, mode) {
+    const key = String(phaseKey || "").toLowerCase();
+    if (!key) return "";
+    if ((key === "items" || key === "unlock") && mode === "cookie_unlock") {
+      const name = String(statusContext?.itemName || "").trim();
+      return name ? "กำลังปลดล็อก " + name : "กำลังปลดล็อกคุกกี้";
+    }
+    const map = {
+      login: "เข้าสู่ระบบเกม",
+      start: "เริ่มงาน",
+      clear: "เคลียร์รางวัลค้าง",
+      match: "จับคู่",
+      round: "วิ่งฟาร์ม",
+      run: "วิ่งฟาร์ม",
+      claim: "รับรางวัล",
+      collect: "รับหัวใจ",
+      send: "ส่งหัวใจ",
+      buy: "ซื้อสมบัติ",
+      extract: "ย่อยเป็นผง",
+      items: "กำลังดำเนินการ",
+      unlock: "ปลดล็อกคุกกี้",
+      draw: "สุ่มของ",
+      open: "เปิดกล่อง",
+      done: "สรุปผล",
+    };
+    if (map[key]) return map[key];
+    const steps = modeConfig(mode).steps || [];
+    const hit = steps.find((s) => s.id === key);
+    return hit ? hit.label : "";
   }
 
   function historyRowToCard(row) {
@@ -6531,6 +8659,9 @@
 
   function buildLiveCard(snap) {
     if (!snap.showLive) return null;
+    const canCancelLive =
+      (snap.phase === "running" || snap.phase === "queued") &&
+      !!(liveJob?.id || activeWatchJobId);
     return {
       mode: snap.mode,
       phase: snap.phase,
@@ -6539,7 +8670,15 @@
       detail: snap.jobDetail,
       timeLine: snap.timeLine,
       live: true,
+      cancelable: canCancelLive,
+      jobId: liveJob?.id || activeWatchJobId || "",
       statusLineText: snap.statusLineText,
+      steps: snap.steps || [],
+      stepKinds: snap.stepKinds || {},
+      logLines: snap.logLines || [],
+      iconUrl: snap.iconUrl || "",
+      cookieThumbs: snap.cookieThumbs || [],
+      currentCookieName: snap.currentCookieName || "",
       progress: {
         pct: snap.progress.pct,
         fraction: snap.fractionText,
@@ -6549,25 +8688,34 @@
   }
 
   function pendingJobsToCards() {
-    return pendingFarmJobs.map((j, i) => ({
-      mode: j.mode,
-      phase: "queued",
-      title: typeof jobTitleForMode === "function" ? jobTitleForMode(j.mode) : j.mode,
-      badge: "รอคิว",
-      detail: j.label || ("คิว #" + (i + 1)),
-      timeLine: "คิวส่วนตัว #" + (i + 1),
-      live: false,
-      pendingId: j.id,
-      cancelable: true,
-    }));
+    return pendingFarmJobs.map((j, i) => {
+      const thumbs = Array.isArray(j.extras?.cookieThumbs) ? j.extras.cookieThumbs : [];
+      const first = thumbs[0];
+      return {
+        mode: j.mode,
+        phase: "queued",
+        title: typeof jobTitleForMode === "function" ? jobTitleForMode(j.mode) : j.mode,
+        badge: "รอคิว",
+        detail: j.label || ("คิว #" + (i + 1)),
+        timeLine: "คิวส่วนตัว #" + (i + 1),
+        live: false,
+        pendingId: j.id,
+        cancelable: true,
+        iconUrl: first?.url || "",
+        cookieThumbs: thumbs,
+        currentCookieName: j.extras?.itemName || first?.name || "",
+      };
+    });
   }
 
   function renderTxCard(card) {
     const article = document.createElement("article");
     article.className = "farm-dock-tx";
     article.dataset.phase = card.phase || "idle";
+    if (card.live) article.dataset.live = "1";
     if (card.pendingId) article.dataset.pendingId = card.pendingId;
-    const iconFile = dockModeIcon(card.mode);
+    const iconSrc =
+      resolveMediaSrc(card.iconUrl) || resolveMediaSrc(dockModeIcon(card.mode));
     const dotClass =
       card.phase === "done"
         ? "is-ok"
@@ -6576,6 +8724,40 @@
           : card.phase === "running" || card.phase === "queued"
             ? "is-running"
             : "";
+    let thumbsHtml = "";
+    if (
+      card.mode === "cookie_unlock" &&
+      Array.isArray(card.cookieThumbs) &&
+      card.cookieThumbs.length
+    ) {
+      const current = String(card.currentCookieName || "").trim().toLowerCase();
+      thumbsHtml =
+        '<div class="farm-dock-tx-cookies" aria-label="คุกกี้ที่เลือก">' +
+        card.cookieThumbs
+          .map((t) => {
+            const name = String(t.name || t.seq || "");
+            const active =
+              current && name.trim().toLowerCase() === current ? " is-active" : "";
+            const src = resolveMediaSrc(t.url) || resolveMediaSrc(dockModeIcon("cookie_unlock"));
+            return (
+              '<span class="farm-dock-tx-cookie' +
+              active +
+              '" title="' +
+              escapeHtml(name) +
+              '">' +
+              '<img src="' +
+              escapeHtml(src) +
+              '" alt="' +
+              escapeHtml(name) +
+              '" width="28" height="28" loading="lazy" decoding="async" />' +
+              '<span class="farm-dock-tx-cookie-name">' +
+              escapeHtml(name) +
+              "</span></span>"
+            );
+          })
+          .join("") +
+        "</div>";
+    }
     let progressHtml = "";
     if (card.live && card.progress?.show !== false) {
       progressHtml =
@@ -6597,16 +8779,86 @@
         escapeHtml(card.progress?.fraction || "—") +
         "</div></div>";
     }
+    let stepsHtml = "";
+    if (card.live && Array.isArray(card.steps) && card.steps.length) {
+      const kinds = card.stepKinds || {};
+      stepsHtml =
+        '<ol class="farm-dock-tx-steps" aria-label="ขั้นตอน">' +
+        card.steps
+          .map((s) => {
+            const kind = kinds[s.id] || "idle";
+            return (
+              '<li class="farm-dock-tx-step is-' +
+              escapeHtml(kind) +
+              '"><span class="farm-dock-tx-step-dot" aria-hidden="true"></span><span>' +
+              escapeHtml(s.label || s.id) +
+              "</span></li>"
+            );
+          })
+          .join("") +
+        "</ol>";
+    }
+    let logsHtml = "";
+    if (card.live) {
+      const lines = Array.isArray(card.logLines) ? card.logLines : [];
+      const open = !!dockLiveLogOpen;
+      logsHtml =
+        '<div class="farm-dock-tx-logs">' +
+        '<button type="button" class="farm-dock-tx-logs-toggle" data-dock-log-toggle="1" aria-expanded="' +
+        (open ? "true" : "false") +
+        '">' +
+        (open ? "ซ่อนรายละเอียด" : "ดูรายละเอียด") +
+        (lines.length ? " (" + lines.length + ")" : "") +
+        "</button>" +
+        '<ul class="farm-dock-tx-log-list' +
+        (open ? "" : " hidden") +
+        '" aria-hidden="' +
+        (open ? "false" : "true") +
+        '">' +
+        (lines.length
+          ? lines
+              .map((l) => {
+                const text = typeof l === "string" ? l : l?.text || "";
+                const kind = typeof l === "object" && l?.kind ? l.kind : "ok";
+                return (
+                  '<li class="farm-dock-tx-log-line is-' +
+                  escapeHtml(kind) +
+                  '">' +
+                  escapeHtml(text) +
+                  "</li>"
+                );
+              })
+              .join("")
+          : '<li class="farm-dock-tx-log-line is-muted">ยังไม่มีรายละเอียด</li>') +
+        "</ul></div>";
+    }
     const cancelHtml = card.cancelable
-      ? '<button type="button" class="farm-dock-tx-cancel" data-cancel-pending="' +
-        escapeHtml(card.pendingId || "") +
-        '" aria-label="ยกเลิกคิว">×</button>'
+      ? card.pendingId
+        ? '<button type="button" class="farm-dock-tx-cancel" data-cancel-pending="' +
+          escapeHtml(card.pendingId || "") +
+          '" aria-label="ยกเลิกคิว">×</button>'
+        : card.jobId && !card.adminCancelId
+          ? '<button type="button" class="farm-dock-tx-cancel" data-cancel-job="' +
+            escapeHtml(card.jobId) +
+            '" aria-label="ยกเลิกงาน">×</button>'
+          : ""
       : "";
+    // Admin cards get an explicit labeled action button in the footer.
+    const adminActionHtml =
+      card.cancelable && card.adminCancelId
+        ? '<div class="farm-dock-tx-admin-actions"><button type="button" class="farm-dock-tx-forcekill' +
+          (card.stuck ? " is-stuck" : "") +
+          '" data-admin-cancel="' +
+          escapeHtml(card.adminCancelId) +
+          '">' +
+          (card.stuck ? "บังคับจบงานค้าง" : "ยกเลิก / บังคับจบ") +
+          "</button></div>"
+        : "";
     article.innerHTML =
       '<div class="farm-dock-tx-top">' +
       '<div class="farm-dock-tx-icon" aria-hidden="true">' +
-      '<img src="assets/' +
-      escapeHtml(iconFile) +
+      '<img src="' +
+      escapeHtml(iconSrc) +
       '" alt="" width="26" height="26" decoding="async" />' +
       (dotClass ? '<span class="farm-dock-tx-icon-dot ' + dotClass + '"></span>' : "") +
       "</div>" +
@@ -6629,13 +8881,52 @@
         ? '<p class="farm-dock-tx-time">' + escapeHtml(card.timeLine) + "</p>"
         : "") +
       "</div></div>" +
-      progressHtml;
+      thumbsHtml +
+      progressHtml +
+      stepsHtml +
+      logsHtml +
+      adminActionHtml;
     return article;
+  }
+
+  let _farmDockRenderTimer = null;
+  let _farmDockRenderRaf = 0;
+
+  function scheduleRenderFarmDock(opts = {}) {
+    // Coalesce rapid callers (pollers / elapsed / activity) into one paint.
+    const immediate = !!opts.immediate;
+    if (immediate) {
+      if (_farmDockRenderTimer) {
+        clearTimeout(_farmDockRenderTimer);
+        _farmDockRenderTimer = null;
+      }
+      if (_farmDockRenderRaf) {
+        cancelAnimationFrame(_farmDockRenderRaf);
+        _farmDockRenderRaf = 0;
+      }
+      renderFarmDock(opts);
+      return;
+    }
+    if (_farmDockRenderTimer) return;
+    _farmDockRenderTimer = setTimeout(() => {
+      _farmDockRenderTimer = null;
+      if (_farmDockRenderRaf) cancelAnimationFrame(_farmDockRenderRaf);
+      _farmDockRenderRaf = requestAnimationFrame(() => {
+        _farmDockRenderRaf = 0;
+        if (document.hidden) return;
+        renderFarmDock(opts);
+      });
+    }, 120);
   }
 
   function renderFarmDock(opts = {}) {
     const snap = buildDockSnapshot(opts);
-    showFarmDock();
+    if (hasActiveJobStatus() && jobStatusView === "hidden") {
+      jobStatusView = "minimized";
+    }
+    if (jobStatusView !== "hidden") syncJobStatusShell();
+    renderMiniStatus(snap);
+    if (jobStatusView === "expanded" && jobStatusTab === "live") renderLiveStatus(snap);
 
     const panelSubEl = $("farm-dock-panel-sub");
     if (panelSubEl) panelSubEl.textContent = snap.panelSub;
@@ -6644,8 +8935,16 @@
     const flashEl = $("farm-dock-flash");
     if (flashEl) {
       const flashText = farmDockFlash.text || "";
+      // Don't surface inventory/status noise (e.g. ticket count) as a "live job" banner.
+      const noisy =
+        /^ตั๋ว\s/i.test(flashText) ||
+        /Party Run\s+\d/i.test(flashText) ||
+        flashText === "ยกเลิกแล้ว";
       const showFlash =
-        !!flashText && (snap.phase === "idle" || snap.phase === "done" || snap.phase === "error");
+        !!flashText &&
+        !noisy &&
+        !snap.idleEmpty &&
+        (snap.phase === "idle" || snap.phase === "done" || snap.phase === "error");
       if (showFlash) {
         flashSection?.classList.remove("hidden");
         flashEl.textContent = flashText;
@@ -6663,60 +8962,104 @@
       .slice(0, 20)
       .map(historyRowToCard);
 
-    const activeCount = (liveCard ? 1 : 0) + pendingCards.length;
+    const liveIsActive =
+      !!liveCard && (snap.phase === "running" || snap.phase === "queued");
+    const activeCount = (liveIsActive ? 1 : 0) + pendingCards.length;
     const allCount = activeCount + historyCards.length;
     const allCountEl = $("farm-dock-tab-all-count");
-    const activeCountEl = $("farm-dock-tab-active-count");
     if (allCountEl) allCountEl.textContent = "(" + allCount + ")";
-    if (activeCountEl) activeCountEl.textContent = "(" + activeCount + ")";
+    const histCountEl = $("farm-history-count");
+    if (histCountEl) {
+      histCountEl.textContent = String(historyCards.length);
+      histCountEl.classList.toggle("hidden", historyCards.length <= 0);
+      histCountEl.hidden = historyCards.length <= 0;
+    }
 
-    document.querySelectorAll(".farm-dock-tab").forEach((btn) => {
-      const tab = btn.getAttribute("data-dock-tab");
-      const on = tab === dockHistoryTab;
+    const adminTabBtn = $("farm-dock-tab-admin");
+    if (adminTabBtn) {
+      adminTabBtn.classList.toggle("hidden", !isAdminUser());
+      if (!isAdminUser() && jobStatusTab === "admin") setJobStatusTab("live");
+    }
+
+    document.querySelectorAll("[data-job-tab]").forEach((btn) => {
+      const tab = btn.getAttribute("data-job-tab");
+      const on = tab === jobStatusTab;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
     });
 
+    const paneLive = $("job-status-pane-live");
+    const paneHistory = $("job-status-pane-history");
+    const paneAdmin = $("job-status-pane-admin");
+    paneLive?.classList.toggle("hidden", jobStatusTab !== "live");
+    if (paneLive) paneLive.hidden = jobStatusTab !== "live";
+    paneHistory?.classList.toggle("hidden", jobStatusTab !== "history");
+    if (paneHistory) paneHistory.hidden = jobStatusTab !== "history";
+    paneAdmin?.classList.toggle("hidden", jobStatusTab !== "admin");
+    if (paneAdmin) paneAdmin.hidden = jobStatusTab !== "admin";
+
+    const isAdminView = jobStatusTab === "admin" && isAdminUser();
+    const userActions = $("farm-dock-user-actions");
+    const adminSection = $("farm-dock-admin-section");
     const list = $("farm-dock-list");
-    if (list) {
+
+    if (userActions) {
+      const showCancelAll =
+        !isAdminView && (pendingCards.length > 0 || liveIsActive || !!queuedRun);
+      userActions.classList.toggle("hidden", !showCancelAll);
+    }
+
+    if (adminSection && isAdminView) {
+      document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+        const on = btn.getAttribute("data-admin-tab") === adminJobsTab;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      loadAdminHeartMaxSetting().catch(() => {});
+      renderAdminJobsList();
+    } else if (!isAdminView) {
+      stopAdminJobsPoll();
+    }
+
+    if (list && jobStatusTab === "history") {
       list.replaceChildren();
-      const showLive = dockHistoryTab === "all" || dockHistoryTab === "active";
-      const showHistory = dockHistoryTab === "all";
       let painted = 0;
-      if (showLive && liveCard) {
+      if (liveCard && (snap.phase === "done" || snap.phase === "error")) {
         list.appendChild(renderTxCard(liveCard));
         painted += 1;
       }
-      if (showLive) {
-        for (const card of pendingCards) {
-          list.appendChild(renderTxCard(card));
-          painted += 1;
-        }
+      for (const card of pendingCards) {
+        list.appendChild(renderTxCard(card));
+        painted += 1;
       }
-      if (showHistory) {
-        for (const card of historyCards) {
-          list.appendChild(renderTxCard(card));
-          painted += 1;
-        }
+      for (const card of historyCards) {
+        list.appendChild(renderTxCard(card));
+        painted += 1;
       }
       if (!painted) {
         const empty = document.createElement("p");
         empty.className = "farm-dock-empty";
-        empty.textContent =
-          dockHistoryTab === "active"
-            ? "ไม่มีงานที่กำลังดำเนินการ"
-            : "ยังไม่มีประวัติการฟาร์ม";
+        empty.textContent = "ยังไม่มีประวัติการฟาร์ม";
         list.appendChild(empty);
       }
     }
 
     const queueSection = $("farm-dock-queue-section");
     const queueList = $("farm-dock-queue");
-    const showQueue = snap.phase === "queued" && snap.queue.length > 0;
+    const leaveQBtn = $("farm-dock-leave-queue");
+    const showQueue =
+      !isAdminView &&
+      (snap.phase === "queued" || !!queuedRun || !!lastGate?.me?.status) &&
+      Array.isArray(snap.queue) &&
+      snap.queue.length > 0;
     if (queueList) {
       queueList.replaceChildren();
       if (showQueue) {
         queueSection?.classList.remove("hidden");
+        leaveQBtn?.classList.toggle(
+          "hidden",
+          !(queuedRun || lastGate?.me?.status === "waiting" || lastGate?.me?.status === "active")
+        );
         for (const row of snap.queue) {
           const li = document.createElement("li");
           li.className = "farm-dock-queue-item";
@@ -6737,44 +9080,7 @@
         }
       } else {
         queueSection?.classList.add("hidden");
-      }
-    }
-
-    const fab = $("farm-dock-fab");
-    const fabIcon = $("farm-dock-fab-icon");
-    const fabDot = $("farm-dock-fab-dot");
-    const fabProg = $("farm-dock-fab-progress");
-    if (fabIcon) {
-      fabIcon.innerHTML =
-        '<img src="assets/' +
-        escapeHtml(dockModeIcon(snap.mode)) +
-        '" alt="" width="28" height="28" decoding="async" />';
-    }
-    if (fabProg) fabProg.style.setProperty("--pct", String(snap.progress.pct || 0));
-    if (fab) {
-      fab.classList.toggle(
-        "is-running",
-        snap.phase === "running" || snap.phase === "queued" || pendingJobsCount() > 0
-      );
-      fab.title =
-        snap.phase === "running"
-          ? snap.fractionText + " — แตะเพื่อดูสถานะ"
-          : pendingJobsCount() > 0
-            ? "มีงานรอคิว " + pendingJobsCount() + " — แตะเพื่อดู"
-            : "เปิดประวัติ / สถานะฟาร์ม";
-    }
-    if (fabDot) {
-      const showDot =
-        snap.phase === "running" ||
-        snap.phase === "queued" ||
-        snap.phase === "done" ||
-        snap.phase === "error";
-      fabDot.classList.toggle("hidden", !showDot);
-      fabDot.classList.remove("is-ok", "is-err", "is-running");
-      if (snap.phase === "running" || snap.phase === "queued") fabDot.classList.add("is-running");
-      else if (snap.phase === "done" && snap.ok !== false) fabDot.classList.add("is-ok");
-      else if (snap.phase === "error" || (snap.phase === "done" && snap.ok === false)) {
-        fabDot.classList.add("is-err");
+        leaveQBtn?.classList.add("hidden");
       }
     }
   }
@@ -6808,60 +9114,251 @@
     if (btn) btn.disabled = false;
   }
 
-  function showFarmDock() {
-    const root = $("farm-dock-root");
+  function hasActiveJobStatus() {
+    return (
+      dockPhase === "running" ||
+      dockPhase === "queued" ||
+      dockPhase === "done" ||
+      dockPhase === "error" ||
+      pendingJobsCount() > 0
+    );
+  }
+
+  function syncJobStatusShell() {
+    const root = $("job-status-root");
     if (!root) return;
-    root.classList.remove("hidden");
+    const showShell = jobStatusView !== "hidden";
+    const showMini = showShell && hasActiveJobStatus() && jobStatusView === "minimized";
+    const showExpanded = showShell && jobStatusView === "expanded";
+
+    if (jobStatusAnimTimer) {
+      clearTimeout(jobStatusAnimTimer);
+      jobStatusAnimTimer = null;
+    }
+
+    const mini = $("job-status-mini");
+    const panel = $("job-status-panel");
+    const backdrop = $("job-status-backdrop");
+    const finishShellHide = () => {
+      root.classList.add("hidden");
+      root.classList.remove("is-closing", "is-open", "is-minimized", "is-expanded");
+      panel?.classList.add("hidden");
+      panel?.classList.remove("is-closing");
+      backdrop?.classList.add("hidden");
+      panel?.setAttribute("aria-hidden", "true");
+      backdrop?.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("has-job-status", "has-farm-dock");
+    };
+
+    if (!showShell) {
+      root.setAttribute("aria-hidden", "true");
+      mini?.classList.add("hidden");
+      mini?.setAttribute("aria-expanded", "false");
+      releaseFocusTrap();
+      if (root.classList.contains("is-open")) {
+        root.classList.add("is-closing");
+        root.classList.remove("is-open");
+        if (panel && !panel.classList.contains("hidden")) {
+          panel.classList.add("is-closing");
+        }
+        jobStatusAnimTimer = setTimeout(() => {
+          jobStatusAnimTimer = null;
+          if (jobStatusView !== "hidden") return;
+          finishShellHide();
+        }, 320);
+      } else {
+        finishShellHide();
+      }
+      return;
+    }
+
+    root.classList.remove("hidden", "is-closing");
     root.setAttribute("aria-hidden", "false");
-    document.body.classList.add("has-farm-dock");
+    root.classList.toggle("is-minimized", showMini);
+    root.classList.toggle("is-expanded", showExpanded);
+
+    mini?.classList.toggle("hidden", !showMini);
+    mini?.setAttribute("aria-expanded", showExpanded ? "true" : "false");
+
+    if (showExpanded) {
+      panel?.classList.remove("hidden", "is-closing");
+      backdrop?.classList.remove("hidden");
+      panel?.setAttribute("aria-hidden", "false");
+      backdrop?.setAttribute("aria-hidden", "false");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => root.classList.add("is-open"));
+      });
+      trapFocus($("live-status-card"));
+    } else {
+      root.classList.remove("is-open");
+      if (panel && !panel.classList.contains("hidden")) {
+        panel.classList.add("is-closing");
+        releaseFocusTrap();
+        jobStatusAnimTimer = setTimeout(() => {
+          jobStatusAnimTimer = null;
+          if (jobStatusView === "expanded") return;
+          panel.classList.add("hidden");
+          panel.classList.remove("is-closing");
+          backdrop?.classList.add("hidden");
+          panel.setAttribute("aria-hidden", "true");
+          backdrop?.setAttribute("aria-hidden", "true");
+        }, 320);
+      } else {
+        releaseFocusTrap();
+        backdrop?.classList.add("hidden");
+        panel?.classList.add("hidden");
+        panel?.classList.remove("is-closing");
+        panel?.setAttribute("aria-hidden", "true");
+        backdrop?.setAttribute("aria-hidden", "true");
+      }
+      if (showMini) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => root.classList.add("is-open"));
+        });
+      }
+    }
+
+    document.body.classList.toggle("has-job-status", showShell);
+    document.body.classList.toggle("has-farm-dock", showShell);
+  }
+
+  function renderMiniStatus(snap) {
+    const mini = $("job-status-mini");
+    if (!mini || jobStatusView !== "minimized") return;
+    snap = snap || buildDockSnapshot();
+    const phase = snap.phase || "idle";
+    const pct = Math.max(
+      0,
+      Math.min(
+        100,
+        phase === "done" && snap.ok !== false
+          ? 100
+          : phase === "error"
+            ? Math.max(Number(snap.progress?.pct) || 0, 8)
+            : Number(snap.progress?.pct) || 0
+      )
+    );
+
+    const iconWrap = $("job-status-mini-icon");
+    const iconSrc =
+      resolveMediaSrc(snap.iconUrl) || resolveMediaSrc(dockModeIcon(snap.mode));
+    if (iconWrap && iconSrc) {
+      iconWrap.innerHTML =
+        '<img src="' +
+        escapeHtml(iconSrc) +
+        '" alt="" width="32" height="32" decoding="async" />' +
+        '<span class="job-status-mini-dot" id="job-status-mini-dot" aria-hidden="true"></span>';
+    }
+
+    const dot = $("job-status-mini-dot");
+    if (dot) {
+      dot.classList.remove("is-ok", "is-err", "is-running");
+      if (phase === "running" || phase === "queued") dot.classList.add("is-running");
+      else if (phase === "done" && snap.ok !== false) dot.classList.add("is-ok");
+      else if (phase === "error" || (phase === "done" && snap.ok === false)) {
+        dot.classList.add("is-err");
+      }
+    }
+
+    const titleEl = $("job-status-mini-title");
+    if (titleEl) titleEl.textContent = snap.jobTitle || "งานฟาร์ม";
+    const chipEl = $("job-status-mini-chip");
+    if (chipEl) {
+      chipEl.textContent = snap.statusBadge || dockPhaseLabel(phase);
+      chipEl.setAttribute("data-phase", phase);
+    }
+    const fillEl = $("job-status-mini-fill");
+    if (fillEl) fillEl.style.width = pct + "%";
+    const pctEl = $("job-status-mini-pct");
+    if (pctEl) pctEl.textContent = pct + "%";
+    const fracEl = $("job-status-mini-frac");
+    if (fracEl) fracEl.textContent = snap.fractionText || "—";
+  }
+
+  function setJobStatusTab(tab) {
+    jobStatusTab = tab === "history" ? "history" : tab === "admin" ? "admin" : "live";
+    dockHistoryTab = jobStatusTab === "admin" ? "admin" : "all";
+    if (jobStatusTab === "history") {
+      loadFarmHistory().catch(() => {});
+    } else if (jobStatusTab === "admin" && isAdminUser()) {
+      loadAdminJobs({ reset: true }).catch(() => {});
+    } else {
+      stopAdminJobsPoll();
+    }
+    renderFarmDock({ immediate: true });
+  }
+
+  function expandJobStatus() {
+    jobStatusView = "expanded";
+    liveStatusOpen = true;
+    dockExpanded = true;
+    syncJobStatusShell();
+    if (jobStatusTab === "history") loadFarmHistory().catch(() => {});
+    if (jobStatusTab === "admin" && isAdminUser()) {
+      loadAdminJobs({ reset: true }).catch(() => {});
+    }
+    renderFarmDock({ immediate: true });
+  }
+
+  function minimizeJobStatus() {
+    if (hasActiveJobStatus()) {
+      jobStatusView = "minimized";
+    } else {
+      jobStatusView = "hidden";
+    }
+    liveStatusOpen = false;
+    dockExpanded = false;
+    syncJobStatusShell();
+  }
+
+  function hideJobStatusShell() {
+    jobStatusView = "hidden";
+    liveStatusOpen = false;
+    dockExpanded = false;
+    dockLiveLogOpen = false;
+    releaseFocusTrap();
+    syncJobStatusShell();
+  }
+
+  function openJobStatusHistory() {
+    setJobStatusTab("history");
+    jobStatusView = "expanded";
+    liveStatusOpen = true;
+    dockExpanded = true;
+    syncJobStatusShell();
+    loadFarmHistory()
+      .then(() => renderFarmDock({ immediate: true }))
+      .catch(() => renderFarmDock({ immediate: true }));
+  }
+
+  function showFarmDock() {
+    if (jobStatusView === "hidden") {
+      if (hasActiveJobStatus()) jobStatusView = "minimized";
+      else return;
+    }
+    syncJobStatusShell();
   }
 
   function hideFarmDock() {
-    const root = $("farm-dock-root");
-    if (!root) return;
-    root.classList.remove("is-expanded");
-    root.classList.add("hidden");
-    root.setAttribute("aria-hidden", "true");
-    const sheet = $("farm-dock-sheet");
-    if (sheet) sheet.classList.add("hidden");
-    dockExpanded = false;
+    hideJobStatusShell();
     dockPhase = null;
     dockOk = null;
     dockJobStartedAt = null;
+    dockJobFinishedAt = null;
+    liveJob = null;
+    statusContext = null;
+    pipelineState = null;
+    farmDockFlash = { text: "", kind: "muted" };
     stopDockElapsedTimer();
     clearPendingFarmJobs();
-    document.body.classList.remove("has-farm-dock");
-    const fab = $("farm-dock-fab");
-    if (fab) fab.setAttribute("aria-expanded", "false");
   }
 
   function expandFarmDock() {
-    const root = $("farm-dock-root");
-    const sheet = $("farm-dock-sheet");
-    if (!root || !sheet) return;
-    showFarmDock();
-    root.classList.add("is-expanded");
-    sheet.classList.remove("hidden");
-    dockExpanded = true;
-    const fab = $("farm-dock-fab");
-    if (fab) fab.setAttribute("aria-expanded", "true");
-    trapFocus(sheet);
-    loadFarmHistory()
-      .then(() => renderFarmDock())
-      .catch(() => renderFarmDock());
+    expandJobStatus();
   }
 
   function collapseFarmDock() {
-    const root = $("farm-dock-root");
-    const sheet = $("farm-dock-sheet");
-    if (!root || !sheet) return;
-    root.classList.remove("is-expanded");
-    sheet.classList.add("hidden");
-    dockExpanded = false;
-    const fab = $("farm-dock-fab");
-    if (fab) fab.setAttribute("aria-expanded", "false");
-    releaseFocusTrap();
-    fab?.focus?.();
+    minimizeJobStatus();
   }
 
   function updateFarmDockBar(opts = {}) {
@@ -6880,8 +9377,8 @@
     lastGate = gate || lastGate;
     dockPhase = "queued";
     dockOk = null;
+    jobStatusTab = "live";
     showFarmDock();
-    expandFarmDock();
     renderFarmDock({
       mode: jobKindToMode(queuedJobKind || currentJobKind()),
       waking: opts.waking,
@@ -6910,23 +9407,45 @@
 
   function applyLiveJobProgress(jobRow, mode, target) {
     const m = mode || jobKindToMode(jobRow?.job_kind) || statusContext?.mode || "partyrun";
-    if (!pipelineState) {
-      statusContext = statusContext || { mode: m, target: target || 0 };
-      if (!statusContext.mode) statusContext.mode = m;
-      if (!statusContext.target && target) statusContext.target = target;
+    // Switch pipeline when the active job kind changes (prevents Party Run steps leaking onto Cookie Unlock).
+    if (!pipelineState || pipelineState.mode !== m) {
+      const keep = statusContext?.mode === m ? statusContext : null;
+      statusContext = {
+        ...(keep || {}),
+        mode: m,
+        target: target || keep?.target || 0,
+      };
       pipelineState = freshPipeline(m);
       if (!dockJobStartedAt) dockJobStartedAt = Date.now();
       if (dockPhase !== "running" && dockPhase !== "done" && dockPhase !== "error") {
         dockPhase = "running";
       }
+    } else if (dockPhase !== "running" && dockPhase !== "done" && dockPhase !== "error") {
+      dockPhase = "running";
     }
     const logs = jobRow?.logs || [];
     applyLogsToPipeline(logs, m);
     const parsed = parseProgressFromLogs(logs, m, target);
+    // Prefer DB progress only when it advances past log-parsed values (or job finished).
+    // Stale worker heartbeats that keep writing {current:0} must not wipe live log progress.
+    const jobDone =
+      jobRow?.status === "succeeded" ||
+      jobRow?.status === "failed" ||
+      jobRow?.status === "cancelled";
     if (jobRow?.progress) {
-      if (jobRow.progress.current != null) parsed.current = Number(jobRow.progress.current);
-      if (jobRow.progress.total != null) parsed.total = Number(jobRow.progress.total);
-      if (jobRow.progress.phase) parsed.phase = jobRow.progress.phase;
+      const dbCur = jobRow.progress.current != null ? Number(jobRow.progress.current) : null;
+      const dbTot = jobRow.progress.total != null ? Number(jobRow.progress.total) : null;
+      if (dbTot != null && dbTot > 0) {
+        parsed.total = Math.max(Number(parsed.total) || 0, dbTot);
+      }
+      if (dbCur != null && Number.isFinite(dbCur)) {
+        if (jobDone || dbCur >= (Number(parsed.current) || 0)) {
+          parsed.current = dbCur;
+        }
+      }
+      if (jobRow.progress.phase) {
+        parsed.phase = jobRow.progress.phase;
+      }
     }
     if (m === "upgrade" && statusContext?.itemTotal > 0) {
       parsed.total = statusContext.itemTotal;
@@ -6938,11 +9457,45 @@
       current: parsed.current,
       total: parsed.total || target || statusContext?.target || 0,
     };
+    if (parsed.phase) {
+      pipelineState.progressPhase = parsed.phase;
+      const phaseStep = stepIdxFromPhase(m, parsed.phase);
+      if (phaseStep >= 0) setPipelineActive(phaseStep);
+    }
     renderPipeline();
+  }
+
+  function stepIdxFromPhase(mode, phase) {
+    const key = String(phase || "").toLowerCase();
+    if (!key) return -1;
+    const alias = {
+      start: "login",
+      round: "run",
+      collect: "claim",
+      items: mode === "cookie_unlock" ? "unlock" : mode === "upgrade" ? "upgrade" : "run",
+      unlock: "unlock",
+      buy: "buy",
+      extract: "extract",
+      open: "open",
+      draw: "draw",
+      guests: "guests",
+      send: "send",
+    };
+    const want = alias[key] || key;
+    const steps = pipelineStepsFor(mode);
+    return steps.findIndex((s) => s.id === want);
   }
 
   async function watchFarmJob(jobId, mode, target, handlers) {
     persistWatchJobId(jobId);
+    // Bind the tracked live job to this concrete job id so pollers can't hijack it.
+    if (!liveJob || liveJob.mode !== mode) {
+      liveJob = { id: jobId, mode, target: Number(target) || 0, finished: false };
+    } else {
+      liveJob.id = jobId;
+      liveJob.finished = false;
+      if (target) liveJob.target = Number(target) || liveJob.target;
+    }
     dockPhase = "running";
     dockOk = null;
     if (!dockJobStartedAt) dockJobStartedAt = Date.now();
@@ -6959,12 +9512,33 @@
         stopWatchJobPoll();
         stopDockElapsedTimer();
         persistWatchJobId(null);
-        const ok = jobRow?.status === "succeeded";
         const result = jobRow?.result || {};
         const logs = jobRow?.logs || [];
+        const st = jobRow?.status || "";
+        let ok = st === "succeeded";
+        // Cookie unlock: treat in-game unlock / partial result as success even if
+        // an older worker wrote failed after Unlock OK + upgrade fail.
+        if (
+          !ok &&
+          st !== "cancelled" &&
+          (mode === "cookie_unlock" || mode === "cookie") &&
+          (Number(result.items_done || 0) > 0 || result.partial || result.ok === true)
+        ) {
+          ok = true;
+        }
         dockOk = ok;
         dockPhase = ok ? "done" : "error";
+        lastFinishedJobId = jobId;
+        if (liveJob && (liveJob.id === jobId || !liveJob.id)) {
+          liveJob.id = jobId;
+          liveJob.finished = true;
+        }
+        stopProgressPoll();
         buildFinalPipeline(logs, result, ok, mode);
+        // Show success/error state immediately (before any queued next job starts).
+        openRunStatusPopup(false);
+        setRunStatusClosable(true);
+        setRunStatusSubtitle(true, ok);
         renderFarmDock({ mode, target, ok });
         if (ok && typeof handlers?.onSuccess === "function") {
           handlers.onSuccess({ ...jobRow, result, ok: true, logs, ...result });
@@ -7027,20 +9601,18 @@
     });
   }
 
-  async function submitFarmJob({ url, body, mode, target, handlers }) {
+  async function submitFarmJob({ url, body, mode, target, handlers, extras }) {
     farmRunning = true;
     updateFarmAvailability();
-    dockPhase = "running";
-    dockOk = null;
-    statusContext = { mode, target };
-    expandFarmDock();
+    resetDockLiveForJob(mode, target, extras || {});
+    showFarmDock();
     renderFarmDock({ mode, target });
     try {
       await ensureApiReady();
       const data = await api(url, { method: "POST", body });
       if (data.accepted && data.job_id) {
-        startLiveStages({ mode, target });
-        expandFarmDock();
+        startLiveStages({ mode, target, ...(extras || {}) });
+        showFarmDock();
         return await watchFarmJob(data.job_id, mode, target, handlers);
       }
       if (data.accepted && !data.job_id) {
@@ -7052,9 +9624,9 @@
         const ok = !!data.ok;
         dockPhase = ok ? "done" : "error";
         dockOk = ok;
-        startLiveStages({ mode, target });
+        startLiveStages({ mode, target, ...(extras || {}) });
         buildFinalPipeline(data.logs || [], data.result || data, ok, mode);
-        expandFarmDock();
+        showFarmDock();
         if (ok && handlers?.onSuccess) handlers.onSuccess(data);
         else if (!ok && handlers?.onError) handlers.onError(data);
         return data;
@@ -7063,10 +9635,10 @@
     } catch (e) {
       clearStageTimer();
       if (e.status === 409 || /farm_busy/i.test(String(e.message))) {
-        expandFarmDock();
+        showFarmDock();
         await enterQueueFor(
           e.gate || e.data?.detail?.gate,
-          () => submitFarmJob({ url, body, mode, target, handlers }),
+          () => submitFarmJob({ url, body, mode, target, handlers, extras }),
           modeToJobKind(mode)
         );
         setFarmStatus( "ระบบไม่ว่าง — จองคิวให้แล้ว รอสักครู่", "muted");
@@ -7075,7 +9647,7 @@
       if (/job_tracking_unavailable/i.test(String(e.message))) {
         dockPhase = "error";
         dockOk = false;
-        expandFarmDock();
+        showFarmDock();
         renderFarmDock({ mode, target, ok: false, errorMsg: "ไม่สามารถติดตามงานบนเซิร์ฟเวอร์ได้ — ลองใหม่" });
       }
       throw e;
@@ -7083,7 +9655,7 @@
       farmRunning = false;
       updateFarmAvailability();
       if (!queuedRun && !activeWatchJobId) {
-        dequeueAndStartNext();
+        dequeueAndStartNext(dockPhase === "done" || dockPhase === "error" ? 900 : 320);
       }
     }
   }
@@ -7100,13 +9672,18 @@
           jobId = localStorage.getItem(FARM_JOB_ID_KEY);
         } catch (_) {}
       }
+      // Never resurrect a job we already finished and are showing as done/error.
+      if (active?.active && active.job_id && active.job_id === lastFinishedJobId) {
+        return;
+      }
       if (jobId && (active?.active || jobId)) {
         if (active?.active) {
-          const mode = jobKindToMode(active.job_kind);
+          const mode = jobKindToMode(active.job_kind) || "partyrun";
           const target = Number(active.progress?.total) || statusContext?.target || 0;
-          statusContext = { mode, target };
+          resetDockLiveForJob(mode, target);
+          statusContext = { ...(statusContext || {}), mode, target };
           startLiveStages({ mode, target });
-          expandFarmDock();
+          showFarmDock();
           farmRunning = true;
           updateFarmAvailability();
           watchFarmJob(jobId, mode, target, {
@@ -7138,28 +9715,145 @@
     } catch (_) {}
   }
 
-  function openRunStatusPopup(running) {
-    showFarmDock();
-    clearRunStatusAutoClose();
-    setRunStatusClosable(!running);
-    if (running) {
-      pendingAfterRunStatus = null;
-      setRunStatusSubtitle(false);
-      expandFarmDock();
-    } else {
-      expandFarmDock();
+  function liveStatusJobId() {
+    return liveJob?.id || activeWatchJobId || "";
+  }
+
+  function renderLiveStatus(snap) {
+    if (jobStatusView !== "expanded" || jobStatusTab !== "live") return;
+    snap = snap || buildDockSnapshot();
+    const phase = snap.phase || "idle";
+
+    const card = $("live-status-card");
+    if (card) {
+      card.setAttribute("data-phase", phase);
+      const compactIdle = phase === "idle" || phase === "done";
+      card.classList.toggle("is-compact", compactIdle);
+    }
+
+    const iconImg = $("live-status-icon-img");
+    const iconSrc =
+      resolveMediaSrc(snap.iconUrl) ||
+      (snap.mode ? resolveMediaSrc(dockModeIcon(snap.mode)) : resolveMediaSrc("notice_b20.png"));
+    if (iconImg && iconSrc && iconImg.getAttribute("src") !== iconSrc) {
+      iconImg.src = iconSrc;
+    }
+
+    const chip = $("live-status-chip");
+    if (chip) {
+      chip.textContent = snap.statusBadge || dockPhaseLabel(phase);
+      chip.setAttribute("data-phase", phase);
+    }
+
+    const titleEl = $("live-status-title");
+    if (titleEl) titleEl.textContent = snap.jobTitle || "งานฟาร์ม";
+    const detailEl = $("live-status-detail");
+    if (detailEl) detailEl.textContent = snap.jobDetail || snap.panelSub || "—";
+
+    const pct = Math.max(0, Math.min(100, Number(snap.progress?.pct) || 0));
+    const ring = $("live-status-ring");
+    if (ring) ring.style.setProperty("--pct", String(pct));
+    const pctEl = $("live-status-pct");
+    if (pctEl) pctEl.textContent = pct + "%";
+    const fracEl = $("live-status-fraction");
+    if (fracEl) fracEl.textContent = snap.fractionText || "—";
+
+    const phaseEl = $("live-status-phase");
+    if (phaseEl) phaseEl.textContent = snap.statusLineText || dockPhaseLabel(phase);
+    const timeEl = $("live-status-time");
+    if (timeEl) {
+      timeEl.textContent =
+        snap.timeLine ||
+        (snap.elapsedSec ? formatDockElapsed(snap.elapsedSec) : "—");
+    }
+
+    const stepsBox = $("live-status-steps");
+    if (stepsBox) {
+      stepsBox.replaceChildren();
+      const steps = Array.isArray(snap.steps) ? snap.steps : [];
+      const kinds = snap.stepKinds || {};
+      for (const s of steps) {
+        const el = document.createElement("span");
+        const kind = kinds[s.id] || "idle";
+        el.className =
+          "live-status-step" +
+          (kind === "ok"
+            ? " is-ok"
+            : kind === "pending"
+              ? " is-pending"
+              : kind === "err"
+                ? " is-err"
+                : "");
+        el.textContent = s.label || s.id;
+        stepsBox.appendChild(el);
+      }
+    }
+
+    const logWrap = $("live-status-log-wrap");
+    const logList = $("live-status-log");
+    const logLines = Array.isArray(snap.logLines) ? snap.logLines.slice(-120) : [];
+    if (logWrap && logList) {
+      if (logLines.length) {
+        logWrap.classList.remove("hidden");
+        logList.replaceChildren();
+        for (const l of logLines) {
+          const text = typeof l === "string" ? l : l?.text || "";
+          const k = typeof l === "object" && l?.kind ? l.kind : "";
+          const li = document.createElement("li");
+          li.className = "live-status-log-line" + (k ? " is-" + k : "");
+          li.textContent = text;
+          logList.appendChild(li);
+        }
+        logList.classList.toggle("hidden", !liveStatusLogOpen);
+        logList.setAttribute("aria-hidden", liveStatusLogOpen ? "false" : "true");
+        const tgl = $("live-status-log-toggle");
+        if (tgl) tgl.setAttribute("aria-expanded", liveStatusLogOpen ? "true" : "false");
+      } else {
+        logWrap.classList.add("hidden");
+      }
+    }
+
+    const running = phase === "running" || phase === "queued";
+    const cancelable = running && !!liveStatusJobId();
+    const cancelBtn = $("live-status-cancel");
+    if (cancelBtn) cancelBtn.classList.toggle("hidden", !cancelable);
+    const doneBtn = $("live-status-done");
+    if (doneBtn) {
+      doneBtn.classList.toggle("hidden", running);
+      doneBtn.textContent = phase === "done" ? "เสร็จสิ้น" : "ปิด";
     }
   }
 
-  function closeRunStatusPopup() {
-    if (!runStatusClosable) {
-      collapseFarmDock();
-      return;
+  function openLiveStatus() {
+    jobStatusTab = "live";
+    expandJobStatus();
+  }
+
+  function closeLiveStatus() {
+    minimizeJobStatus();
+  }
+
+  function openRunStatusPopup(running) {
+    clearRunStatusAutoClose();
+    jobStatusTab = "live";
+    if (running) {
+      pendingAfterRunStatus = null;
+      setRunStatusSubtitle(false);
     }
+    if (hasActiveJobStatus() || running) {
+      jobStatusView = jobStatusView === "expanded" ? "expanded" : "minimized";
+      showFarmDock();
+    }
+    liveStatusOpen = jobStatusView === "expanded";
+    syncJobStatusShell();
+    renderFarmDock({ immediate: true });
+  }
+
+  function closeRunStatusPopup() {
     clearRunStatusAutoClose();
     const cb = pendingAfterRunStatus;
     pendingAfterRunStatus = null;
-    collapseFarmDock();
+    hideJobStatusShell();
     if (typeof cb === "function") cb();
     if (dockPhase === "done" || dockPhase === "error") resetFarmDockIdle();
   }
@@ -7168,7 +9862,7 @@
     clearRunStatusAutoClose();
     runStatusClosable = true;
     pendingAfterRunStatus = null;
-    collapseFarmDock();
+    hideJobStatusShell();
     setRunStatusSubtitle(false);
   }
 
@@ -7236,6 +9930,7 @@
     const parsed = parseProgressFromLogs(rawLogs, m, statusContext?.target);
     pipelineState.progress = { current: parsed.current, total: parsed.total };
     pipelineState.logLines = parsed.lines;
+    if (parsed.phase) pipelineState.progressPhase = parsed.phase;
     if (parsed.stepIdx > 0) setPipelineActive(parsed.stepIdx);
 
     if (m === "partyrun") {
@@ -7330,17 +10025,28 @@
   }
 
   async function pollActiveJobProgress() {
+    if (watchJobTimer) return;
     if (!accessToken || (!farmRunning && !activeWatchJobId)) return;
     try {
       const data = await api("/api/farm/active-job");
       if (!data?.active || !pipelineState) return;
-      const mode = statusContext?.mode || pipelineState.mode || "partyrun";
-      applyLiveJobProgress(data, mode, statusContext?.target);
+      // Only accept progress for the job we are actually tracking.
+      // A different server-side "running" row (e.g. a stale party run) must not hijack the card.
+      if (activeWatchJobId && data.job_id && data.job_id !== activeWatchJobId) return;
+      if (liveJob?.finished) return;
+      const mode =
+        (liveJob && !liveJob.finished && liveJob.mode) ||
+        jobKindToMode(data.job_kind) ||
+        statusContext?.mode ||
+        pipelineState.mode ||
+        "partyrun";
+      applyLiveJobProgress(data, mode, liveJob?.target || statusContext?.target);
     } catch (_) {}
   }
 
   function startProgressPoll() {
     stopProgressPoll();
+    if (watchJobTimer) return;
     progressPollTimer = setInterval(() => {
       pollActiveJobProgress().catch(() => {});
     }, 2000);
@@ -7356,13 +10062,24 @@
   }
 
   function startLiveStages(ctx) {
-    statusContext = ctx || { mode: "partyrun", target: 0 };
-    const mode = statusContext.mode || "partyrun";
+    const next = ctx || { mode: "partyrun", target: 0 };
+    const mode = next.mode || "partyrun";
+    const prev =
+      statusContext?.mode === mode
+        ? statusContext
+        : null;
+    statusContext = {
+      ...(prev || {}),
+      ...next,
+      mode,
+      target: next.target != null ? next.target : prev?.target || 0,
+    };
     clearStageTimer();
     clearRunStatusAutoClose();
     dockPhase = "running";
     dockOk = null;
     dockJobStartedAt = Date.now();
+    dockJobFinishedAt = null;
     startDockElapsedTimer();
     setRunStatusTitle(mode);
     pipelineState = freshPipeline(mode);
@@ -7390,8 +10107,10 @@
     clearRunStatusAutoClose();
     setRunStatusClosable(true);
     setRunStatusSubtitle(true, true);
-    // Keep popup open until user closes — no auto-close.
-    expandFarmDock();
+    if (jobStatusView === "hidden") jobStatusView = "minimized";
+    jobStatusTab = "live";
+    showFarmDock();
+    renderFarmDock({ immediate: true });
     loadFarmHistory().catch(() => {});
   }
 
@@ -7451,29 +10170,59 @@
   }
 
   const LOG_TH = [
+    [/^\[round\s+(\d+)\/(\d+)\]\s*\[2\/4\]/i, (m) => "รอบ " + m[1] + "/" + m[2] + " — จับคู่ห้อง"],
+    [/^\[round\s+(\d+)\/(\d+)\]\s*\[3\/4\]/i, (m) => "รอบ " + m[1] + "/" + m[2] + " — กำลังวิ่ง+ส่งผล"],
     [/^\[round\s+(\d+)\/(\d+)\]/i, (m) => "รอบที่ " + m[1] + " จาก " + m[2]],
+    [/partyrun:\s*starting\s+(\d+)\s+run/i, (m) => "เริ่มวิ่ง " + m[1] + " รอบ"],
     [/claiming reward/i, () => "กำลังรับรางวัล"],
     [/REWARD CLAIMED/i, () => "รับรางวัลแล้ว"],
     [/matchmaking/i, () => "กำลังจับคู่ห้อง"],
     [/creating guest/i, () => "กำลังสร้างไอดีชั่วคราว"],
     [/create_guest failed/i, () => "สร้างไอดีชั่วคราวไม่สำเร็จ"],
     [/sending life/i, () => "กำลังส่งหัวใจ"],
+    // Heart farm — detailed session lines
+    [/heart:\s*login main account/i, () => "เข้าสู่ระบบบัญชีหลัก"],
+    [/heart:\s*prefetching\s+~?(\d+)\s+guests/i, (m) => "เตรียมเพื่อน guest ~" + m[1] + " คน"],
+    [/session\s+(\d+):\s*target=(\d+)\s+collected=(\d+)\s+room=(\d+)\s+batch=(\d+)/i, (m) => "รอบ " + m[1] + ": เก็บแล้ว " + m[3] + "/" + m[2] + " (ชุดละ " + m[5] + ")"],
+    [/session\s+(\d+)\s+done:\s*\+(\d+)\s+total\s+(\d+)\/(\d+)/i, (m) => "รอบ " + m[1] + " เสร็จ +" + m[2] + " · รวม " + m[3] + "/" + m[4]],
+    [/(\d+)\/(\d+)\s+guests already prefetched/i, (m) => "เตรียมเพื่อนไว้แล้ว " + m[1] + "/" + m[2]],
+    [/prefetch dry\s*\((\d+)\/(\d+)\)/i, (m) => "เพื่อนไม่พอ (" + m[1] + "/" + m[2] + ") — เติมเพิ่ม"],
+    [/heart:\s*no guests available/i, () => "รอบนี้ไม่มีเพื่อนให้ส่ง"],
+    [/heart:\s*2 zero sessions/i, () => "ไม่ได้หัวใจ 2 รอบติด — หยุด"],
     [/collected\s+(\d+)\/(\d+)\s+hearts/i, (m) => "เก็บหัวใจได้ " + m[1] + " จาก " + m[2]],
     [/claim:\s*collected\s+(\d+)\/(\d+)/i, (m) => "รับหัวใจได้ " + m[1] + " จาก " + m[2]],
     [/claim:\s*collected\s+(\d+)/i, (m) => "รับหัวใจได้ " + m[1]],
     [/hearts collected/i, () => "เก็บหัวใจแล้ว"],
-    [/\bBUY\b.*\bOK\b/i, () => "ซื้อสมบัติสำเร็จ"],
-    [/\bBUY\b.*\bERR\b/i, () => "ซื้อสมบัติไม่สำเร็จ"],
-    [/\bBREAK\b.*\bOK\b/i, () => "ย่อยสมบัติสำเร็จ"],
-    [/\bBREAK\b.*\bERR\b/i, () => "ย่อยสมบัติไม่สำเร็จ"],
+    // Powder farm
+    [/powder:\s*login/i, () => "เข้าสู่ระบบเพื่อฟาร์มผง"],
+    [/\[(\d+)\/(\d+)\]\s+BUY\s+(.+?)\s+code=/i, (m) => "ซื้อสมบัติ " + m[1] + "/" + m[2] + " — " + m[3].trim()],
+    [/\bBREAK\s+OK\s+powder\+(\d+)/i, (m) => "ย่อยได้ผง +" + m[1]],
     [/\[SKIP BREAK\]/i, () => "ข้ามการย่อย — ไม่พบ uuid"],
+    [/\bBUY\b.*\bERR\b/i, () => "ซื้อสมบัติไม่สำเร็จ"],
+    [/\bBREAK\b.*\bERR\b/i, () => "ย่อยสมบัติไม่สำเร็จ"],
     [/reroll guest\s*\[(\d+)\/(\d+)\]/i, (m) => "รีโรลไอดีใหม่ " + m[1] + "/" + m[2]],
+    [/reroll\s*\[(\d+)\/(\d+)\]\s+(.+)/i, (m) => "รีโรลบัญชี " + m[1] + "/" + m[2] + " — " + m[3].trim()],
     [/reroll\s*\[(\d+)\/(\d+)\]/i, (m) => "รีโรลบัญชี " + m[1] + "/" + m[2]],
+    [/\[TARGET\]\s*pet\s+(.+?)\s+—\s+stop hatch/i, (m) => "เจอเพ็ตเป้าหมาย " + m[1].trim() + " — หยุดฟัก"],
+    [/reroll fail\s+(.+)/i, (m) => "รีโรลไม่สำเร็จ: " + m[1].trim()],
     [/quest:\s*claimed\s+(\d+)\/(\d+)/i, (m) => "รับรางวัลเควสแล้ว " + m[1] + "/" + m[2]],
     [/quest:\s*logging in/i, () => "กำลังเข้าสู่ระบบเพื่อรับเควส"],
     [/quest:\s*auto-selected\s+(\d+)/i, (m) => "เลือกเควสที่รับได้ " + m[1] + " รายการ"],
-    [/powder:\s*login/i, () => "กำลังเข้าสู่ระบบเพื่อฟาร์มผง"],
     [/cookie_unlock:\s*login/i, () => "กำลังเข้าสู่ระบบเพื่อปลดล็อกคุกกี้"],
+    [/cookie-unlock batch:\s*item\s+(\d+)\/(\d+)\s+—\s+prepare/i, (m) => "เตรียมปลดล็อกคุกกี้ 0/" + m[2]],
+    [/cookie-unlock batch:\s*item\s+(\d+)\/(\d+)\s+—\s+(.+)/i, (m) => "ปลดล็อกตัวที่ " + m[1] + "/" + m[2] + " — " + m[3].trim()],
+    [/cookie-unlock:\s*start\s+(.+?)(?:\s+\(|$)/i, (m) => "เริ่มปลดล็อก " + m[1].trim()],
+    [/cookie-unlock:\s*done\s+(.+)/i, (m) => "ปลดล็อก " + m[1].trim() + " สำเร็จ"],
+    [/cookie-unlock:\s*skip\s+(.+?)\s+—\s+already owned/i, (m) => "ข้าม " + m[1].trim() + " — มีอยู่แล้ว"],
+    [/cookie-unlock:\s*skip\s+(.+?)\s+—\s+coin\s+/i, (m) => "ข้าม " + m[1].trim() + " — เหรียญไม่พอ"],
+    [/cookie-unlock:\s*pre-buy\s+(.+?)\s+×\s+(\d+)/i, (m) => "ซื้อล่วงหน้า " + m[1].trim() + " × " + m[2]],
+    [/cookie-unlock:\s*pre-buy\s+(\d+)\/(\d+)\s+OK/i, (m) => "ซื้อล่วงหน้า " + m[1] + "/" + m[2] + " สำเร็จ"],
+    [/cookie-unlock:\s*pre-buy failed/i, () => "ซื้อล่วงหน้าไม่สำเร็จ"],
+    [/cookie-unlock:\s*(.+?)\s+\[(.+?)\]\s+\((.+)\)/i, (m) => m[1].trim() + " [" + m[2] + "] (" + m[3] + ")"],
+    [/cookie-unlock:\s*(.+?)\s+OK$/i, (m) => m[1].trim() + " สำเร็จ"],
+    [/cookie-unlock:\s*(.+?)\s+failed/i, (m) => m[1].trim() + " ไม่สำเร็จ"],
+    [/cookie-unlock:\s*refresh inventory/i, () => "กำลังโหลดรายการคุกกี้"],
+    [/cookie-unlock:\s*re-init failed/i, () => "รีเฟรชบัญชีไม่สำเร็จ"],
     [/heart:\s*login main account/i, () => "กำลังเข้าสู่ระบบบัญชีหลัก"],
     [/heart:\s*no friend slots left/i, () => "ช่องเพื่อนเต็มแล้ว"],
     [/heart:\s*stopped by user/i, () => "หยุดโดยผู้ใช้"],
@@ -7569,7 +10318,7 @@
 
     if (/powder_session_missing/i.test(raw)) {
       clearPendingFarmJobs();
-      expandFarmDock();
+      showFarmDock();
       renderFarmDock({
         mode,
         ok: false,
@@ -7585,6 +10334,12 @@
       forceCloseRunStatusPopup();
       showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
       setFarmStatus( ERR_TH.account_banned, "err");
+    } else if (/feature_locked/i.test(raw)) {
+      clearPendingFarmJobs();
+      forceCloseRunStatusPopup();
+      showErrorModal(ERR_TH.feature_locked, "ปิดปรับปรุง");
+      setFarmStatus(ERR_TH.feature_locked, "err");
+      paintFeatureLocks();
     } else if (/maintenance/i.test(raw)) {
       clearPendingFarmJobs();
       forceCloseRunStatusPopup();
@@ -7616,7 +10371,7 @@
       dequeueAndStartNext();
     } else {
       const msg = thError(raw) || "การฟาร์มไม่สำเร็จ";
-      expandFarmDock();
+      showFarmDock();
       renderFarmDock({ mode, ok: false, errorMsg: msg });
       setFarmStatus( msg, "err");
       if (isRentalDeniedError(e)) {
@@ -7743,31 +10498,30 @@
       await promptProxyModal({ locked: true, title: "ใส่ Proxy ก่อนฟาร์มผง" });
       if (!hasUsableProxy()) return;
     }
-    paintPowderExamEstimate();
-    if (!powderEstimate?.can_run) {
+    paintPowderPlan(powderPlan);
+    if (!powderPlan?.can_run) {
       showErrorModal(ERR_TH.insufficient_coin, "เหรียญไม่พอ");
       return;
     }
 
-    const rounds = clampPowderRounds(powderRounds ?? Number($("powder-rounds")?.value) ?? 10);
+    const rounds = clampPowderRounds(Number(powderPlan?.rounds) || powderRounds || 1);
     const stuffSeq = Math.max(1, Number($("powder-stuff-seq")?.value) || 811);
     const price = Math.max(0, Number($("powder-price")?.value) || 5000);
-    const powderQty = Math.max(1, Number($("powder-qty")?.value) || 15);
+    const powderQty = Math.max(1, Number($("powder-qty")?.value) || POWDER_BREAK_FALLBACK);
     const doBreak = !!$("powder-do-break")?.checked;
+    const estGain =
+      Number(powderPlan?.powder_gain) || rounds * powderYieldPerRound();
     setFarmStatus(
       "กำลังฟาร์มผง " +
         formatNumTh(rounds) +
-        " รอบ (seq " +
-        stuffSeq +
-        " · ≈" +
-        formatNumTh(rounds * powderQty) +
+        " กล่อง (≈" +
+        formatNumTh(estGain) +
         " ผง) …",
       "muted"
     );
 
     const body = {
       devplay_session_id: devplaySession.id,
-      treasure_name: "Box-" + stuffSeq,
       rounds,
       stuff_seq: stuffSeq,
       price,
@@ -7781,7 +10535,7 @@
         rounds || 0,
         rounds == null
           ? "ฟาร์มผง · ใช้เหรียญทั้งหมด"
-          : "ฟาร์มผง · " + formatNumTh(rounds) + " รอบ",
+          : "ฟาร์มผง · " + formatNumTh(rounds) + " กล่อง",
         () => runPowder()
       )
     ) {
@@ -7826,7 +10580,9 @@
             pendingAfterRunStatus = () =>
               showPowderResultModal({
                 account: devplaySession?.nickname || "—",
-                treasure: result.treasure || powderTreasureName,
+                treasure:
+                  powderStuffLabel ||
+                  ("กล่อง seq " + (Number($("powder-stuff-seq")?.value) || 811)),
                 powderGained: formatNumTh(powderGained),
                 powderAfter: formatNumTh(result.powder_after ?? "—"),
                 coinAfter: formatNumTh(result.coin_after ?? devplaySession?.coin ?? "—"),
@@ -7976,9 +10732,16 @@
   }
 
   async function runUpgrade() {
-    const items = getSelectedUpgradeItems();
+    const items = getSelectedUpgradeItems().slice(0, UPGRADE_MAX_SELECT);
     if (!items.length) {
       showErrorModal("เลือกสมบัติที่จะตีบวกก่อน", "ยังไม่ได้เลือก");
+      return;
+    }
+    if (items.length > UPGRADE_MAX_SELECT) {
+      showErrorModal(
+        "เลือกได้สูงสุด " + formatNumTh(UPGRADE_MAX_SELECT) + " ชิ้นต่อรัน",
+        "เกินจำนวนที่อนุญาต"
+      );
       return;
     }
     if (!hasFarmAccess()) {
@@ -7989,11 +10752,6 @@
       showErrorModal(ERR_TH.devplay_session_expired, "เชื่อม DevPlay ก่อน");
       return;
     }
-    if (!upgradeRngAccepted) {
-      showErrorModal("ต้องยอมรับความเสี่ยง RNG ก่อนเริ่ม", "ยังไม่ยืนยัน");
-      return;
-    }
-
     const mode = upgradeRunMode === "fast" ? "fast" : "sequential";
     setFarmStatus(
       (mode === "fast" ? "Fast · " : "") + "กำลังตีบวก " + formatNumTh(items.length) + " ชิ้น…",
@@ -8057,21 +10815,21 @@
             refreshGateAndQueueUi().catch(() => {});
             loadUpgradeTreasures(true).catch(() => {});
             loadFarmHistory().catch(() => {});
-            paintUpgradeGrid();
+            paintUpgradeSelectedSummary();
           },
           onError: (data) => {
             const result = data.result || data;
             const msg = farmErrorMessage(result, "ตีบวกไม่สำเร็จ (แห้วหรือ coin ไม่พอ)");
-            setFarmStatus( msg, "err");
+            setFarmStatus(msg, "err");
             loadUpgradeTreasures(true).catch(() => {});
             loadFarmHistory().catch(() => {});
-            paintUpgradeGrid();
+            paintUpgradeSelectedSummary();
           },
         },
       });
     } catch (e) {
       handleFarmRunException(e, "upgrade");
-      paintUpgradeGrid();
+      paintUpgradeSelectedSummary();
     }
   }
 
@@ -8111,8 +10869,8 @@
       await submitFarmJob({
         url: "/api/farm/heart/run",
         body: {
-          email: $("dp-acct-mail").value.trim(),
-          password: $("dp-acct-secret").value,
+          email: getDevPlayCreds().email,
+          password: getDevPlayCreds().password,
           target_hearts: target,
           proxy_url: getHeartProxy() || undefined,
           devplay_session_id: devplaySession?.id,
@@ -8130,7 +10888,7 @@
             );
             pendingAfterRunStatus = () =>
               showHeartResultModal({
-                account: devplaySession?.nickname || $("dp-acct-mail").value.trim() || "—",
+                account: devplaySession?.nickname || getDevPlayCreds().email || "—",
                 hearts: formatNumTh(hearts),
                 target: formatNumTh(target),
                 partial: hearts < target || !!data.partial,
@@ -8146,6 +10904,7 @@
             const code = String(result?.error || data.error || "");
             if (/heart_timeout/i.test(code)) msg = ERR_TH.heart_timeout;
             else if (/no_hearts_collected/i.test(code)) msg = ERR_TH.no_hearts_collected;
+            else if (/guest_creation_failed/i.test(code)) msg = ERR_TH.guest_creation_failed;
             setFarmStatus( msg, "err");
             loadFarmHistory().catch(() => {});
           },
@@ -8191,6 +10950,10 @@
       if (activeWatchJobId || dockPhase === "running") {
         resumeFarmSession().catch(() => {});
       }
+      if (jobStatusTab === "admin" && adminJobsTab === "live") {
+        loadAdminJobs({ reset: true, silent: true }).catch(() => {});
+      }
+      pingApiHealth(1).catch(() => {});
     });
 
     const { data } = await sb.auth.getSession();
@@ -8530,9 +11293,35 @@
     connectDevPlay();
   });
 
-  $("devplay-reconnect-btn")?.addEventListener("click", () => {
-    resetDevPlaySession();
-    connectDevPlay();
+  $("devplay-account-picker-list")?.addEventListener("click", (ev) => {
+    const removeBtn = ev.target.closest("[data-vault-remove]");
+    if (removeBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      removeDevPlayVaultEntry(removeBtn.dataset.vaultRemove).catch(() => {});
+      return;
+    }
+    const card = ev.target.closest("[data-vault-email]");
+    if (!card || devplayConnecting || farmRunning) return;
+    const email = card.dataset.vaultEmail;
+    const entry = devplayVaultEntries.find(
+      (e) => String(e.email || "").trim().toLowerCase() === String(email || "").trim().toLowerCase()
+    );
+    if (!entry) return;
+    connectDevPlay({ email: entry.email, password: entry.password });
+  });
+
+  $("devplay-new-account-link")?.addEventListener("click", () => {
+    const mail = $("dp-acct-mail");
+    const secret = $("dp-acct-secret");
+    mail?.removeAttribute("readonly");
+    secret?.removeAttribute("readonly");
+    mail?.focus();
+    $("devplay-creds-section")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+
+  $("devplay-refresh-btn")?.addEventListener("click", () => {
+    refreshDevPlayAccount();
   });
 
   $("devplay-logout-btn")?.addEventListener("click", () => {
@@ -8652,8 +11441,17 @@
     promptProxyModal({ locked: false, title: "ตั้งค่า Proxy" }).catch(() => {});
   });
   ["powder-stuff-seq", "powder-price", "powder-qty", "powder-do-break"].forEach((id) => {
-    $(id)?.addEventListener("input", () => paintPowderExamEstimate());
-    $(id)?.addEventListener("change", () => paintPowderExamEstimate());
+    $(id)?.addEventListener("input", () => {
+      if (id === "powder-stuff-seq") schedulePowderStuffLookup();
+      refreshPowderEstimate().catch(() => {});
+    });
+    $(id)?.addEventListener("change", () => {
+      if (id === "powder-stuff-seq") lookupPowderStuffSeq().catch(() => {});
+      refreshPowderEstimate().catch(() => {});
+    });
+  });
+  $("powder-stuff-search-btn")?.addEventListener("click", () => {
+    showPowderStuffSearchModal();
   });
   $("heart-proxy-url")?.addEventListener("input", (ev) => {
     saveHeartProxy(ev.target.value);
@@ -8672,7 +11470,7 @@
     if (v) showToast("บันทึก proxy แล้ว", "ok");
   });
 
-  $("devplay-shortcuts")?.addEventListener("click", (ev) => {
+  $("feature-dock-grid")?.addEventListener("click", (ev) => {
     const btn = ev.target.closest("[data-shortcut-tab]");
     if (!btn) return;
     onFarmTabClick(btn.dataset.shortcutTab);
@@ -8740,6 +11538,14 @@
   $("quest-reload-btn")?.addEventListener("click", () => {
     loadQuestList().catch(() => {});
   });
+  document.querySelectorAll("[data-quest-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-quest-filter") || "all";
+      if (next === questFilter) return;
+      questFilter = next;
+      paintQuestList();
+    });
+  });
   $("quest-claim-btn")?.addEventListener("click", () => {
     runQuestClaim().catch(() => {});
   });
@@ -8749,11 +11555,6 @@
   $("ds-path-select")?.addEventListener("change", () => updateFarmAvailability());
   $("ds-call-btn")?.addEventListener("click", () => {
     runDsCall().catch(() => {});
-  });
-
-  $("upgrade-rng-accept")?.addEventListener("change", (ev) => {
-    upgradeRngAccepted = !!ev.target.checked;
-    updateFarmAvailability();
   });
 
   $("upgrade-target-levels")?.addEventListener("click", (ev) => {
@@ -8772,39 +11573,34 @@
     loadUpgradeTreasures(true).catch(() => {});
   });
 
-  $("upgrade-grid-toggle")?.addEventListener("click", () => {
-    upgradeGridExpanded = !upgradeGridExpanded;
-    paintUpgradeGrid();
+  $("upgrade-pick-btn")?.addEventListener("click", () => {
+    showUpgradePickerModal();
   });
 
-  $("powder-pick-btn")?.addEventListener("click", () => {
-    showPowderTreasurePickerModal();
-  });
+  $("powder-target-powder-minus")?.addEventListener("click", () => bumpPowderTarget(-1));
+  $("powder-target-powder-plus")?.addEventListener("click", () => bumpPowderTarget(1));
+  $("powder-target-coin-minus")?.addEventListener("click", () => bumpPowderCoinBudget(-1));
+  $("powder-target-coin-plus")?.addEventListener("click", () => bumpPowderCoinBudget(1));
 
-  $("powder-minus")?.addEventListener("click", () => {
-    powderRounds = clampPowderRounds((powderRounds ?? powderMaxRounds()) - 1);
-    paintPowderStepper();
-    updateFarmAvailability();
-  });
-
-  $("powder-plus")?.addEventListener("click", () => {
-    powderRounds = clampPowderRounds((powderRounds ?? powderMaxRounds()) + 1);
-    paintPowderStepper();
-    updateFarmAvailability();
-  });
-
-  ["powder-rounds", "powder-target-input"].forEach((id) => {
+  ["powder-target-powder", "powder-target-coin"].forEach((id) => {
+    $(id)?.addEventListener("focus", () => {
+      powderEditLock = id === "powder-target-powder" ? "powder" : "coin";
+    });
     $(id)?.addEventListener("input", (ev) => {
       const el = ev.target;
       const cleaned = String(el.value || "").replace(/[^\d]/g, "");
       if (el.value !== cleaned) el.value = cleaned;
+      powderEditLock = id === "powder-target-powder" ? "powder" : "coin";
+      schedulePowderRefresh();
     });
   });
 
-  const commitPowderField = (id) =>
-    id === "powder-rounds" ? commitPowderRoundsFromInput() : commitPowderTargetFromInput();
+  const commitPowderField = (id) => {
+    if (id === "powder-target-powder") commitPowderTargetPowderFromInput();
+    else commitPowderTargetCoinFromInput();
+  };
 
-  ["powder-rounds", "powder-target-input"].forEach((id) => {
+  ["powder-target-powder", "powder-target-coin"].forEach((id) => {
     $(id)?.addEventListener("change", () => commitPowderField(id));
     $(id)?.addEventListener("blur", () => commitPowderField(id));
     $(id)?.addEventListener("keydown", (ev) => {
@@ -8865,10 +11661,6 @@
       const upgradeItems = getSelectedUpgradeItems();
       if (!upgradeItems.length) {
         showErrorModal("เลือกสมบัติที่จะตีบวกก่อน", "ยังไม่ได้เลือก");
-        return;
-      }
-      if (!upgradeRngAccepted) {
-        showErrorModal("ต้องยอมรับความเสี่ยง RNG ก่อนเริ่ม", "ยังไม่ยืนยัน");
         return;
       }
       if (upgradeRunMode === "fast") {
@@ -8960,15 +11752,13 @@
     }
 
     if (farmTab === "powder") {
-      if (!powderEstimate?.can_run) {
+      if (!powderPlan?.can_run) {
         showErrorModal(ERR_TH.insufficient_coin, "เหรียญไม่พอ");
         return;
       }
-      let askRounds = null;
-      if (powderRoundsSupported()) {
-        commitPowderRoundsFromInput();
-        askRounds = clampPowderRounds(powderRounds ?? powderMaxRounds());
-      }
+      if (powderEditLock === "coin") commitPowderTargetCoinFromInput();
+      else commitPowderTargetPowderFromInput();
+      const askRounds = clampPowderRounds(Number(powderPlan?.rounds) || powderRounds || 1);
       const confirmed = await showPowderConfirmModal(askRounds);
       if (!confirmed) {
         setFarmStatus( "ยกเลิกแล้ว", "muted");
@@ -9009,28 +11799,130 @@
     closeRunStatusPopup();
   });
 
-  $("farm-dock-fab")?.addEventListener("click", () => {
-    if (dockExpanded) collapseFarmDock();
-    else {
-      expandFarmDock();
-      loadFarmHistory().catch(() => {});
+  $("live-status-close")?.addEventListener("click", () => {
+    closeRunStatusPopup();
+  });
+  $("live-status-done")?.addEventListener("click", () => {
+    closeRunStatusPopup();
+  });
+  $("live-status-cancel")?.addEventListener("click", () => {
+    cancelLiveFarmJob().catch(() => {});
+  });
+  $("live-status-log-toggle")?.addEventListener("click", () => {
+    liveStatusLogOpen = !liveStatusLogOpen;
+    renderFarmDock({ immediate: true });
+  });
+  $("job-status-backdrop")?.addEventListener("click", () => {
+    if (dockPhase === "running" || dockPhase === "queued") {
+      minimizeJobStatus();
+      return;
     }
+    if (hasActiveJobStatus()) minimizeJobStatus();
+    else hideJobStatusShell();
   });
-
-  $("farm-dock-list")?.addEventListener("click", (ev) => {
-    const btn = ev.target?.closest?.("[data-cancel-pending]");
-    if (!btn) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-    const id = btn.getAttribute("data-cancel-pending");
-    if (id) cancelPendingFarmJob(id);
+  $("job-status-mini")?.addEventListener("click", () => {
+    expandJobStatus();
   });
-
-  document.querySelectorAll(".farm-dock-tab").forEach((btn) => {
+  $("job-status-minimize")?.addEventListener("click", () => {
+    minimizeJobStatus();
+  });
+  $("farm-history-open")?.addEventListener("click", () => {
+    openJobStatusHistory();
+  });
+  document.querySelectorAll("[data-job-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      const tab = btn.getAttribute("data-dock-tab") || "all";
-      dockHistoryTab = tab === "active" ? "active" : "all";
+      const tab = btn.getAttribute("data-job-tab") || "live";
+      if (tab === "admin" && !isAdminUser()) return;
+      setJobStatusTab(tab);
+    });
+  });
+
+  function onDockListClick(ev) {
+    const logToggle = ev.target?.closest?.("[data-dock-log-toggle]");
+    if (logToggle) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      dockLiveLogOpen = !dockLiveLogOpen;
       renderFarmDock();
+      return;
+    }
+    const pendingBtn = ev.target?.closest?.("[data-cancel-pending]");
+    if (pendingBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = pendingBtn.getAttribute("data-cancel-pending");
+      if (id) cancelPendingFarmJob(id);
+      return;
+    }
+    const jobBtn = ev.target?.closest?.("[data-cancel-job]");
+    if (jobBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      cancelLiveFarmJob().catch(() => {});
+      return;
+    }
+    const adminBtn = ev.target?.closest?.("[data-admin-cancel]");
+    if (adminBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = adminBtn.getAttribute("data-admin-cancel");
+      if (id) {
+        adminCancelJob(id).catch((e) =>
+          showErrorModal(thError(e.message) || "ยกเลิกไม่สำเร็จ", "Admin")
+        );
+      }
+    }
+  }
+
+  $("farm-dock-list")?.addEventListener("click", onDockListClick);
+  $("farm-dock-admin-list")?.addEventListener("click", onDockListClick);
+
+  $("farm-dock-cancel-all")?.addEventListener("click", () => {
+    cancelAllMyFarmWork().catch((e) =>
+      showErrorModal(thError(e.message) || "ยกเลิกไม่สำเร็จ", "ยกเลิกทั้งหมด")
+    );
+  });
+
+  $("farm-dock-leave-queue")?.addEventListener("click", () => {
+    leaveServerQueue().catch(() => {});
+  });
+
+  $("farm-dock-admin-clear")?.addEventListener("click", () => {
+    adminClearQueueAll().catch((e) =>
+      showErrorModal(thError(e.message) || "ล้างคิวไม่สำเร็จ", "Admin")
+    );
+  });
+
+  $("farm-dock-admin-heart-max-save")?.addEventListener("click", () => {
+    saveAdminHeartMaxSetting().catch((e) =>
+      showErrorModal(thError(e.message) || "บันทึกไม่สำเร็จ", "Admin")
+    );
+  });
+
+  $("farm-dock-admin-powder-max-save")?.addEventListener("click", () => {
+    saveAdminPowderMaxSetting().catch((e) =>
+      showErrorModal(thError(e.message) || "บันทึกไม่สำเร็จ", "Admin")
+    );
+  });
+
+  $("farm-dock-admin-more")?.addEventListener("click", () => {
+    loadAdminJobs({ reset: false }).catch(() => {});
+  });
+
+  document.querySelectorAll("[data-admin-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      adminJobsTab = btn.getAttribute("data-admin-tab") === "history" ? "history" : "live";
+      adminJobsFilter = "all";
+      loadAdminJobs({ reset: true })
+        .catch(() => {})
+        .finally(() => renderFarmDock());
+    });
+  });
+
+  document.querySelectorAll("[data-admin-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      adminJobsFilter = btn.getAttribute("data-admin-filter") || "all";
+      renderAdminJobsList();
     });
   });
 
@@ -9046,9 +11938,16 @@
 
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
-    const dockRoot = $("farm-dock-root");
-    if (dockRoot && !dockRoot.classList.contains("hidden") && dockExpanded) {
-      collapseFarmDock();
+    if (jobStatusView === "expanded") {
+      if (dockPhase !== "running" && dockPhase !== "queued") {
+        closeRunStatusPopup();
+      } else {
+        minimizeJobStatus();
+      }
+      return;
+    }
+    if (jobStatusView === "minimized") {
+      minimizeJobStatus();
       return;
     }
     if (modalRoot && !modalRoot.classList.contains("hidden") && !modalRoot.classList.contains("locked")) {
