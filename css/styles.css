@@ -8286,8 +8286,10 @@ body.menu-open {
 
 .upgrade-picker-grid {
   --upgrade-pick-min: 112px;
+  --upgrade-pick-media: 112px;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--upgrade-pick-min), 1fr));
+  grid-auto-rows: max-content;
   gap: 12px;
   flex: 1 1 auto;
   min-height: 180px;
@@ -8320,7 +8322,7 @@ body.menu-open {
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
   text-align: center;
-  min-height: 100%;
+  min-height: 0;
   outline: none;
   -webkit-tap-highlight-color: transparent;
   color: inherit;
@@ -8350,13 +8352,14 @@ body.menu-open {
 
 .upgrade-pick-card-media {
   position: relative;
-  width: min(100%, 112px);
+  width: var(--upgrade-pick-media);
+  height: var(--upgrade-pick-media);
   aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  overflow: visible;
+  overflow: hidden;
 }
 
 /* Grade frame from CDN — no CSS border lines */
@@ -8367,7 +8370,7 @@ body.menu-open {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .upgrade-pick-card-media .treasure-frame-bg {
@@ -8386,11 +8389,11 @@ body.menu-open {
   object-fit: contain;
 }
 
-/* Checklist sits ABOVE the grade frame + icon */
+/* Checklist sits ABOVE the grade frame + icon (inset so overflow:hidden does not clip it) */
 .upgrade-pick-check {
   position: absolute;
-  top: -2px;
-  right: -2px;
+  top: 2px;
+  right: 2px;
   z-index: 6;
   width: 24px;
   height: 24px;
@@ -8565,17 +8568,14 @@ body.menu-open {
   }
 
   .upgrade-picker-grid {
-    --upgrade-pick-min: 42vw;
+    --upgrade-pick-min: 140px;
+    --upgrade-pick-media: 100px;
     gap: 10px;
   }
 
   .upgrade-pick-card {
     padding: 8px 6px 8px;
     gap: 5px;
-  }
-
-  .upgrade-pick-card-media {
-    width: min(100%, 100px);
   }
 
   .upgrade-pick-check {
@@ -8613,11 +8613,8 @@ body.menu-open {
 @media (min-width: 641px) and (max-width: 1023px) {
   .upgrade-picker-grid {
     --upgrade-pick-min: 136px;
+    --upgrade-pick-media: 112px;
     gap: 12px;
-  }
-
-  .upgrade-pick-card-media {
-    width: min(100%, 112px);
   }
 }
 
@@ -8629,15 +8626,12 @@ body.menu-open {
 
   .upgrade-picker-grid {
     --upgrade-pick-min: 148px;
+    --upgrade-pick-media: 120px;
     gap: 14px;
   }
 
   .upgrade-pick-card {
     padding: 12px 10px 10px;
-  }
-
-  .upgrade-pick-card-media {
-    width: min(100%, 120px);
   }
 
   .upgrade-pick-card-name {
@@ -8652,10 +8646,7 @@ body.menu-open {
 @media (min-width: 1280px) {
   .upgrade-picker-grid {
     --upgrade-pick-min: 160px;
-  }
-
-  .upgrade-pick-card-media {
-    width: min(100%, 128px);
+    --upgrade-pick-media: 128px;
   }
 }
 

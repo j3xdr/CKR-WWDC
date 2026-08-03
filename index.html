@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260803-dockh1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260803-picker1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -1542,10 +1542,10 @@
             <div id="farm-dock-admin-powder-max" class="farm-dock-admin-heart-max hidden">
               <label class="farm-dock-admin-heart-max-label" for="farm-dock-admin-powder-max-input">ผงสูงสุดต่อรอบ (admin)</label>
               <div class="farm-dock-admin-heart-max-row">
-                <input id="farm-dock-admin-powder-max-input" class="farm-dock-admin-heart-max-input" type="number" min="1" max="50000" />
+                <input id="farm-dock-admin-powder-max-input" class="farm-dock-admin-heart-max-input" type="number" min="1" max="2000000" step="1" inputmode="numeric" />
                 <button type="button" id="farm-dock-admin-powder-max-save" class="btn btn-ghost btn-sm farm-dock-admin-heart-max-save">บันทึก</button>
               </div>
-              <p id="farm-dock-admin-powder-max-msg" class="farm-dock-admin-heart-max-msg muted"></p>
+              <p id="farm-dock-admin-powder-max-msg" class="farm-dock-admin-heart-max-msg muted">ค่าเริ่มต้น 5,000 — แอดมินปรับเพิ่ม/ลดได้</p>
             </div>
             <div class="farm-dock-admin-toolbar">
               <div class="farm-dock-admin-subtabs" role="tablist" aria-label="Admin jobs">
@@ -1607,6 +1607,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260803-dockh1"></script>
+  <script src="js/app.js?v=20260803-picker1"></script>
 </body>
 </html>

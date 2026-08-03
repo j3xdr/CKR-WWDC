@@ -735,6 +735,10 @@
     MAINTENANCE: "ระบบซองอั่งเปาปิดปรับปรุงชั่วคราว",
     TIMEOUT: "เชื่อมต่อ TrueMoney หมดเวลา",
     NETWORK_ERROR: "เชื่อมต่อ TrueMoney ไม่ได้",
+    TMN_BLOCKED: "TrueMoney บล็อกการเชื่อมต่อ — ลองใหม่หรือติดต่อแอดมิน",
+    TMN_CLIENT_MISSING: "ระบบเติมเงินยังติดตั้งไม่ครบ — ติดต่อแอดมิน",
+    INVALID_JSON_RESPONSE: "เชื่อมต่อ TrueMoney ไม่สำเร็จ — ลองใหม่ภายหลัง",
+    AMOUNT_MISMATCH_AFTER_REDEEM: "รับซองแล้วแต่ยอดไม่ตรงแพ็ก — ติดต่อแอดมิน",
     topup_credit_failed: "รับซองแล้วแต่ต่ออายุเช่าไม่สำเร็จ — ติดต่อแอดมิน",
     session_replaced: "มีการเข้าสู่ระบบจากที่อื่น — กรุณาเข้าสู่ระบบใหม่",
     account_banned: "บัญชีถูกระงับ กรุณาติดต่อแอดมิน",
@@ -948,11 +952,12 @@
     paintApiStatus("waking", "กำลังปลุกเซิร์ฟเวอร์…");
     for (let i = 0; i < tries; i++) {
       const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+      // Health used to take ~4s (many sequential Supabase calls) and abort at 4.5s → false "API ยังไม่พร้อม".
       const timer = setTimeout(() => {
         try {
           ctrl?.abort();
         } catch (_) {}
-      }, 4500);
+      }, 15000);
       try {
         const res = await fetch(API + "/api/health", {
           method: "GET",
@@ -2269,7 +2274,12 @@
         powderInput.max = String(pr[1]);
       }
       if (msg) msg.textContent = "";
-      if (powderMsg) powderMsg.textContent = "";
+      if (powderMsg) {
+        const hi = Array.isArray(pr) && pr.length >= 2 ? pr[1] : null;
+        powderMsg.textContent = hi
+          ? "ค่าปัจจุบันใช้เป็นเพดานผู้ใช้ · แอดมินปรับได้ 1–" + formatNumTh(hi)
+          : "ค่าเริ่มต้น 5,000 — แอดมินปรับเพิ่ม/ลดได้";
+      }
     } catch (e) {
       const err = thError(e.message) || "โหลดการตั้งค่าไม่สำเร็จ";
       if (msg) msg.textContent = err;
@@ -2314,9 +2324,17 @@
     const msg = $("farm-dock-admin-powder-max-msg");
     const btn = $("farm-dock-admin-powder-max-save");
     if (!input || !isAdminUser()) return;
-    const n = Math.floor(Number(input.value) || 0);
-    if (!Number.isFinite(n) || n < 1) {
-      if (msg) msg.textContent = "ใส่จำนวนผงที่ถูกต้อง";
+    const n = Math.floor(Number(String(input.value || "").replace(/[^\d]/g, "")) || 0);
+    const minAllowed = Math.max(1, Number(input.min) || 1);
+    const maxAllowed = Math.max(minAllowed, Number(input.max) || 2000000);
+    if (!Number.isFinite(n) || n < minAllowed) {
+      if (msg) msg.textContent = "ใส่จำนวนผงอย่างน้อย " + formatNumTh(minAllowed);
+      return;
+    }
+    if (n > maxAllowed) {
+      if (msg)
+        msg.textContent =
+          "สูงสุดที่ระบบรับได้คือ " + formatNumTh(maxAllowed) + " ผง/รอบ";
       return;
     }
     if (btn) btn.disabled = true;
@@ -2334,9 +2352,16 @@
         paintPowderGoalControls();
         refreshPowderEstimate().catch(() => {});
       }
+      const range = data.powder_max_target_range;
+      if (Array.isArray(range) && range.length >= 2) {
+        input.min = String(range[0]);
+        input.max = String(range[1]);
+      }
       if (msg)
         msg.textContent =
-          "บันทึกแล้ว — สูงสุด " + formatNumTh(saved || n) + " ผง/รอบ";
+          "บันทึกแล้ว — ผู้ใช้ตั้งเป้าได้สูงสุด " +
+          formatNumTh(saved || n) +
+          " ผง/รอบ";
     } catch (e) {
       if (msg) msg.textContent = thError(e.message) || "บันทึกไม่สำเร็จ";
     } finally {
