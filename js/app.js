@@ -8931,7 +8931,10 @@
     }
     if (jobStatusView !== "hidden") syncJobStatusShell();
     renderMiniStatus(snap);
-    if (jobStatusView === "expanded" && jobStatusTab === "live") renderLiveStatus(snap);
+    if (jobStatusView === "expanded") {
+      syncJobStatusCardLayout(snap);
+      if (jobStatusTab === "live") renderLiveStatus(snap);
+    }
 
     const panelSubEl = $("farm-dock-panel-sub");
     if (panelSubEl) panelSubEl.textContent = snap.panelSub;
@@ -9724,6 +9727,19 @@
     return liveJob?.id || activeWatchJobId || "";
   }
 
+  function syncJobStatusCardLayout(snap) {
+    const card = $("live-status-card");
+    if (!card) return;
+    snap = snap || buildDockSnapshot();
+    const phase = snap.phase || "idle";
+    card.dataset.jobTab = jobStatusTab;
+    card.setAttribute("data-phase", phase);
+    // Compact height is only for the idle live tab — history/admin need room to grow.
+    const compactIdle =
+      jobStatusTab === "live" && (phase === "idle" || phase === "done");
+    card.classList.toggle("is-compact", compactIdle);
+  }
+
   function renderLiveStatus(snap) {
     if (jobStatusView !== "expanded" || jobStatusTab !== "live") return;
     snap = snap || buildDockSnapshot();
@@ -9731,9 +9747,7 @@
 
     const card = $("live-status-card");
     if (card) {
-      card.setAttribute("data-phase", phase);
-      const compactIdle = phase === "idle" || phase === "done";
-      card.classList.toggle("is-compact", compactIdle);
+      syncJobStatusCardLayout(snap);
     }
 
     const iconImg = $("live-status-icon-img");

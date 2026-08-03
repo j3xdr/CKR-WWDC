@@ -4185,6 +4185,14 @@ body.has-farm-dock {
   margin: 0 12px 8px;
 }
 
+.farm-dock-admin-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: 8px;
+}
+
 .farm-dock-user-actions.hidden,
 .farm-dock-admin-section.hidden {
   display: none;
@@ -4225,7 +4233,9 @@ body.has-farm-dock {
 }
 
 .farm-dock-admin-list {
-  max-height: min(42vh, 360px);
+  flex: 1 1 auto;
+  min-height: min(32dvh, 280px);
+  max-height: none;
   overflow: auto;
 }
 
@@ -10541,6 +10551,7 @@ main.shell:has(#user-view:not(.hidden)) {
   display: flex;
   flex-direction: column;
   width: 100%;
+  height: auto;
   max-height: 85dvh;
   overflow: hidden;
   border-radius: 20px 20px 0 0;
@@ -10555,7 +10566,8 @@ main.shell:has(#user-view:not(.hidden)) {
   transform: translateY(100%);
   transition:
     opacity var(--motion-med) var(--ease-out),
-    transform var(--motion-slow) var(--ease-out);
+    transform var(--motion-slow) var(--ease-out),
+    max-height var(--motion-med) var(--ease-out);
 }
 
 .job-status.is-expanded.is-open .job-status-panel:not(.hidden):not(.is-closing) .job-status-card {
@@ -10663,14 +10675,28 @@ main.shell:has(#user-view:not(.hidden)) {
 }
 
 .job-status-pane {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   padding: 12px 16px 8px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .job-status-pane.hidden {
   display: none !important;
+}
+
+.job-status-pane[data-pane="history"],
+.job-status-pane[data-pane="admin"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: min(42dvh, 360px);
+}
+
+.job-status-card[data-job-tab="history"] .job-status-pane[data-pane="history"],
+.job-status-card[data-job-tab="admin"] .job-status-pane[data-pane="admin"] {
+  flex: 1 1 auto;
 }
 
 .job-status-progress {
@@ -10727,8 +10753,15 @@ main.shell:has(#user-view:not(.hidden)) {
     min-height: 0;
   }
 
-  .job-status-card.is-compact {
+  /* Compact only for idle live tab — do not clamp history/admin */
+  .job-status-card.is-compact[data-job-tab="live"] {
     max-height: min(42dvh, 320px);
+  }
+
+  .job-status-card[data-job-tab="history"],
+  .job-status-card[data-job-tab="admin"] {
+    max-height: min(88dvh, 720px);
+    min-height: min(62dvh, 520px);
   }
 
   .job-status-head {
@@ -10737,6 +10770,11 @@ main.shell:has(#user-view:not(.hidden)) {
 
   .job-status-pane {
     padding: 10px 16px 8px;
+  }
+
+  .job-status-card[data-job-tab="history"] .job-status-pane[data-pane="history"],
+  .job-status-card[data-job-tab="admin"] .job-status-pane[data-pane="admin"] {
+    min-height: min(46dvh, 420px);
   }
 }
 
@@ -10752,6 +10790,17 @@ main.shell:has(#user-view:not(.hidden)) {
 
   .job-status-card.is-compact .job-status-pane {
     padding-bottom: 4px;
+  }
+
+  .job-status-card[data-job-tab="history"],
+  .job-status-card[data-job-tab="admin"] {
+    max-height: 88dvh;
+    min-height: min(68dvh, 560px);
+  }
+
+  .job-status-pane[data-pane="history"],
+  .job-status-pane[data-pane="admin"] {
+    min-height: min(48dvh, 420px);
   }
 }
 
@@ -10803,7 +10852,10 @@ main.shell:has(#user-view:not(.hidden)) {
 }
 
 .job-status-history-list {
-  max-height: 50vh;
+  flex: 1 1 auto;
+  min-height: min(36dvh, 300px);
+  max-height: none;
+  overflow-y: auto;
 }
 
 .job-status-flash {
