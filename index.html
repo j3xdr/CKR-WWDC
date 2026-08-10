@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260803-picker1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260806-miniglow2" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -59,7 +59,7 @@
     <section id="login-view" class="view">
       <div class="login-stage">
         <div class="login-hero">
-          <img class="hero-logo" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
+          <img class="hero-logo" id="login-api-glow" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
           <h1 class="hero-title">CKR WWDC</h1>
           <p class="hero-lead">ใช้ส่วนตัว กรุณาไม่แชร์ต่อ</p>
         </div>
@@ -97,19 +97,31 @@
               </label>
               <label class="field">
                 <span>รหัสผ่าน</span>
-                <input
-                  id="login-pass"
-                  name="password"
-                  type="password"
-                  required
-                  autocomplete="current-password"
-                  placeholder="••••••••"
-                  aria-describedby="login-status"
-                />
+                <div class="password-field">
+                  <input
+                    id="login-pass"
+                    name="password"
+                    type="password"
+                    required
+                    autocomplete="current-password"
+                    placeholder="••••••••"
+                    aria-describedby="login-status"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    data-password-toggle="login-pass"
+                    aria-label="แสดงรหัสผ่าน"
+                    aria-pressed="false"
+                    title="แสดงรหัสผ่าน"
+                  >
+                    แสดง
+                  </button>
+                </div>
               </label>
               <label class="remember-row">
                 <input id="remember-me" type="checkbox" checked />
-                <span>จำฉันไว้บนเครื่องนี้</span>
+                <span>จำฉันไว้และเข้าอัตโนมัติ</span>
               </label>
               <button class="btn btn-candy" type="submit" id="login-btn">
                 <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
@@ -139,32 +151,56 @@
               </label>
               <label class="field">
                 <span>รหัสผ่าน</span>
-                <input
-                  id="signup-pass"
-                  name="password"
-                  type="password"
-                  required
-                  minlength="6"
-                  autocomplete="new-password"
-                  placeholder="อย่างน้อย 6 ตัวอักษร"
-                />
+                <div class="password-field">
+                  <input
+                    id="signup-pass"
+                    name="password"
+                    type="password"
+                    required
+                    minlength="6"
+                    autocomplete="new-password"
+                    placeholder="อย่างน้อย 6 ตัวอักษร"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    data-password-toggle="signup-pass"
+                    aria-label="แสดงรหัสผ่าน"
+                    aria-pressed="false"
+                    title="แสดงรหัสผ่าน"
+                  >
+                    แสดง
+                  </button>
+                </div>
               </label>
               <label class="field">
                 <span>ยืนยันรหัสผ่าน</span>
-                <input
-                  id="signup-pass2"
-                  name="confirm_password"
-                  type="password"
-                  required
-                  minlength="6"
-                  autocomplete="new-password"
-                  placeholder="พิมพ์รหัสผ่านอีกครั้ง"
-                  aria-describedby="signup-status"
-                />
+                <div class="password-field">
+                  <input
+                    id="signup-pass2"
+                    name="confirm_password"
+                    type="password"
+                    required
+                    minlength="6"
+                    autocomplete="new-password"
+                    placeholder="พิมพ์รหัสผ่านอีกครั้ง"
+                    aria-describedby="signup-status"
+                  />
+                  <button
+                    type="button"
+                    class="password-toggle"
+                    data-password-toggle="signup-pass2"
+                    aria-label="แสดงรหัสผ่าน"
+                    aria-pressed="false"
+                    title="แสดงรหัสผ่าน"
+                  >
+                    แสดง
+                  </button>
+                </div>
               </label>
               <label class="remember-row">
                 <input id="signup-remember" type="checkbox" checked />
-                <span>จำฉันไว้บนเครื่องนี้</span>
+                <span>จำฉันไว้และเข้าอัตโนมัติ</span>
               </label>
               <button class="btn btn-candy" type="submit" id="signup-btn">
                 <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
@@ -232,10 +268,6 @@
                 </div>
               </div>
               <div class="player-hero-actions" role="toolbar" aria-label="การจัดการบัญชี">
-                <button type="button" class="btn btn-candy-compact btn-candy-proxy player-hero-action" id="devplay-proxy-btn" hidden aria-label="แก้ Proxy">
-                  <svg class="player-hero-action-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 2.4 1.2 4.5 3 5.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3c1.8-1.2 3-3.3 3-5.7a7 7 0 0 0-7-7Zm0 2a5 5 0 0 1 5 5c0 1.9-1.1 3.6-2.7 4.4l-.3.1V17h-4v-3.5l-.3-.1A5 5 0 0 1 7 9a5 5 0 0 1 5-5Z"/></svg>
-                  <span class="player-hero-action-label">Proxy</span>
-                </button>
                 <button type="button" class="btn btn-candy-compact btn-candy-refresh player-hero-action" id="devplay-refresh-btn" hidden aria-label="รีเฟรชข้อมูล">
                   <svg class="player-hero-action-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.38 2.17-1.02 3.01l1.46 1.46A7.94 7.94 0 0 0 20 12c0-2.21-.9-4.21-2.35-5.65ZM6 12c0-1.13.38-2.17 1.02-3.01L5.56 7.53A7.94 7.94 0 0 0 4 12c0 2.21.9 4.21 2.35 5.65A7.96 7.96 0 0 0 12 20v3l5-5-5-5v3c-2.76 0-5-2.24-5-5Z"/></svg>
                   <span class="player-hero-action-label">รีเฟรช</span>
@@ -491,7 +523,7 @@
 
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" aria-labelledby="farm-tab-heart" hidden>
                 <p class="heart-info-note muted" id="heart-proxy-hint">
-                  ใช้ proxy ที่ตั้งหลัง login DevPlay — เฉพาะตอนสร้างบัญชี guest · บัญชีหลักไม่ผ่าน proxy
+                  ใช้ Proxy ร้าน (US · rotating) อัตโนมัติ — ไม่ต้องตั้งเอง
                 </p>
 
                 <div class="ticket-stepper">
@@ -511,7 +543,7 @@
                     />
                     <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ">+</button>
                   </div>
-                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ต้องตั้ง proxy หลัง login ก่อนรัน</p>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ใช้ Proxy ร้านอัตโนมัติ</p>
                 </div>
 
                 <p class="heart-info-note muted">
@@ -958,6 +990,42 @@
                 </div>
               </div>
 
+              <div class="farm-tab-panel hidden" id="farm-panel-invite" role="tabpanel" aria-labelledby="farm-tab-invite" hidden>
+                <div class="upgrade-panel-layout">
+                  <section class="upgrade-section upgrade-section-settings">
+                    <div class="upgrade-settings-head">
+                      <h3 class="upgrade-section-title">Invite Friend</h3>
+                      <div class="cookie-toolbar">
+                        <button type="button" class="upgrade-reload-btn" id="invite-refresh-btn">รีเฟรชสถานะ</button>
+                        <button type="button" class="upgrade-reload-btn" id="invite-credit-open-btn">เติม Credit</button>
+                      </div>
+                    </div>
+                    <p class="muted farm-panel-hint-line">ใช้ได้แม้ไม่มีวันเช่าฟาร์ม · 1 Link = 14 Credit · 29 Guest จาก Pool</p>
+                  </section>
+                  <section class="upgrade-section">
+                    <div class="devplay-stat-grid" id="invite-stats" style="margin-bottom:12px">
+                      <div class="devplay-stat"><span class="devplay-stat-label">Credit</span><strong id="invite-stat-credit">—</strong></div>
+                      <div class="devplay-stat"><span class="devplay-stat-label">Pool Ready</span><strong id="invite-stat-ready">—</strong></div>
+                      <div class="devplay-stat"><span class="devplay-stat-label">ใช้ได้อีก (Link)</span><strong id="invite-stat-links">—</strong></div>
+                      <div class="devplay-stat"><span class="devplay-stat-label">ราคา/Link</span><strong id="invite-stat-cost">14</strong></div>
+                    </div>
+                    <label class="field" for="invite-link-input">
+                      <span>ลิงก์เชิญเพื่อน</span>
+                      <input id="invite-link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://crk.onelink.me/..." />
+                    </label>
+                    <p id="invite-status" class="status muted" role="status"></p>
+                    <div id="invite-job-log" class="quest-list muted" style="max-height:220px;overflow:auto;margin-top:8px" aria-live="polite"></div>
+                  </section>
+                  <button class="btn btn-run" type="button" id="invite-start-btn">
+                    <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title">เริ่ม Invite</span>
+                      <span class="btn-run-sub" id="invite-start-btn-sub">หัก 14 Credit · ใช้ 29 Guest</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               <div class="farm-tab-panel hidden" id="farm-panel-account" role="tabpanel" aria-labelledby="farm-tab-account" hidden>
                 <div class="upgrade-panel-layout">
                   <section class="upgrade-section upgrade-section-settings">
@@ -1173,6 +1241,22 @@
         </button>
         <button
           type="button"
+          class="farm-nav-item"
+          id="farm-tab-invite"
+          data-tab="invite"
+          role="tab"
+          aria-controls="farm-panel-invite"
+          aria-selected="false"
+          aria-disabled="false"
+          title="ใช้ได้โดยไม่ต้องมีวันเช่า"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/icon_giftpoint.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Invite</span>
+          </span>
+        </button>
+        <button
+          type="button"
           class="farm-nav-item is-locked"
           id="farm-tab-account"
           data-tab="account"
@@ -1221,6 +1305,15 @@
                 <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="20" height="20" />
                 <span>ต่ออายุ</span>
               </button>
+              <button
+                type="button"
+                class="farm-sidebar-link"
+                id="menu-nav-invite"
+                data-menu-action="invite"
+              >
+                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+                <span>Invite Friend</span>
+              </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 8v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -1242,15 +1335,44 @@
                   <span class="account-card-name" id="menu-who-user">—</span>
                   <span class="account-card-rental" id="menu-rental-label">—</span>
                 </div>
-                <div
-                  id="api-status-menu"
-                  class="api-chip toolbar-chip is-waking account-card-api"
-                  title="สถานะเซิร์ฟเวอร์"
-                  aria-live="polite"
-                >
-                  <span class="api-chip-dot" aria-hidden="true"></span>
-                  <span class="api-chip-label">API…</span>
+              </div>
+              <button
+                type="button"
+                id="api-status-menu"
+                class="api-status-btn is-waking"
+                title="กดดูสถานะ worker งานหนัก / งานเบา"
+                aria-live="polite"
+                aria-expanded="false"
+                aria-controls="api-status-detail"
+              >
+                <span class="api-status-btn-dot" aria-hidden="true"></span>
+                <span class="api-chip-label">API…</span>
+              </button>
+              <div id="api-status-detail" class="api-status-detail hidden" hidden>
+                <div class="api-worker-row" data-role="heavy">
+                  <span class="api-worker-dot is-down" aria-hidden="true"></span>
+                  <div class="api-worker-copy">
+                    <span class="api-worker-name">งานหนัก (หัวใจ / ผง)</span>
+                    <span class="api-worker-state" id="api-worker-heavy-state">กำลังตรวจ…</span>
+                  </div>
                 </div>
+                <div class="api-worker-row" data-role="light">
+                  <span class="api-worker-dot is-down" aria-hidden="true"></span>
+                  <div class="api-worker-copy">
+                    <span class="api-worker-name">งานเบา (ปลดคุกกี้ / อื่น ๆ)</span>
+                    <span class="api-worker-state" id="api-worker-light-state">กำลังตรวจ…</span>
+                  </div>
+                </div>
+              </div>
+              <div class="proxy-pool-card proxy-pool-card--sidebar" id="proxy-pool-card" hidden>
+                <div class="proxy-pool-head">
+                  <span class="proxy-pool-title">Proxy Pool</span>
+                  <span class="proxy-pool-pct" id="proxy-pool-pct">—</span>
+                </div>
+                <div class="proxy-pool-bar" aria-hidden="true">
+                  <div class="proxy-pool-bar-fill" id="proxy-pool-bar-fill"></div>
+                </div>
+                <p class="proxy-pool-detail" id="proxy-pool-detail">กำลังโหลด…</p>
               </div>
             </div>
           </section>
@@ -1258,12 +1380,143 @@
 
         <div class="farm-sidebar-foot">
           <div class="farm-sidebar-divider" role="separator" aria-hidden="true"></div>
+          <button type="button" id="change-password-btn-menu" class="farm-sidebar-account-btn btn btn-ghost btn-sm hidden">
+            เปลี่ยนรหัสผ่าน
+          </button>
           <button type="button" id="logout-btn-menu" class="farm-sidebar-logout btn btn-candy-compact btn-candy-logout hidden">ออกจากระบบ</button>
         </div>
       </aside>
       <div class="farm-sidebar-scrim" id="farm-sidebar-scrim" hidden></div>
     </section>
   </main>
+
+  <!-- เปลี่ยนรหัสผ่าน (หลัง login) -->
+  <div id="change-password-modal" class="vault-modal-root hidden" aria-hidden="true">
+    <div class="vault-modal-backdrop" data-change-password-close></div>
+    <div
+      class="panel pass-modal-sheet change-password-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="change-password-title"
+    >
+      <div class="vault-modal-head">
+        <div class="vault-modal-titles">
+          <p class="pass-eyebrow">บัญชี</p>
+          <h2 class="panel-title" id="change-password-title">เปลี่ยนรหัสผ่าน</h2>
+        </div>
+        <button type="button" class="vault-modal-close" id="change-password-close" aria-label="ปิด" data-change-password-close>×</button>
+      </div>
+      <p class="panel-hint">ใส่รหัสเก่า แล้วตั้งรหัสใหม่ · ยืนยันให้ตรงกัน</p>
+      <form id="reset-form" autocomplete="on">
+        <input id="reset-user" name="username" type="hidden" />
+        <label class="field">
+          <span>รหัสผ่านเดิม</span>
+          <div class="password-field">
+            <input
+              id="reset-old"
+              name="old_password"
+              type="password"
+              required
+              autocomplete="current-password"
+              placeholder="••••••••"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              data-password-toggle="reset-old"
+              aria-label="แสดงรหัสผ่าน"
+              aria-pressed="false"
+              title="แสดงรหัสผ่าน"
+            >
+              แสดง
+            </button>
+          </div>
+        </label>
+        <label class="field">
+          <span>รหัสผ่านใหม่</span>
+          <div class="password-field">
+            <input
+              id="reset-new"
+              name="new_password"
+              type="password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+              placeholder="อย่างน้อย 6 ตัวอักษร"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              data-password-toggle="reset-new"
+              aria-label="แสดงรหัสผ่าน"
+              aria-pressed="false"
+              title="แสดงรหัสผ่าน"
+            >
+              แสดง
+            </button>
+          </div>
+        </label>
+        <label class="field">
+          <span>ยืนยันรหัสผ่านใหม่</span>
+          <div class="password-field">
+            <input
+              id="reset-new2"
+              name="confirm_password"
+              type="password"
+              required
+              minlength="6"
+              autocomplete="new-password"
+              placeholder="พิมพ์รหัสใหม่อีกครั้ง"
+              aria-describedby="reset-status"
+            />
+            <button
+              type="button"
+              class="password-toggle"
+              data-password-toggle="reset-new2"
+              aria-label="แสดงรหัสผ่าน"
+              aria-pressed="false"
+              title="แสดงรหัสผ่าน"
+            >
+              แสดง
+            </button>
+          </div>
+        </label>
+        <button class="btn btn-candy" type="submit" id="reset-btn">
+          <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+          บันทึกรหัสผ่านใหม่
+        </button>
+        <p id="reset-status" class="status" role="status"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Invite Friend credit topup (แยกจาก vault วันเช่า) -->
+  <div id="invite-credit-modal" class="vault-modal-root hidden" aria-hidden="true">
+    <div class="vault-modal-backdrop" data-invite-credit-close></div>
+    <div
+      class="panel pass-modal-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invite-credit-title"
+    >
+      <div class="vault-modal-head">
+        <div class="vault-modal-titles">
+          <p class="pass-eyebrow">Invite Friend</p>
+          <h2 class="panel-title" id="invite-credit-title">เติม Credit</h2>
+        </div>
+        <button type="button" class="vault-modal-close" id="invite-credit-close" aria-label="ปิด" data-invite-credit-close>×</button>
+      </div>
+      <p class="panel-hint">1 Credit = 1 บาท · แยกจากวันเช่าฟาร์ม · TrueMoney Wallet เบอร์เดิม · 1 Link = 14 Credit</p>
+      <p class="muted" style="margin:0 0 8px">คงเหลือ: <strong id="invite-credit-balance-label">—</strong> Credit</p>
+      <div id="invite-credit-packages" class="pass-card-grid pass-card-grid-full" role="listbox" aria-label="แพ็ก Invite Credit"></div>
+      <label class="field" for="invite-credit-voucher">
+        <span>ลิงก์ซองอั่งเปา / โค้ด</span>
+        <input id="invite-credit-voucher" type="text" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ซอง TrueMoney" />
+      </label>
+      <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">เติม Credit</button>
+      <p id="invite-credit-status" class="status muted" role="status"></p>
+    </div>
+  </div>
 
   <!-- สิทธิ์ใช้งาน / ต่ออายุเช่า -->
   <div id="vault-modal" class="vault-modal-root hidden" aria-hidden="true">
@@ -1294,12 +1547,23 @@
       </div>
 
       <section class="pass-section">
-        <h3 class="pass-section-title">เลือกแพ็กวันเช่า</h3>
+        <h3 class="pass-section-title">แพ็กวันเช่า</h3>
         <div
           id="topup-packages"
-          class="pass-card-grid"
+          class="pass-card-grid pass-card-grid-full"
           role="listbox"
           aria-label="แพ็กวันเช่า"
+        ></div>
+      </section>
+
+      <section class="pass-section pass-section-feature">
+        <h3 class="pass-section-title">แพ็กเสริม</h3>
+        <p class="pass-section-hint">50฿ · 12 ชม. · เลือกได้ 1 ฟังก์ชันหลังเติมสำเร็จ</p>
+        <div
+          id="topup-packages-feature"
+          class="pass-card-grid pass-card-grid-feature"
+          role="listbox"
+          aria-label="แพ็กเสริม"
         ></div>
       </section>
 
@@ -1307,7 +1571,7 @@
         <div class="pass-price-row">
           <div class="pass-price-copy">
             <span class="pass-price-label">ยอดซองที่ต้องสร้าง</span>
-            <span class="pass-price-value" id="topup-selected-text">200฿ · 1 วัน</span>
+            <span class="pass-price-value" id="topup-selected-text">200฿ · 1 วัน · ทุกฟังก์ชัน</span>
           </div>
           <button type="button" class="btn btn-ghost btn-sm pass-copy-btn" id="topup-copy-price">
             คัดลอก
@@ -1347,7 +1611,8 @@
           <span>ต้องการวันใช้งานอื่น? ติดต่อแอดมิน Telegram</span>
         </a>
         <p class="muted pass-footnote">
-          ยอดซองต้องตรงราคาแพ็ก · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน) · สำรอง:
+          ยอดซองต้องตรงราคาแพ็ก · ตั้งรับได้ <strong>1 คน</strong> · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน
+          091-012-1122) · สำรอง:
           <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
         </p>
       </section>
@@ -1477,25 +1742,22 @@
             <p id="farm-dock-flash" class="farm-dock-flash" role="status"></p>
           </div>
 
-          <div class="job-status-progress">
+          <div class="job-status-progress job-status-progress--focus">
             <div class="live-status-ring-wrap">
               <div class="live-status-ring" id="live-status-ring" style="--pct: 0">
+                <span class="live-status-ring-shimmer" aria-hidden="true"></span>
                 <div class="live-status-ring-inner">
                   <span class="live-status-pct" id="live-status-pct">0%</span>
+                  <span class="live-status-fraction" id="live-status-fraction">—</span>
                 </div>
               </div>
-              <p class="live-status-fraction" id="live-status-fraction">—</p>
             </div>
-            <div class="live-status-meta job-status-meta">
-              <div class="live-status-meta-item">
-                <span class="live-status-meta-label">สถานะ</span>
-                <span class="live-status-meta-val" id="live-status-phase">—</span>
-              </div>
-              <div class="live-status-meta-item">
-                <span class="live-status-meta-label">เวลา</span>
-                <span class="live-status-meta-val" id="live-status-time">—</span>
-              </div>
-            </div>
+            <p class="live-status-focus" id="live-status-focus">
+              <span class="live-status-focus-dot" aria-hidden="true"></span>
+              <span class="live-status-focus-text" id="live-status-phase">—</span>
+              <span class="live-status-focus-ellipsis" aria-hidden="true"></span>
+            </p>
+            <p class="live-status-elapsed" id="live-status-time">—</p>
           </div>
 
           <div class="live-status-steps job-status-steps" id="live-status-steps" aria-label="ขั้นตอน"></div>
@@ -1607,6 +1869,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260803-picker1"></script>
+  <script src="js/app.js?v=20260806-miniglow1"></script>
 </body>
 </html>
