@@ -532,7 +532,7 @@
     },
     invite: {
       title: "Invite Friend",
-      hint: "วางลิงก์เชิญ · ใช้ Credit แยกจากวันเช่า",
+      hint: "เติม Credit → วางลิงก์ → กดเริ่ม (14 Credit/ครั้ง)",
       blurb: "Invite ด้วย Guest Pool",
       icon: "icon_giftpoint.png",
     },
@@ -1907,8 +1907,12 @@
     }
     if ($("invite-stat-cost")) $("invite-stat-cost").textContent = String(cost);
     if ($("invite-start-btn-sub")) {
-      $("invite-start-btn-sub").textContent =
-        "หัก " + cost + " Credit · ใช้ " + (data?.guests_per_link || 29) + " Guest";
+      $("invite-start-btn-sub").textContent = "หัก " + cost + " Credit ต่อครั้ง";
+    }
+    const startBtn = $("invite-start-btn");
+    if (startBtn) {
+      const canRun = bal >= cost && (links == null || Number(links) > 0);
+      startBtn.classList.toggle("is-disabled-look", !canRun);
     }
   }
 
@@ -1933,24 +1937,32 @@
     paintInviteStats({ invite_credit_balance: inviteCreditBalance() });
     setStatus($("invite-credit-status"), "", "muted");
     if ($("invite-credit-voucher")) $("invite-credit-voucher").value = "";
-    modal.classList.remove("hidden");
-    modal.setAttribute("aria-hidden", "false");
-    loadInvitePackages().then(() => renderInviteCreditPackages()).catch(() => {
-      renderInviteCreditPackages();
-    });
-    $("invite-credit-voucher")?.focus();
+    // Must use animateOpen + is-open — otherwise invisible overlay freezes the page.
+    renderInviteCreditPackages();
+    animateOpen(modal);
+    lockBodyScroll("invite-credit-open");
+    const sheet = modal.querySelector(".invite-credit-sheet") || modal;
+    trapFocus(sheet);
+    loadInvitePackages()
+      .then(() => renderInviteCreditPackages())
+      .catch(() => {
+        renderInviteCreditPackages();
+        setStatus($("invite-credit-status"), "โหลดแพ็กไม่สำเร็จ — ใช้แพ็กเริ่มต้น", "err");
+      });
+    setTimeout(() => $("invite-credit-voucher")?.focus(), 220);
   }
 
   function closeInviteCreditModal() {
     const modal = $("invite-credit-modal");
     if (!modal) return;
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
+    unlockBodyScroll("invite-credit-open");
+    releaseFocusTrap();
+    animateClose(modal);
     setStatus($("invite-credit-status"), "", "muted");
   }
 
   async function loadInvitePackages() {
-    const data = await api("/api/invite/packages");
+    const data = await api("/api/invite/packages", { timeoutMs: 12000 });
     invitePackages = Array.isArray(data.packages) ? data.packages : [];
     if (!invitePackages.some((p) => p.id === inviteSelectedPackageId)) {
       inviteSelectedPackageId = invitePackages[0]?.id || "invite_100";
@@ -1970,22 +1982,24 @@
           { id: "invite_200", credits: 200, price_baht: 200, label_th: "200 Credit" },
           { id: "invite_500", credits: 500, price_baht: 500, label_th: "500 Credit" },
         ];
+    if (!inviteSelectedPackageId) {
+      inviteSelectedPackageId = list[0]?.id || "invite_100";
+    }
     list.forEach((pkg) => {
+      const credits = pkg.credits || pkg.price_baht;
       const selected = pkg.id === inviteSelectedPackageId;
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "pass-card" + (selected ? " is-selected" : "");
+      btn.className = "invite-pack-btn" + (selected ? " is-selected" : "");
       btn.setAttribute("role", "option");
       btn.setAttribute("aria-selected", selected ? "true" : "false");
       btn.innerHTML =
-        '<span class="pass-card-days">' +
-        escapeHtml(String(pkg.credits || pkg.price_baht)) +
+        '<span class="invite-pack-credits">' +
+        escapeHtml(formatNumTh(credits)) +
         "</span>" +
-        '<span class="pass-card-unit">Credit</span>' +
-        '<span class="pass-card-price">' +
+        '<span class="invite-pack-baht">' +
         escapeHtml(formatNumTh(pkg.price_baht)) +
-        "฿</span>" +
-        '<span class="pass-card-perday">1 Credit = 1฿</span>';
+        "฿</span>";
       btn.addEventListener("click", () => {
         inviteSelectedPackageId = pkg.id;
         renderInviteCreditPackages();
@@ -2059,6 +2073,8 @@
       );
       const logEl = $("invite-job-log");
       if (logEl) {
+        logEl.hidden = false;
+        logEl.classList.remove("hidden");
         logEl.textContent = "job " + (data.job_id || "") + " queued…\n";
       }
       if (data.job_id) pollInviteJob(data.job_id);
@@ -2102,12 +2118,14 @@
         const job = await api("/api/farm/job/" + encodeURIComponent(jobId));
         const logEl = $("invite-job-log");
         if (logEl) {
+          logEl.hidden = false;
+          logEl.classList.remove("hidden");
           const lines = Array.isArray(job.logs) ? job.logs.slice(-40) : [];
           const prog = job.progress || {};
           logEl.textContent =
-            "status=" +
+            "สถานะ " +
             (job.status || "?") +
-            " · " +
+            " · สำเร็จ " +
             (prog.current || 0) +
             "/" +
             (prog.total || 0) +
@@ -12949,6 +12967,10 @@
     if (e.key !== "Escape") return;
     if (!$("wallet-tutorial")?.classList.contains("hidden")) {
       closeWalletTutorial();
+      return;
+    }
+    if (!$("invite-credit-modal")?.classList.contains("hidden")) {
+      closeInviteCreditModal();
       return;
     }
     if (vaultOpen) closeVaultModal();

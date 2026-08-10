@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260810-invite1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260810-invite2" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -991,36 +991,55 @@
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-invite" role="tabpanel" aria-labelledby="farm-tab-invite" hidden>
-                <div class="upgrade-panel-layout">
-                  <section class="upgrade-section upgrade-section-settings">
-                    <div class="upgrade-settings-head">
-                      <h3 class="upgrade-section-title">Invite Friend</h3>
-                      <div class="cookie-toolbar">
-                        <button type="button" class="upgrade-reload-btn" id="invite-refresh-btn">รีเฟรชสถานะ</button>
-                        <button type="button" class="upgrade-reload-btn" id="invite-credit-open-btn">เติม Credit</button>
-                      </div>
-                    </div>
-                    <p class="muted farm-panel-hint-line">ใช้ได้แม้ไม่มีวันเช่าฟาร์ม · 1 Link = 14 Credit · 29 Guest จาก Pool</p>
-                  </section>
+                <div class="upgrade-panel-layout invite-panel">
                   <section class="upgrade-section">
-                    <div class="devplay-stat-grid" id="invite-stats" style="margin-bottom:12px">
-                      <div class="devplay-stat"><span class="devplay-stat-label">Credit</span><strong id="invite-stat-credit">—</strong></div>
-                      <div class="devplay-stat"><span class="devplay-stat-label">Pool Ready</span><strong id="invite-stat-ready">—</strong></div>
-                      <div class="devplay-stat"><span class="devplay-stat-label">ใช้ได้อีก (Link)</span><strong id="invite-stat-links">—</strong></div>
-                      <div class="devplay-stat"><span class="devplay-stat-label">ราคา/Link</span><strong id="invite-stat-cost">14</strong></div>
+                    <ol class="invite-steps" aria-label="ขั้นตอนใช้งาน">
+                      <li><span class="invite-step-n">1</span> เติม Credit (1 Credit = 1 บาท)</li>
+                      <li><span class="invite-step-n">2</span> วางลิงก์เชิญเพื่อน</li>
+                      <li><span class="invite-step-n">3</span> กดเริ่ม — หัก 14 Credit / ครั้ง</li>
+                    </ol>
+                  </section>
+
+                  <section class="upgrade-section invite-balance-card">
+                    <div class="invite-balance-row">
+                      <div>
+                        <p class="invite-kicker">เครดิตของคุณ</p>
+                        <p class="invite-balance-value"><strong id="invite-stat-credit">0</strong> <span>Credit</span></p>
+                      </div>
+                      <button type="button" class="btn btn-candy btn-sm" id="invite-credit-open-btn">เติม Credit</button>
                     </div>
+                    <div class="invite-meta-grid" id="invite-stats">
+                      <div class="invite-meta">
+                        <span>ใช้ได้อีก</span>
+                        <strong><span id="invite-stat-links">0</span> ลิงก์</strong>
+                      </div>
+                      <div class="invite-meta">
+                        <span>ราคา / ครั้ง</span>
+                        <strong><span id="invite-stat-cost">14</span> Credit</strong>
+                      </div>
+                      <div class="invite-meta">
+                        <span>Pool พร้อมใช้</span>
+                        <strong id="invite-stat-ready">0</strong>
+                      </div>
+                      <button type="button" class="invite-refresh-link" id="invite-refresh-btn">รีเฟรช</button>
+                    </div>
+                    <p class="muted invite-note">ไม่ต้องมีวันเช่าฟาร์ม · ระบบใช้ 29 Guest จาก Pool ต่อ 1 ลิงก์</p>
+                  </section>
+
+                  <section class="upgrade-section">
                     <label class="field" for="invite-link-input">
                       <span>ลิงก์เชิญเพื่อน</span>
-                      <input id="invite-link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://crk.onelink.me/..." />
+                      <input id="invite-link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ เช่น https://crk.onelink.me/..." />
                     </label>
                     <p id="invite-status" class="status muted" role="status"></p>
-                    <div id="invite-job-log" class="quest-list muted" style="max-height:220px;overflow:auto;margin-top:8px" aria-live="polite"></div>
+                    <div id="invite-job-log" class="invite-job-log hidden" hidden aria-live="polite"></div>
                   </section>
+
                   <button class="btn btn-run" type="button" id="invite-start-btn">
                     <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
                     <span class="btn-run-copy">
                       <span class="btn-run-title">เริ่ม Invite</span>
-                      <span class="btn-run-sub" id="invite-start-btn-sub">หัก 14 Credit · ใช้ 29 Guest</span>
+                      <span class="btn-run-sub" id="invite-start-btn-sub">หัก 14 Credit ต่อครั้ง</span>
                     </span>
                   </button>
                 </div>
@@ -1494,7 +1513,7 @@
   <div id="invite-credit-modal" class="vault-modal-root hidden" aria-hidden="true">
     <div class="vault-modal-backdrop" data-invite-credit-close></div>
     <div
-      class="panel pass-modal-sheet"
+      class="panel pass-modal-sheet invite-credit-sheet"
       role="dialog"
       aria-modal="true"
       aria-labelledby="invite-credit-title"
@@ -1506,14 +1525,15 @@
         </div>
         <button type="button" class="vault-modal-close" id="invite-credit-close" aria-label="ปิด" data-invite-credit-close>×</button>
       </div>
-      <p class="panel-hint">1 Credit = 1 บาท · แยกจากวันเช่าฟาร์ม · TrueMoney Wallet เบอร์เดิม · 1 Link = 14 Credit</p>
-      <p class="muted" style="margin:0 0 8px">คงเหลือ: <strong id="invite-credit-balance-label">—</strong> Credit</p>
-      <div id="invite-credit-packages" class="pass-card-grid pass-card-grid-full" role="listbox" aria-label="แพ็ก Invite Credit"></div>
+      <p class="panel-hint">เลือกยอด → สร้างซอง TrueMoney ตามยอดนั้น → วางลิงก์ด้านล่าง · 1 Credit = 1 บาท</p>
+      <p class="invite-credit-balance-line">คงเหลือ <strong id="invite-credit-balance-label">0</strong> Credit</p>
+      <p class="invite-pack-label">เลือกแพ็ก</p>
+      <div id="invite-credit-packages" class="invite-pack-row" role="listbox" aria-label="แพ็ก Invite Credit"></div>
       <label class="field" for="invite-credit-voucher">
-        <span>ลิงก์ซองอั่งเปา / โค้ด</span>
+        <span>ลิงก์ซองอั่งเปา</span>
         <input id="invite-credit-voucher" type="text" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ซอง TrueMoney" />
       </label>
-      <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">เติม Credit</button>
+      <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">ยืนยันเติม Credit</button>
       <p id="invite-credit-status" class="status muted" role="status"></p>
     </div>
   </div>
@@ -1869,6 +1889,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260810-invite1"></script>
+  <script src="js/app.js?v=20260810-invite2"></script>
 </body>
 </html>
