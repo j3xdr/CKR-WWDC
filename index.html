@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260810-invite2" />
+  <link rel="stylesheet" href="css/styles.css?v=20260811-progress-a1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -1024,6 +1024,7 @@
                       <button type="button" class="invite-refresh-link" id="invite-refresh-btn">รีเฟรช</button>
                     </div>
                     <p class="muted invite-note">ไม่ต้องมีวันเช่าฟาร์ม · ระบบใช้ 29 Guest จาก Pool ต่อ 1 ลิงก์</p>
+                    <p id="invite-pool-empty-note" class="status err invite-pool-empty-note hidden" hidden>Pool หมด — เติมเงินและเริ่มเชิญเพื่อนไม่ได้ชั่วคราว</p>
                   </section>
 
                   <section class="upgrade-section">
@@ -1032,14 +1033,171 @@
                       <input id="invite-link-input" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ เช่น https://crk.onelink.me/..." />
                     </label>
                     <p id="invite-status" class="status muted" role="status"></p>
-                    <div id="invite-job-log" class="invite-job-log hidden" hidden aria-live="polite"></div>
+
+                    <div id="invite-progress-card" class="invite-progress-card hidden" hidden>
+                      <div class="invite-progress-head">
+                        <div>
+                          <p class="invite-progress-label" id="invite-progress-label">รอเริ่มงาน…</p>
+                          <p class="invite-progress-count">
+                            <strong id="invite-progress-current">0</strong>/<span id="invite-progress-total">0</span>
+                            <span class="invite-progress-pct" id="invite-progress-pct">0%</span>
+                          </p>
+                        </div>
+                        <div class="invite-progress-actions">
+                          <button type="button" class="btn btn-ghost btn-sm" id="invite-log-open-btn">ดู Log</button>
+                          <button type="button" class="btn btn-danger btn-sm hidden" id="invite-cancel-btn" hidden>ยกเลิก</button>
+                        </div>
+                      </div>
+                      <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="invite-progress-track">
+                        <div class="invite-progress-fill" id="invite-progress-fill"></div>
+                      </div>
+                      <p id="invite-result-summary" class="invite-result-summary hidden" hidden></p>
+                    </div>
                   </section>
 
                   <button class="btn btn-run" type="button" id="invite-start-btn">
                     <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
                     <span class="btn-run-copy">
-                      <span class="btn-run-title">เริ่ม Invite</span>
+                      <span class="btn-run-title" id="invite-start-btn-title">เริ่มเชิญเพื่อน</span>
                       <span class="btn-run-sub" id="invite-start-btn-sub">หัก 14 Credit ต่อครั้ง</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="farm-tab-afterplay_fast" hidden>
+                <div class="upgrade-panel-layout invite-panel afterplay-panel">
+                  <section class="upgrade-section">
+                    <ol class="invite-steps" aria-label="ขั้นตอน AfterPlay Fast">
+                      <li><span class="invite-step-n">1</span> ใช้กระเป๋า Credit เดียวกับเชิญเพื่อน (1 Credit = 1 บาท)</li>
+                      <li><span class="invite-step-n">2</span> ตั้งเป้าเลเวลหรือจำนวนรอบ — 1 รอบ = 1 หัวใจ = 0.5 Credit</li>
+                      <li><span class="invite-step-n">3</span> หัวใจไม่พอห้ามเริ่ม · เจอธง 210 ไปต่อ (Hardcore)</li>
+                    </ol>
+                  </section>
+                  <section class="upgrade-section invite-balance-card">
+                    <div class="invite-balance-row">
+                      <div>
+                        <p class="invite-kicker">เครดิตของคุณ</p>
+                        <p class="invite-balance-value"><strong id="afterplay-stat-credit">0</strong> <span>Credit</span></p>
+                      </div>
+                      <button type="button" class="btn btn-candy btn-sm" id="afterplay-credit-open-btn">เติม Credit</button>
+                    </div>
+                    <p class="muted invite-note">ไม่ใช้วันเช่า · Hardcore: เหรียญ 350k–420k · EXP 69k–80k ต่อรอบ (ค่าประมาณ)</p>
+                  </section>
+                  <section class="upgrade-section afterplay-snap-grid" aria-label="สถานะไอดี">
+                    <div class="afterplay-snap"><span>เลเวล</span><strong id="afterplay-snap-level">—</strong></div>
+                    <div class="afterplay-snap"><span>XP ในเลเวล</span><strong id="afterplay-snap-exp">—</strong></div>
+                    <div class="afterplay-snap"><span>หัวใจ</span><strong id="afterplay-snap-life">—</strong></div>
+                    <div class="afterplay-snap"><span>เหรียญ</span><strong id="afterplay-snap-coin">—</strong></div>
+                  </section>
+                  <section class="upgrade-section afterplay-plan-fields">
+                    <label class="field" for="afterplay-target-level">
+                      <span>เป้าเลเวล</span>
+                      <input id="afterplay-target-level" type="number" inputmode="numeric" min="1" max="110" step="1" placeholder="เช่น 50" />
+                    </label>
+                    <label class="field" for="afterplay-runs">
+                      <span>จำนวนรอบ</span>
+                      <input id="afterplay-runs" type="number" inputmode="numeric" min="1" max="200" step="1" placeholder="คำนวณจากเป้าเลเวล" />
+                    </label>
+                    <button type="button" class="btn btn-ghost btn-sm" id="afterplay-preview-btn">คำนวณ</button>
+                  </section>
+                  <section class="upgrade-section afterplay-estimate-card" id="afterplay-estimate">
+                    <p class="invite-kicker">ประมาณการ</p>
+                    <div class="invite-meta-grid">
+                      <div class="invite-meta"><span>รอบ</span><strong id="afterplay-est-runs">—</strong></div>
+                      <div class="invite-meta"><span>XP (ช่วง)</span><strong id="afterplay-est-xp">—</strong></div>
+                      <div class="invite-meta"><span>เหรียญ (ช่วง)</span><strong id="afterplay-est-coin">—</strong></div>
+                      <div class="invite-meta"><span>Credit</span><strong id="afterplay-est-credit">—</strong></div>
+                      <div class="invite-meta"><span>หัวใจที่ต้องมี</span><strong id="afterplay-est-hearts">—</strong></div>
+                      <div class="invite-meta"><span>เลเวลหลังรัน (เฉลี่ย)</span><strong id="afterplay-est-level">—</strong></div>
+                    </div>
+                    <p id="afterplay-life-warn" class="status err hidden" hidden>หัวใจไม่พอ — ห้ามเริ่ม (ไม่ลดรอบให้อัตโนมัติ)</p>
+                  </section>
+                  <p id="afterplay-status" class="status muted" role="status"></p>
+                  <div id="afterplay-progress-card" class="invite-progress-card hidden" hidden>
+                    <div class="invite-progress-head">
+                      <div>
+                        <p class="invite-progress-label" id="afterplay-progress-label">รอเริ่มงาน…</p>
+                        <p class="invite-progress-count">
+                          <strong id="afterplay-progress-current">0</strong>/<span id="afterplay-progress-total">0</span>
+                          <span class="invite-progress-pct" id="afterplay-progress-pct">0%</span>
+                        </p>
+                      </div>
+                      <div class="invite-progress-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="afterplay-log-open-btn">ดู Log</button>
+                        <button type="button" class="btn btn-danger btn-sm hidden" id="afterplay-cancel-btn" hidden>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="afterplay-progress-track">
+                      <div class="invite-progress-fill" id="afterplay-progress-fill"></div>
+                    </div>
+                    <p id="afterplay-result-summary" class="invite-result-summary hidden" hidden></p>
+                  </div>
+                  <button class="btn btn-run" type="button" id="afterplay-start-btn">
+                    <img src="assets/score.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title" id="afterplay-start-btn-title">เริ่ม AfterPlay Fast</span>
+                      <span class="btn-run-sub" id="afterplay-start-btn-sub">หัก Credit ตามจำนวนรอบ</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="farm-tab-unlock_l" hidden>
+                <div class="upgrade-panel-layout invite-panel afterplay-panel">
+                  <section class="upgrade-section">
+                    <ol class="invite-steps" aria-label="ขั้นตอน Unlock L">
+                      <li><span class="invite-step-n">1</span> เลือก L ที่ยังไม่มี · ตัวที่มีแล้วไม่คิดเงิน</li>
+                      <li><span class="invite-step-n">2</span> 1–6 ตัว = 15 Credit/ตัว · ครบ 7 ตัว = 100 Credit</li>
+                      <li><span class="invite-step-n">3</span> Ice Tower (ep5) ตามเอนจินเดิม</li>
+                    </ol>
+                  </section>
+                  <section class="upgrade-section invite-balance-card">
+                    <div class="invite-balance-row">
+                      <div>
+                        <p class="invite-kicker">เครดิตของคุณ</p>
+                        <p class="invite-balance-value"><strong id="unlockl-stat-credit">0</strong> <span>Credit</span></p>
+                      </div>
+                      <button type="button" class="btn btn-candy btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
+                    </div>
+                    <div class="invite-meta-grid">
+                      <div class="invite-meta"><span>ต่อตัว</span><strong><span id="unlockl-price-each">15</span> Credit</strong></div>
+                      <div class="invite-meta"><span>ครบ 7 ตัว</span><strong><span id="unlockl-price-bundle">100</span> Credit</strong></div>
+                      <div class="invite-meta"><span>ยอดที่เลือก</span><strong id="unlockl-quote">0 Credit</strong></div>
+                      <button type="button" class="invite-refresh-link" id="unlockl-refresh-btn">รีเฟรชคลัง</button>
+                    </div>
+                  </section>
+                  <section class="upgrade-section">
+                    <div class="unlockl-toolbar">
+                      <button type="button" class="btn btn-ghost btn-sm" id="unlockl-select-all-btn">เลือกทั้งหมดที่ยังไม่มี</button>
+                    </div>
+                    <div id="unlockl-grid" class="unlockl-grid" role="group" aria-label="เลือก Unlock L"></div>
+                  </section>
+                  <p id="unlockl-status" class="status muted" role="status"></p>
+                  <div id="unlockl-progress-card" class="invite-progress-card hidden" hidden>
+                    <div class="invite-progress-head">
+                      <div>
+                        <p class="invite-progress-label" id="unlockl-progress-label">รอเริ่มงาน…</p>
+                        <p class="invite-progress-count">
+                          <strong id="unlockl-progress-current">0</strong>/<span id="unlockl-progress-total">0</span>
+                          <span class="invite-progress-pct" id="unlockl-progress-pct">0%</span>
+                        </p>
+                      </div>
+                      <div class="invite-progress-actions">
+                        <button type="button" class="btn btn-ghost btn-sm" id="unlockl-log-open-btn">ดู Log</button>
+                        <button type="button" class="btn btn-danger btn-sm hidden" id="unlockl-cancel-btn" hidden>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="unlockl-progress-track">
+                      <div class="invite-progress-fill" id="unlockl-progress-fill"></div>
+                    </div>
+                    <p id="unlockl-result-summary" class="invite-result-summary hidden" hidden></p>
+                  </div>
+                  <button class="btn btn-run" type="button" id="unlockl-start-btn">
+                    <img src="assets/Crystal_Pearl_Earring_2B9.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title" id="unlockl-start-btn-title">เริ่ม Unlock L</span>
+                      <span class="btn-run-sub" id="unlockl-start-btn-sub">เลือกอย่างน้อย 1 ตัว</span>
                     </span>
                   </button>
                 </div>
@@ -1271,7 +1429,37 @@
         >
           <span class="farm-nav-pill">
             <img src="assets/icon_giftpoint.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">Invite</span>
+            <span class="farm-nav-label">เชิญเพื่อน</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-afterplay_fast"
+          data-tab="afterplay_fast"
+          role="tab"
+          aria-controls="farm-panel-afterplay_fast"
+          aria-selected="false"
+          aria-disabled="true"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/score.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">AfterPlay</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-unlock_l"
+          data-tab="unlock_l"
+          role="tab"
+          aria-controls="farm-panel-unlock_l"
+          aria-selected="false"
+          aria-disabled="true"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/Crystal_Pearl_Earring_2B9.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Unlock L</span>
           </span>
         </button>
         <button
@@ -1331,7 +1519,25 @@
                 data-menu-action="invite"
               >
                 <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
-                <span>Invite Friend</span>
+                <span>เชิญเพื่อน 29 คน</span>
+              </button>
+              <button
+                type="button"
+                class="farm-sidebar-link"
+                id="menu-nav-afterplay_fast"
+                data-menu-action="afterplay_fast"
+              >
+                <img src="assets/score.png" alt="" width="20" height="20" />
+                <span>AfterPlay Fast</span>
+              </button>
+              <button
+                type="button"
+                class="farm-sidebar-link"
+                id="menu-nav-unlock_l"
+                data-menu-action="unlock_l"
+              >
+                <img src="assets/Crystal_Pearl_Earring_2B9.png" alt="" width="20" height="20" />
+                <span>Unlock L</span>
               </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1520,21 +1726,65 @@
     >
       <div class="vault-modal-head">
         <div class="vault-modal-titles">
-          <p class="pass-eyebrow">Invite Friend</p>
+          <p class="pass-eyebrow">เชิญเพื่อน 29 คน</p>
           <h2 class="panel-title" id="invite-credit-title">เติม Credit</h2>
         </div>
         <button type="button" class="vault-modal-close" id="invite-credit-close" aria-label="ปิด" data-invite-credit-close>×</button>
       </div>
-      <p class="panel-hint">เลือกยอด → สร้างซอง TrueMoney ตามยอดนั้น → วางลิงก์ด้านล่าง · 1 Credit = 1 บาท</p>
+      <p class="panel-hint">เลือกจำนวน coin → สร้างซอง TrueMoney ตามจำนวนนั้น → วางลิงก์ด้านล่าง · 1 coin = 1 Credit</p>
       <p class="invite-credit-balance-line">คงเหลือ <strong id="invite-credit-balance-label">0</strong> Credit</p>
-      <p class="invite-pack-label">เลือกแพ็ก</p>
+      <p class="invite-pack-label">เลือกแพ็ก <span class="invite-pack-hint">(แตะเพื่อคัดลอกยอด)</span></p>
       <div id="invite-credit-packages" class="invite-pack-row" role="listbox" aria-label="แพ็ก Invite Credit"></div>
+      <div class="invite-selected-copy-row">
+        <span class="invite-selected-copy-text">ยอดที่เลือก: <strong id="invite-selected-coin">14</strong> coin</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="invite-copy-coin-btn">คัดลอก</button>
+      </div>
       <label class="field" for="invite-credit-voucher">
         <span>ลิงก์ซองอั่งเปา</span>
         <input id="invite-credit-voucher" type="text" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ซอง TrueMoney" />
       </label>
       <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">ยืนยันเติม Credit</button>
       <p id="invite-credit-status" class="status muted" role="status"></p>
+    </div>
+  </div>
+
+  <!-- Invite job log sheet -->
+  <div id="invite-log-modal" class="vault-modal-root hidden" aria-hidden="true">
+    <div class="vault-modal-backdrop" data-invite-log-close></div>
+    <div
+      class="panel pass-modal-sheet invite-log-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="invite-log-title"
+    >
+      <div class="vault-modal-head">
+        <div class="vault-modal-titles">
+          <p class="pass-eyebrow">เชิญเพื่อน 29 คน</p>
+          <h2 class="panel-title" id="invite-log-title">Log งาน</h2>
+        </div>
+        <button type="button" class="vault-modal-close" id="invite-log-close" aria-label="ปิด" data-invite-log-close>×</button>
+      </div>
+      <pre id="invite-log-body" class="invite-log-body" aria-live="polite">ยังไม่มี log</pre>
+    </div>
+  </div>
+
+  <!-- Farm job full log sheet (Session Timeline) -->
+  <div id="job-log-modal" class="vault-modal-root hidden" aria-hidden="true">
+    <div class="vault-modal-backdrop" data-job-log-close></div>
+    <div
+      class="panel pass-modal-sheet job-log-sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="job-log-title"
+    >
+      <div class="vault-modal-head">
+        <div class="vault-modal-titles">
+          <p class="pass-eyebrow" id="job-log-eyebrow">Worker</p>
+          <h2 class="panel-title" id="job-log-title">Log งาน</h2>
+        </div>
+        <button type="button" class="vault-modal-close" id="job-log-close" aria-label="ปิด" data-job-log-close>×</button>
+      </div>
+      <pre id="job-log-body" class="job-log-body" aria-live="polite">ยังไม่มี log</pre>
     </div>
   </div>
 
@@ -1578,7 +1828,7 @@
 
       <section class="pass-section pass-section-feature">
         <h3 class="pass-section-title">แพ็กเสริม</h3>
-        <p class="pass-section-hint">50฿ · 12 ชม. · เลือกได้ 1 ฟังก์ชันหลังเติมสำเร็จ</p>
+        <p class="pass-section-hint">50 coin · 12 ชม. · เลือกได้ 1 ฟังก์ชันหลังเติมสำเร็จ</p>
         <div
           id="topup-packages-feature"
           class="pass-card-grid pass-card-grid-feature"
@@ -1591,7 +1841,7 @@
         <div class="pass-price-row">
           <div class="pass-price-copy">
             <span class="pass-price-label">ยอดซองที่ต้องสร้าง</span>
-            <span class="pass-price-value" id="topup-selected-text">200฿ · 1 วัน · ทุกฟังก์ชัน</span>
+            <span class="pass-price-value" id="topup-selected-text">200 coin · 1 วัน · ทุกฟังก์ชัน</span>
           </div>
           <button type="button" class="btn btn-ghost btn-sm pass-copy-btn" id="topup-copy-price">
             คัดลอก
@@ -1601,7 +1851,7 @@
         <button type="button" class="pass-tutorial-link" id="wallet-tutorial-open">
           <span class="pass-tutorial-title">วิธีสร้างซอง TrueMoney</span>
           <span class="pass-tutorial-sub">
-            ยอด <strong id="topup-step-amount">200฿</strong> · ดูทีละขั้นพร้อมรูป ›
+            ยอด <strong id="topup-step-amount">200 coin</strong> · ดูทีละขั้นพร้อมรูป ›
           </span>
         </button>
 
@@ -1762,25 +2012,40 @@
             <p id="farm-dock-flash" class="farm-dock-flash" role="status"></p>
           </div>
 
-          <div class="job-status-progress job-status-progress--focus">
-            <div class="live-status-ring-wrap">
-              <div class="live-status-ring" id="live-status-ring" style="--pct: 0">
-                <span class="live-status-ring-shimmer" aria-hidden="true"></span>
-                <div class="live-status-ring-inner">
-                  <span class="live-status-pct" id="live-status-pct">0%</span>
-                  <span class="live-status-fraction" id="live-status-fraction">—</span>
-                </div>
+          <div class="session-progress" id="session-progress">
+            <div class="session-progress-head">
+              <div class="session-progress-nums">
+                <span class="session-progress-fraction" id="live-status-fraction">—</span>
+                <span class="session-progress-pct" id="live-status-pct">0%</span>
               </div>
+              <p class="session-progress-meta">
+                <span class="session-progress-phase" id="live-status-phase">—</span>
+                <span class="session-progress-time" id="live-status-time">—</span>
+              </p>
             </div>
-            <p class="live-status-focus" id="live-status-focus">
-              <span class="live-status-focus-dot" aria-hidden="true"></span>
-              <span class="live-status-focus-text" id="live-status-phase">—</span>
-              <span class="live-status-focus-ellipsis" aria-hidden="true"></span>
-            </p>
-            <p class="live-status-elapsed" id="live-status-time">—</p>
+            <div
+              class="session-progress-track"
+              id="live-status-track"
+              role="progressbar"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+            >
+              <span class="session-progress-fill" id="live-status-fill" style="width:0%"></span>
+            </div>
+            <!-- Keep ring id as hidden compat hook for any leftover CSS/JS -->
+            <div id="live-status-ring" class="hidden" aria-hidden="true" style="--pct:0"></div>
           </div>
 
-          <div class="live-status-steps job-status-steps" id="live-status-steps" aria-label="ขั้นตอน"></div>
+          <ol class="session-timeline" id="live-status-steps" aria-label="ขั้นตอน"></ol>
+
+          <div id="live-status-log-preview" class="session-log-preview hidden">
+            <p class="session-log-preview-label">Log ล่าสุด</p>
+            <ul id="live-status-log-preview-list" class="session-log-preview-list" aria-live="polite"></ul>
+            <button type="button" id="job-log-open-btn" class="btn btn-ghost btn-sm session-log-open-btn">
+              ดู Log เต็ม
+            </button>
+          </div>
 
           <div id="farm-dock-queue-section" class="job-status-queue hidden">
             <h3 class="job-status-section-label">คิวรอ</h3>
@@ -1788,7 +2053,8 @@
             <button type="button" id="farm-dock-leave-queue" class="btn btn-ghost btn-sm hidden">ออกจากคิว</button>
           </div>
 
-          <div id="live-status-log-wrap" class="job-status-log-wrap hidden">
+          <!-- Legacy collapse log kept hidden; full log uses modal -->
+          <div id="live-status-log-wrap" class="job-status-log-wrap hidden" hidden>
             <button type="button" id="live-status-log-toggle" class="live-status-log-toggle" aria-expanded="false">
               <span>รายละเอียด Log</span>
               <span class="live-status-log-caret" aria-hidden="true">▾</span>
@@ -1889,6 +2155,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260810-invite2"></script>
+  <script src="js/app.js?v=20260814-afterplay-a1"></script>
 </body>
 </html>
