@@ -537,16 +537,16 @@
       icon: "icon_giftpoint.png",
     },
     afterplay_fast: {
-      title: "AfterPlay Fast",
-      hint: "Hardcore · 0.5 Credit/รอบ · หัวใจไม่พอห้ามเริ่ม",
-      blurb: "ยัด XP/เหรียญแบบ Hardcore จากไอดีที่ล็อกอิน",
-      icon: "score.png",
+      title: "ฟาร์มเงิน/XP",
+      hint: "ใส่เป้าเหรียญหรือเลเวล · คำนวณรอบชัวร์จากไอดีจริง",
+      blurb: "ฟาร์มเหรียญและ XP แบบ Hardcore จากไอดีที่ล็อกอิน",
+      icon: "Cookie0023_head.png",
     },
     unlock_l: {
-      title: "Unlock L",
+      title: "ปลดล็อค L",
       hint: "15 Credit/ตัว · ครบ 7 = 100 · ไม่คิดตัวที่มีแล้ว",
       blurb: "ปลด L ทีละด่านหรือครบชุด 7 ตัว",
-      icon: "Crystal_Pearl_Earring_2B9.png",
+      icon: "Tiger_Lily_Cookie.png",
     },
     account: {
       title: "ข้อมูลไอดี",
@@ -1393,8 +1393,8 @@
       quest: "เควส",
       account: "ข้อมูลไอดี",
       dstool: "ทดสอบเกม",
-      afterplay_fast: "AfterPlay Fast",
-      unlock_l: "Unlock L",
+      afterplay_fast: "ฟาร์มเงิน/XP",
+      unlock_l: "ปลดล็อค L",
     };
     const name = labels[tab] || tab || "ฟีเจอร์นี้";
     showErrorModal(
@@ -2924,7 +2924,7 @@
     const btn = $("afterplay-start-btn");
     if (!btn) return;
     const plan = afterplayPlan;
-    const runs = Number(plan?.runs || $("afterplay-runs")?.value || 0);
+    const runs = Number(plan?.runs || 0);
     const enoughLife = !!plan?.enough_life;
     const bal = inviteCreditBalance();
     const cost = Number(plan?.credit || 0);
@@ -2946,8 +2946,8 @@
     if ($("afterplay-start-btn-sub") && !afterplayRunning) {
       if (!devplaySession?.id) $("afterplay-start-btn-sub").textContent = "ล็อกอิน DevPlay ก่อน";
       else if (!enoughLife && runs > 0) $("afterplay-start-btn-sub").textContent = "หัวใจไม่พอ — ห้ามเริ่ม";
-      else if (runs > 0) $("afterplay-start-btn-sub").textContent = "หัก " + formatCredit(cost) + " Credit";
-      else $("afterplay-start-btn-sub").textContent = "ตั้งเป้าเลเวลหรือจำนวนรอบ";
+      else if (runs > 0) $("afterplay-start-btn-sub").textContent = "หัก " + formatCredit(cost) + " Credit · " + formatNumTh(runs) + " รอบ";
+      else $("afterplay-start-btn-sub").textContent = "ใส่เป้าเหรียญหรือเลเวล";
     }
   }
 
@@ -2969,20 +2969,41 @@
         $("afterplay-est-xp").textContent =
           formatNumTh(plan.xp_gain_min || 0) + "–" + formatNumTh(plan.xp_gain_max || 0);
       }
+      if ($("afterplay-est-credit")) $("afterplay-est-credit").textContent = formatCredit(plan.credit || 0);
+      if ($("afterplay-est-hearts")) {
+        const have = Number(plan.life || snap.life || 0);
+        const need = Number(plan.hearts_required || 0);
+        $("afterplay-est-hearts").textContent =
+          "มี " + formatNumTh(have) + " / ต้อง " + formatNumTh(need) + (plan.enough_life ? " · พร้อม" : " · ไม่พอ");
+      }
       if ($("afterplay-est-coin")) {
         $("afterplay-est-coin").textContent =
           formatNumTh(plan.coin_min || 0) + "–" + formatNumTh(plan.coin_max || 0);
       }
-      if ($("afterplay-est-credit")) $("afterplay-est-credit").textContent = formatCredit(plan.credit || 0);
-      if ($("afterplay-est-hearts")) $("afterplay-est-hearts").textContent = formatNumTh(plan.hearts_required || 0);
-      const proj = plan.projected_level_avg || {};
-      if ($("afterplay-est-level")) {
-        $("afterplay-est-level").textContent = proj.level != null ? String(proj.level) : "—";
+      const before = plan.before || snap;
+      const safe = plan.after_safe || {};
+      const best = plan.after_best || {};
+      const cmp = $("afterplay-compare");
+      if (cmp) {
+        const show = Number(plan.runs || 0) > 0;
+        cmp.hidden = !show;
+        cmp.classList.toggle("hidden", !show);
+        if (show) {
+          if ($("afterplay-cmp-before-level")) $("afterplay-cmp-before-level").textContent = formatNumTh(before.level || 0);
+          if ($("afterplay-cmp-before-coin")) $("afterplay-cmp-before-coin").textContent = formatNumTh(before.coin || 0);
+          if ($("afterplay-cmp-before-life")) $("afterplay-cmp-before-life").textContent = formatNumTh(before.life || 0);
+          if ($("afterplay-cmp-after-level")) {
+            const a = Number(safe.level || 0);
+            const b = Number(best.level || a);
+            $("afterplay-cmp-after-level").textContent = a === b ? formatNumTh(a) : formatNumTh(a) + "–" + formatNumTh(b);
+          }
+          if ($("afterplay-cmp-after-coin")) {
+            $("afterplay-cmp-after-coin").textContent =
+              formatNumTh(safe.coin || 0) + "–" + formatNumTh(best.coin || 0);
+          }
+          if ($("afterplay-cmp-after-life")) $("afterplay-cmp-after-life").textContent = formatNumTh(safe.life || 0);
+        }
       }
-      const runsEl = $("afterplay-runs");
-      const tgtEl = $("afterplay-target-level");
-      if (runsEl && document.activeElement !== runsEl && plan.runs) runsEl.value = String(plan.runs);
-      if (tgtEl && document.activeElement !== tgtEl && plan.target_level) tgtEl.value = String(plan.target_level);
     }
     paintAfterplayStartEnabled();
   }
@@ -2993,7 +3014,6 @@
     const options = opts || {};
     const force = !!options.force;
     const fromTab = !!options.fromTab;
-    const source = options.source || afterplayLastEdit || "runs";
     if (
       fromTab &&
       !force &&
@@ -3004,24 +3024,38 @@
       paintAfterplayPlan(afterplaySnapCache.data);
       return afterplaySnapCache.data;
     }
-    const runsRaw = $("afterplay-runs")?.value;
-    const tgtRaw = $("afterplay-target-level")?.value;
+    const tgtNum = Math.floor(Number($("afterplay-target-level")?.value || 0));
+    const coinNum = Math.floor(Number($("afterplay-target-coin")?.value || 0));
     const body = { devplay_session_id: sid };
-    if (source === "level") {
-      if (tgtRaw) body.target_level = Math.max(1, Math.min(110, Number(tgtRaw) || 1));
-    } else if (source === "runs") {
-      if (runsRaw) body.runs = Math.max(1, Math.min(200, Number(runsRaw) || 1));
-    } else if (runsRaw && !tgtRaw) {
-      body.runs = Math.max(1, Math.min(200, Number(runsRaw) || 1));
-    } else if (tgtRaw) {
-      body.target_level = Math.max(1, Math.min(110, Number(tgtRaw) || 1));
-    }
+    if (tgtNum >= 1) body.target_level = Math.max(1, Math.min(110, tgtNum));
+    if (coinNum >= 1) body.target_coin = coinNum;
     setStatus($("afterplay-status"), "กำลังอ่านไอดี…", "muted");
     try {
       const data = await api("/api/farm/afterplay/preview", { method: "POST", body, timeoutMs: 45000 });
       afterplaySnapCache = { at: Date.now(), sid, data };
       paintAfterplayPlan(data);
-      setStatus($("afterplay-status"), "พร้อมคำนวณแล้ว · หัวใจไม่พอห้ามเริ่ม · ธง 210 ไปต่อ", "ok");
+      const plan = data?.plan;
+      if (plan?.capped) {
+        setStatus($("afterplay-status"), "เป้าเกินเพดาน " + formatNumTh(plan.max_runs || 200) + " รอบ — ใช้จำนวนสูงสุด", "err");
+      } else if (plan?.runs) {
+        const why =
+          plan.goal === "both"
+            ? " (ยึดเป้าที่ต้องรอบมากกว่า)"
+            : plan.goal === "level"
+              ? " (จากเลเวล)"
+              : plan.goal === "coin"
+                ? " (จากเหรียญ)"
+                : "";
+        setStatus(
+          $("afterplay-status"),
+          "ชัวร์ " + formatNumTh(plan.runs) + " รอบ" + why + " · หัวใจ" + (plan.enough_life ? "พร้อม" : "ไม่พอ"),
+          plan.enough_life ? "ok" : "err"
+        );
+      } else if (tgtNum >= 1 && !coinNum && Number(data?.snapshot?.level || 0) >= tgtNum) {
+        setStatus($("afterplay-status"), "เลเวลถึงหรือเกินเป้าแล้ว", "ok");
+      } else {
+        setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวลแล้วกดคำนวณ", "muted");
+      }
       return data;
     } catch (err) {
       setStatus($("afterplay-status"), String(err?.userMessage || err?.message || "คำนวณไม่สำเร็จ"), "err");
@@ -3049,9 +3083,10 @@
     if (afterplayBusy || afterplayRunning) return;
     const sid = requireDevplaySessionId();
     if (!sid) return;
-    const runs = Math.max(1, Math.min(200, Number($("afterplay-runs")?.value || afterplayPlan?.runs || 0)));
-    if (!runs) {
-      setStatus($("afterplay-status"), "ใส่จำนวนรอบหรือเป้าเลเวลก่อน", "err");
+    const tgt = Math.floor(Number($("afterplay-target-level")?.value || 0));
+    const coin = Math.floor(Number($("afterplay-target-coin")?.value || 0));
+    if (tgt < 1 && coin < 1) {
+      setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวลก่อน", "err");
       return;
     }
     if (afterplayPlan && !afterplayPlan.enough_life) {
@@ -3061,9 +3096,9 @@
     afterplayBusy = true;
     setStatus($("afterplay-status"), "กำลังเริ่มงาน…", "muted");
     try {
-      const body = { devplay_session_id: sid, runs };
-      const tgt = Number($("afterplay-target-level")?.value || 0);
-      if (tgt) body.target_level = tgt;
+      const body = { devplay_session_id: sid };
+      if (tgt >= 1) body.target_level = Math.max(1, Math.min(110, tgt));
+      if (coin >= 1) body.target_coin = coin;
       const data = await api("/api/farm/afterplay/start", { method: "POST", body, timeoutMs: 45000 });
       if (data?.invite_credit_balance != null && profile) {
         profile.invite_credit_balance = data.invite_credit_balance;
@@ -3121,17 +3156,58 @@
               (res.failed_send ? " · ส่งไม่ติด: " + formatNumTh(res.failed_send) : "") +
               (res.refunded ? " · คืน " + formatCredit(res.refunded) + " Credit" : "");
           }
+          paintAfterplayResultCompare(res);
           setStatus(
             $("afterplay-status"),
-            job.status === "succeeded" ? "AfterPlay Fast สำเร็จ" : "จบ: " + (job.error || job.status),
+            job.status === "succeeded" ? "ฟาร์มเงิน/XP สำเร็จ" : "จบ: " + (job.error || job.status),
             job.status === "succeeded" ? "ok" : "err"
           );
-          refreshAfterplayPreview({ force: true, source: "runs" }).catch(() => {});
+          refreshAfterplayPreview({ force: true, source: afterplayLastEdit }).catch(() => {});
         }
       } catch (_) {}
     };
     tick();
     afterplayPollTimer = setInterval(tick, 2000);
+  }
+
+  function signedDelta(n) {
+    const v = Number(n) || 0;
+    if (v > 0) return "+" + formatNumTh(v);
+    if (v < 0) return formatNumTh(v);
+    return "0";
+  }
+
+  function paintAfterplayResultCompare(res) {
+    const box = $("afterplay-result-compare");
+    if (!box) return;
+    const before = res?.before || {};
+    const after = res?.after || {};
+    const delta = res?.delta || {};
+    if (before.level == null && after.level == null) {
+      box.hidden = true;
+      box.classList.add("hidden");
+      box.textContent = "";
+      return;
+    }
+    box.hidden = false;
+    box.classList.remove("hidden");
+    const lv = formatNumTh(before.level || 0) + " → " + formatNumTh(after.level || before.level || 0) + " (" + signedDelta(delta.level) + ")";
+    const coin = formatNumTh(before.coin || 0) + " → " + formatNumTh(after.coin || before.coin || 0) + " (" + signedDelta(delta.coin) + ")";
+    const life = formatNumTh(before.life || 0) + " → " + formatNumTh(after.life || before.life || 0) + " (" + signedDelta(delta.life) + ")";
+    box.replaceChildren();
+    const mk = (title, value) => {
+      const p = document.createElement("p");
+      const s = document.createElement("span");
+      s.textContent = title + " ";
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      p.append(s, strong);
+      return p;
+    };
+    const head = document.createElement("p");
+    head.className = "afterplay-compare-h";
+    head.textContent = "สรุปก่อน vs หลัง";
+    box.append(head, mk("เลเวล", lv), mk("เหรียญ", coin), mk("หัวใจ", life));
   }
 
   async function cancelAfterplayJob() {
@@ -3312,7 +3388,7 @@
       return;
     }
     if (Number(unlockLSnap.life || 0) < 1) {
-      setStatus($("unlockl-status"), "หัวใจเป็น 0 — ห้ามเริ่ม Unlock L", "err");
+      setStatus($("unlockl-status"), "หัวใจเป็น 0 — ห้ามเริ่มปลดล็อค L", "err");
       return;
     }
     if (q.billable.includes(5) && Number(unlockLSnap.key || 0) < 1) {
@@ -3389,7 +3465,7 @@
           }
           setStatus(
             $("unlockl-status"),
-            job.status === "succeeded" ? "Unlock L สำเร็จ" : "จบ: " + (job.error || job.status),
+            job.status === "succeeded" ? "ปลดล็อค L สำเร็จ" : "จบ: " + (job.error || job.status),
             job.status === "succeeded" ? "ok" : "err"
           );
           refreshUnlockLCatalog({ force: true }).catch(() => {});
@@ -3726,6 +3802,8 @@
     powder: "ฟาร์มผง",
     giftdraw: "เปิดกล่องขวัญ",
     heart: "ฟาร์มหัวใจ",
+    afterplay_fast: "ฟาร์มเงิน/XP",
+    unlock_l: "ปลดล็อค L",
     upgrade: "ตีบวกสมบัติ",
     cookie_unlock: "ปลดล็อกคุกกี้",
     reroll: "รีโรล",
@@ -11073,8 +11151,8 @@
     if (mode === "cookie_unlock") return "ปลดล็อกคุกกี้";
     if (mode === "reroll") return "รีโรล";
     if (mode === "quest_claim") return "รับรางวัลเควส";
-    if (mode === "afterplay_fast") return "AfterPlay Fast";
-    if (mode === "unlock_l") return "Unlock L";
+    if (mode === "afterplay_fast") return "ฟาร์มเงิน/XP";
+    if (mode === "unlock_l") return "ปลดล็อค L";
     return "ฟาร์ม";
   }
 
@@ -14650,12 +14728,12 @@
     cancelAfterplayJob().catch(() => {});
   });
   $("afterplay-log-open-btn")?.addEventListener("click", () => {
-    openCreditLogModal(afterplayLogLines, "Log AfterPlay Fast");
+    openCreditLogModal(afterplayLogLines, "Log ฟาร์มเงิน/XP");
   });
   $("afterplay-target-level")?.addEventListener("input", () => scheduleAfterplayPreview("level"));
   $("afterplay-target-level")?.addEventListener("change", () => scheduleAfterplayPreview("level"));
-  $("afterplay-runs")?.addEventListener("input", () => scheduleAfterplayPreview("runs"));
-  $("afterplay-runs")?.addEventListener("change", () => scheduleAfterplayPreview("runs"));
+  $("afterplay-target-coin")?.addEventListener("input", () => scheduleAfterplayPreview("coin"));
+  $("afterplay-target-coin")?.addEventListener("change", () => scheduleAfterplayPreview("coin"));
   $("unlockl-refresh-btn")?.addEventListener("click", () => {
     refreshUnlockLCatalog({ force: true }).catch(() => {});
   });
@@ -14667,7 +14745,7 @@
     cancelUnlockLJob().catch(() => {});
   });
   $("unlockl-log-open-btn")?.addEventListener("click", () => {
-    openCreditLogModal(unlockLLogLines, "Log Unlock L");
+    openCreditLogModal(unlockLLogLines, "Log ปลดล็อค L");
   });
 
   document.addEventListener("keydown", (ev) => {

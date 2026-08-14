@@ -11735,11 +11735,35 @@ body.has-job-status .job-status-mini:not(.hidden) {
   gap: 10px;
   align-items: end;
 }
-.afterplay-estimate-card {
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(240, 180, 41, 0.16);
-  background: rgba(0, 0, 0, 0.22);
+.afterplay-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(240, 180, 41, 0.12);
+}
+.afterplay-compare[hidden],
+#afterplay-result-compare[hidden] {
+  display: none !important;
+}
+.afterplay-compare-col,
+#afterplay-result-compare {
+  display: grid;
+  gap: 4px;
+  font-size: 0.88rem;
+  color: var(--cream);
+}
+.afterplay-compare-h {
+  margin: 0 0 4px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cream-dim);
+}
+#afterplay-result-compare {
+  grid-template-columns: 1fr;
+  margin-top: 10px;
 }
 .unlockl-toolbar {
   display: flex;
@@ -11780,8 +11804,12 @@ body.has-job-status .job-status-mini:not(.hidden) {
 }
 @media (max-width: 720px) {
   .afterplay-snap-grid,
-  .afterplay-plan-fields {
+  .afterplay-plan-fields,
+  .afterplay-compare {
     grid-template-columns: 1fr 1fr;
+  }
+  .afterplay-plan-fields {
+    grid-template-columns: 1fr;
   }
 }
 
