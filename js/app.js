@@ -599,6 +599,10 @@
   let afterplayPollTimer = null;
   let afterplayLogLines = [];
   let afterplayResultShownFor = null;
+  let afterplayLastEdit = "level";
+  let afterplayPreviewTimer = null;
+  let afterplaySnapCache = { at: 0, sid: "", data: null };
+  const AFTERPLAY_SNAP_TTL_MS = 8000;
   let unlockLCatalog = [];
   let unlockLSelected = new Set();
   let unlockLPrices = { each: 15, bundle: 100 };
@@ -608,6 +612,8 @@
   let unlockLPollTimer = null;
   let unlockLLogLines = [];
   let unlockLResultShownFor = null;
+  let unlockLSnap = { life: 0, key: 0 };
+  let unlockLCatalogCache = { at: 0, sid: "", data: null };
   const DEVPLAY_PORTRAIT_CDN = "https://link.clashofdragons.com/images/cookies";
   const DEVPLAY_AVATAR_FALLBACK = "assets/notice_b20.png";
   let devplayConnecting = false;
@@ -2938,17 +2944,39 @@
     paintAfterplayStartEnabled();
   }
 
-  async function refreshAfterplayPreview() {
+  async function refreshAfterplayPreview(opts) {
     const sid = requireDevplaySessionId();
     if (!sid) return null;
+    const options = opts || {};
+    const force = !!options.force;
+    const fromTab = !!options.fromTab;
+    const source = options.source || afterplayLastEdit || "runs";
+    if (
+      fromTab &&
+      !force &&
+      afterplaySnapCache.data &&
+      afterplaySnapCache.sid === sid &&
+      Date.now() - afterplaySnapCache.at < AFTERPLAY_SNAP_TTL_MS
+    ) {
+      paintAfterplayPlan(afterplaySnapCache.data);
+      return afterplaySnapCache.data;
+    }
     const runsRaw = $("afterplay-runs")?.value;
     const tgtRaw = $("afterplay-target-level")?.value;
     const body = { devplay_session_id: sid };
-    if (runsRaw) body.runs = Math.max(1, Math.min(200, Number(runsRaw) || 1));
-    if (tgtRaw) body.target_level = Math.max(1, Math.min(110, Number(tgtRaw) || 1));
+    if (source === "level") {
+      if (tgtRaw) body.target_level = Math.max(1, Math.min(110, Number(tgtRaw) || 1));
+    } else if (source === "runs") {
+      if (runsRaw) body.runs = Math.max(1, Math.min(200, Number(runsRaw) || 1));
+    } else if (runsRaw && !tgtRaw) {
+      body.runs = Math.max(1, Math.min(200, Number(runsRaw) || 1));
+    } else if (tgtRaw) {
+      body.target_level = Math.max(1, Math.min(110, Number(tgtRaw) || 1));
+    }
     setStatus($("afterplay-status"), "กำลังอ่านไอดี…", "muted");
     try {
       const data = await api("/api/farm/afterplay/preview", { method: "POST", body, timeoutMs: 45000 });
+      afterplaySnapCache = { at: Date.now(), sid, data };
       paintAfterplayPlan(data);
       setStatus($("afterplay-status"), "พร้อมคำนวณแล้ว · หัวใจไม่พอห้ามเริ่ม · ธง 210 ไปต่อ", "ok");
       return data;
@@ -2956,6 +2984,15 @@
       setStatus($("afterplay-status"), String(err?.userMessage || err?.message || "คำนวณไม่สำเร็จ"), "err");
       return null;
     }
+  }
+
+  function scheduleAfterplayPreview(source) {
+    afterplayLastEdit = source || afterplayLastEdit;
+    if (afterplayPreviewTimer) clearTimeout(afterplayPreviewTimer);
+    afterplayPreviewTimer = setTimeout(() => {
+      afterplayPreviewTimer = null;
+      refreshAfterplayPreview({ source: afterplayLastEdit }).catch(() => {});
+    }, 400);
   }
 
   function stopAfterplayPoll() {
@@ -3036,7 +3073,9 @@
               "/" +
               formatNumTh(res.runs || job.ticket_count || 0) +
               " รอบ" +
+              (res.ok200 ? " · 200: " + formatNumTh(res.ok200) : "") +
               (res.flagged ? " · ธง 210: " + formatNumTh(res.flagged) + " (ไปต่อ)" : "") +
+              (res.failed_send ? " · ส่งไม่ติด: " + formatNumTh(res.failed_send) : "") +
               (res.refunded ? " · คืน " + formatCredit(res.refunded) + " Credit" : "");
           }
           setStatus(
@@ -3044,6 +3083,7 @@
             job.status === "succeeded" ? "AfterPlay Fast สำเร็จ" : "จบ: " + (job.error || job.status),
             job.status === "succeeded" ? "ok" : "err"
           );
+          refreshAfterplayPreview({ force: true, source: "runs" }).catch(() => {});
         }
       } catch (_) {}
     };
@@ -3112,23 +3152,60 @@
     if ($("unlockl-quote")) $("unlockl-quote").textContent = formatCredit(q.credit) + " Credit";
     if ($("unlockl-price-each")) $("unlockl-price-each").textContent = formatCredit(unlockLPrices.each);
     if ($("unlockl-price-bundle")) $("unlockl-price-bundle").textContent = formatCredit(unlockLPrices.bundle);
+    if ($("unlockl-snap-life")) $("unlockl-snap-life").textContent = formatNumTh(unlockLSnap.life || 0);
+    if ($("unlockl-snap-key")) $("unlockl-snap-key").textContent = formatNumTh(unlockLSnap.key || 0);
     const btn = $("unlockl-start-btn");
     const bal = inviteCreditBalance();
-    const can = !unlockLRunning && !unlockLBusy && q.n > 0 && bal + 1e-9 >= q.credit && !!devplaySession?.id;
+    const noLife = Number(unlockLSnap.life || 0) < 1;
+    const needsEp5 = q.billable.includes(5);
+    const noKey = needsEp5 && Number(unlockLSnap.key || 0) < 1;
+    const can =
+      !unlockLRunning &&
+      !unlockLBusy &&
+      q.n > 0 &&
+      bal + 1e-9 >= q.credit &&
+      !!devplaySession?.id &&
+      !noLife &&
+      !noKey;
     if (btn) {
       btn.disabled = !can;
       btn.classList.toggle("is-disabled-look", !can);
     }
+    const lifeWarn = $("unlockl-life-warn");
+    if (lifeWarn) {
+      lifeWarn.hidden = !noLife;
+      lifeWarn.classList.toggle("hidden", !noLife);
+    }
+    const keyWarn = $("unlockl-key-warn");
+    if (keyWarn) {
+      keyWarn.hidden = !noKey;
+      keyWarn.classList.toggle("hidden", !noKey);
+    }
     if ($("unlockl-start-btn-sub") && !unlockLRunning) {
       if (!q.n) $("unlockl-start-btn-sub").textContent = "เลือกอย่างน้อย 1 ตัวที่ยังไม่มี";
+      else if (noLife) $("unlockl-start-btn-sub").textContent = "หัวใจเป็น 0 — ห้ามเริ่ม";
+      else if (noKey) $("unlockl-start-btn-sub").textContent = "EP5 ต้องมีกุญแจ";
       else if (bal + 1e-9 < q.credit) $("unlockl-start-btn-sub").textContent = "Credit ไม่พอ (" + formatCredit(q.credit) + ")";
       else $("unlockl-start-btn-sub").textContent = "หัก " + formatCredit(q.credit) + " Credit";
     }
   }
 
-  async function refreshUnlockLCatalog() {
+  async function refreshUnlockLCatalog(opts) {
     const sid = requireDevplaySessionId();
     if (!sid) return null;
+    const options = opts || {};
+    const force = !!options.force;
+    const fromTab = !!options.fromTab;
+    if (
+      fromTab &&
+      !force &&
+      unlockLCatalogCache.data &&
+      unlockLCatalogCache.sid === sid &&
+      Date.now() - unlockLCatalogCache.at < AFTERPLAY_SNAP_TTL_MS
+    ) {
+      paintUnlockLGrid();
+      return unlockLCatalogCache.data;
+    }
     setStatus($("unlockl-status"), "กำลังโหลดคลัง…", "muted");
     try {
       const data = await api("/api/farm/unlock-l/catalog", {
@@ -3145,8 +3222,13 @@
         bundle: Number(data.credit_bundle || 100),
       };
       unlockLCatalog = Array.isArray(data.episodes) ? data.episodes : [];
+      unlockLSnap = {
+        life: Number(data.snapshot?.life || 0),
+        key: Number(data.snapshot?.key || 0),
+      };
       const owned = new Set(unlockLCatalog.filter((r) => r.owned).map((r) => Number(r.ep)));
       unlockLSelected = new Set([...unlockLSelected].filter((ep) => !owned.has(ep)));
+      unlockLCatalogCache = { at: Date.now(), sid, data };
       paintUnlockLGrid();
       setStatus($("unlockl-status"), "เลือกตัวที่ยังไม่มี หรือกดเลือกทั้งหมด", "ok");
       return data;
@@ -3184,6 +3266,14 @@
     const q = unlockLQuote(unlockLSelected, unlockLCatalog);
     if (!q.n) {
       setStatus($("unlockl-status"), "เลือกอย่างน้อย 1 ตัวที่ยังไม่มี", "err");
+      return;
+    }
+    if (Number(unlockLSnap.life || 0) < 1) {
+      setStatus($("unlockl-status"), "หัวใจเป็น 0 — ห้ามเริ่ม Unlock L", "err");
+      return;
+    }
+    if (q.billable.includes(5) && Number(unlockLSnap.key || 0) < 1) {
+      setStatus($("unlockl-status"), "Ice Tower (EP5) ต้องมีกุญแจ", "err");
       return;
     }
     unlockLBusy = true;
@@ -3259,7 +3349,7 @@
             job.status === "succeeded" ? "Unlock L สำเร็จ" : "จบ: " + (job.error || job.status),
             job.status === "succeeded" ? "ok" : "err"
           );
-          refreshUnlockLCatalog().catch(() => {});
+          refreshUnlockLCatalog({ force: true }).catch(() => {});
         }
       } catch (_) {}
     };
@@ -6062,10 +6152,10 @@
       loadDsAllowlist(false).catch(() => {});
     }
     if (farmTab === AFTERPLAY_FAST_TAB) {
-      refreshAfterplayPreview().catch(() => {});
+      refreshAfterplayPreview({ fromTab: true, source: afterplayLastEdit }).catch(() => {});
     }
     if (farmTab === UNLOCK_L_TAB) {
-      refreshUnlockLCatalog().catch(() => {});
+      refreshUnlockLCatalog({ fromTab: true }).catch(() => {});
     }
     paintDevPlayHub();
     syncOvenDevPlayLayout();
@@ -14495,7 +14585,7 @@
   $("afterplay-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   $("unlockl-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   $("afterplay-preview-btn")?.addEventListener("click", () => {
-    refreshAfterplayPreview().catch(() => {});
+    refreshAfterplayPreview({ force: true, source: afterplayLastEdit }).catch(() => {});
   });
   $("afterplay-start-btn")?.addEventListener("click", () => {
     startAfterplayJob().catch(() => {});
@@ -14506,13 +14596,12 @@
   $("afterplay-log-open-btn")?.addEventListener("click", () => {
     openCreditLogModal(afterplayLogLines, "Log AfterPlay Fast");
   });
-  ["afterplay-target-level", "afterplay-runs"].forEach((id) => {
-    $(id)?.addEventListener("change", () => {
-      refreshAfterplayPreview().catch(() => {});
-    });
-  });
+  $("afterplay-target-level")?.addEventListener("input", () => scheduleAfterplayPreview("level"));
+  $("afterplay-target-level")?.addEventListener("change", () => scheduleAfterplayPreview("level"));
+  $("afterplay-runs")?.addEventListener("input", () => scheduleAfterplayPreview("runs"));
+  $("afterplay-runs")?.addEventListener("change", () => scheduleAfterplayPreview("runs"));
   $("unlockl-refresh-btn")?.addEventListener("click", () => {
-    refreshUnlockLCatalog().catch(() => {});
+    refreshUnlockLCatalog({ force: true }).catch(() => {});
   });
   $("unlockl-select-all-btn")?.addEventListener("click", () => selectAllUnlockL());
   $("unlockl-start-btn")?.addEventListener("click", () => {
