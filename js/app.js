@@ -752,6 +752,7 @@
     afterplay_fast: false,
     unlock_l: false,
   };
+  let earlyAccessFeatures = new Set();
   const FEATURE_LOCK_SVG =
     '<svg class="farm-nav-lock-icon" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9zm3 4a1.75 1.75 0 0 1 .75 3.33V19a.75.75 0 0 1-1.5 0v-1.67A1.75 1.75 0 0 1 12 14z"/></svg>';
   // Run held back by farm_busy, replayed automatically once our turn comes up.
@@ -1236,6 +1237,9 @@
       setupDevPlayAutofillGuards();
       try {
         await api("/api/me", { timeoutMs: 15000 }).then((me) => {
+          applyEarlyAccess(
+            me?.early_access_features || me?.profile?.early_access_features
+          );
           if (me?.profile) profile = me.profile;
         });
         await loadDevPlayVault().catch(() => {});
@@ -1405,14 +1409,12 @@
       const btn = $("farm-tab-" + t);
       if (!btn) return;
       const closed = isFeatureClosed(t);
-      const hide = closed && !admin;
-      btn.classList.toggle("is-feature-locked", closed);
+      const hide = isFeatureLocked(t);
+      btn.classList.toggle("is-feature-locked", closed && admin);
       btn.classList.toggle("is-feature-hidden", hide);
       btn.hidden = hide;
-      btn.title = closed
-        ? admin
-          ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
-          : "ปิดปรับปรุง"
+      btn.title = closed && admin
+        ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
         : "";
       const side = $("menu-nav-" + t);
       if (side) {
@@ -1550,6 +1552,7 @@
     } catch (_) {}
     accessToken = null;
     profile = null;
+    earlyAccessFeatures = new Set();
     clearSessionToken();
     showLogin();
     showErrorModal(ERR_TH.session_replaced, "มีการเข้าสู่ระบบจากที่อื่น");
@@ -1572,8 +1575,27 @@
     return !!featureLocks[key];
   }
 
+  function applyEarlyAccess(features) {
+    const next = new Set();
+    if (Array.isArray(features)) {
+      features.forEach((item) => {
+        const key = item === "cookie_unlock" ? "cookie" : String(item || "").trim();
+        if (key) next.add(key);
+      });
+    }
+    earlyAccessFeatures = next;
+    paintFeatureLocks();
+    updateFarmAvailability();
+  }
+
+  function hasEarlyAccess(tab) {
+    const key = tab === "cookie_unlock" ? "cookie" : tab;
+    return earlyAccessFeatures.has(key);
+  }
+
   function isFeatureLocked(tab) {
     if (isAdminUser()) return false;
+    if (hasEarlyAccess(tab)) return false;
     return isFeatureClosed(tab);
   }
 
@@ -4701,6 +4723,9 @@
       if (data.is_admin && profile) {
         profile.role = "admin";
         profile.is_admin = true;
+      }
+      if (Array.isArray(data.early_access_features)) {
+        applyEarlyAccess(data.early_access_features);
       }
       if (data.feature_locks) applyFeatureLocks(data.feature_locks);
       else paintFeatureLocks();
@@ -10498,6 +10523,9 @@
 
   async function refreshMe() {
     const data = await api("/api/me");
+    applyEarlyAccess(
+      data?.early_access_features || data?.profile?.early_access_features
+    );
     profile = data.profile;
     await loadDevPlayVault();
     paintProfile();
@@ -14520,6 +14548,7 @@
     await sb.auth.signOut();
     accessToken = null;
     profile = null;
+    earlyAccessFeatures = new Set();
     clearSessionToken();
     autoLoginAttempted = false;
     if (!wantsRemember()) clearAutoLoginCreds();
