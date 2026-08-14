@@ -561,7 +561,7 @@
       icon: "score.png",
     },
   };
-  const FARM_DOCK_TABS = [
+  const FARM_DOCK_TABS_DEFAULT = [
     "partyrun",
     "heart",
     "powder",
@@ -575,6 +575,24 @@
     "account",
     "dstool",
   ];
+  const FARM_DOCK_TAB_SET = new Set(FARM_DOCK_TABS_DEFAULT);
+  let FARM_DOCK_TABS = FARM_DOCK_TABS_DEFAULT.slice();
+  const DEFAULT_FARM_FEATURE_ORDER = [
+    "partyrun",
+    "heart",
+    "powder",
+    "giftdraw",
+    "upgrade",
+    "cookie",
+    "reroll",
+    "quest",
+    "invite",
+    "afterplay_fast",
+    "unlock_l",
+    "account",
+    "dstool",
+  ];
+  let farmFeatureOrder = DEFAULT_FARM_FEATURE_ORDER.slice();
   const INVITE_TAB = "invite";
   const INVITE_JOB_KEY = "ckr_invite_job_id";
   const INVITE_CHARGE_KEY = "ckr_invite_last_charge";
@@ -1240,6 +1258,7 @@
           applyEarlyAccess(
             me?.early_access_features || me?.profile?.early_access_features
           );
+          if (Array.isArray(me?.farm_feature_order)) applyFarmFeatureOrder(me.farm_feature_order);
           if (me?.profile) profile = me.profile;
         });
         await loadDevPlayVault().catch(() => {});
@@ -1379,6 +1398,51 @@
     featureLocks = next;
     paintFeatureLocks();
     updateFarmAvailability();
+  }
+
+  function normalizeFarmFeatureOrder(raw) {
+    const allowed = new Set(DEFAULT_FARM_FEATURE_ORDER);
+    const seen = new Set();
+    const out = [];
+    if (Array.isArray(raw)) {
+      raw.forEach((item) => {
+        let k = String(item || "").trim();
+        if (k === "cookie_unlock") k = "cookie";
+        if (!allowed.has(k) || seen.has(k)) return;
+        seen.add(k);
+        out.push(k);
+      });
+    }
+    DEFAULT_FARM_FEATURE_ORDER.forEach((k) => {
+      if (!seen.has(k)) out.push(k);
+    });
+    return out;
+  }
+
+  function applyFarmFeatureOrder(raw) {
+    farmFeatureOrder = normalizeFarmFeatureOrder(raw);
+    FARM_DOCK_TABS = farmFeatureOrder.filter((t) => FARM_DOCK_TAB_SET.has(t));
+    const nav = $("farm-bottom-nav");
+    if (nav) {
+      farmFeatureOrder.forEach((key) => {
+        const btn = $("farm-tab-" + key);
+        if (btn) nav.appendChild(btn);
+      });
+      const pin = $("farm-tab-devplay");
+      if (pin) nav.insertBefore(pin, nav.firstChild);
+    }
+    const menuNav = document.querySelector(".farm-sidebar-features");
+    if (menuNav) {
+      const topup = $("menu-nav-topup");
+      const history = $("menu-nav-history");
+      farmFeatureOrder.forEach((key) => {
+        const btn = $("menu-nav-" + key);
+        if (btn) menuNav.appendChild(btn);
+      });
+      if (history) menuNav.appendChild(history);
+      if (topup) menuNav.insertBefore(topup, menuNav.firstChild);
+    }
+    paintFeatureDock();
   }
 
   function showFeatureLockedModal(tab) {
@@ -1526,6 +1590,7 @@
   function paintMaintenanceBanner(health) {
     const el = $("maintenance-banner");
     if (!el) return;
+    if (health && Array.isArray(health.farm_feature_order)) applyFarmFeatureOrder(health.farm_feature_order);
     if (health && health.feature_locks) applyFeatureLocks(health.feature_locks);
     const farm = !!(health && health.farm_maintenance);
     const topup = !!(health && health.topup_maintenance);
@@ -4805,6 +4870,7 @@
       if (Array.isArray(data.early_access_features)) {
         applyEarlyAccess(data.early_access_features);
       }
+      if (Array.isArray(data.farm_feature_order)) applyFarmFeatureOrder(data.farm_feature_order);
       if (data.feature_locks) applyFeatureLocks(data.feature_locks);
       else paintFeatureLocks();
       const queueStatus = data.me?.status;
@@ -10604,6 +10670,7 @@
     applyEarlyAccess(
       data?.early_access_features || data?.profile?.early_access_features
     );
+    if (Array.isArray(data?.farm_feature_order)) applyFarmFeatureOrder(data.farm_feature_order);
     profile = data.profile;
     await loadDevPlayVault();
     paintProfile();
