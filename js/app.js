@@ -492,7 +492,7 @@
       title: "ฟาร์มหัวใจ",
       hint: "เลือกจำนวนหัวใจแล้วกดรัน",
       blurb: "ฟาร์มหัวใจผ่านเพื่อน",
-      icon: "bbc_stat_iconHeart.png",
+      icon: "Heart.png",
     },
     powder: {
       title: "ฟาร์มผง",
@@ -1377,12 +1377,6 @@
     updateFarmAvailability();
   }
 
-  function isFeatureLocked(tab) {
-    if (isAdminUser()) return false;
-    const key = tab === "cookie_unlock" ? "cookie" : tab;
-    return !!featureLocks[key];
-  }
-
   function showFeatureLockedModal(tab) {
     const labels = {
       partyrun: "Party Run",
@@ -1406,25 +1400,40 @@
   }
 
   function paintFeatureLocks() {
+    const admin = isAdminUser();
     FARM_DOCK_TABS.forEach((t) => {
       const btn = $("farm-tab-" + t);
       if (!btn) return;
-      const locked = isFeatureLocked(t);
-      btn.classList.toggle("is-feature-locked", locked);
-      btn.classList.toggle("is-feature-hidden", locked);
-      btn.hidden = locked;
+      const closed = isFeatureClosed(t);
+      const hide = closed && !admin;
+      btn.classList.toggle("is-feature-locked", closed);
+      btn.classList.toggle("is-feature-hidden", hide);
+      btn.hidden = hide;
+      btn.title = closed
+        ? admin
+          ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
+          : "ปิดปรับปรุง"
+        : "";
       const side = $("menu-nav-" + t);
       if (side) {
-        side.hidden = locked;
-        side.classList.toggle("hidden", locked);
+        side.hidden = hide;
+        side.classList.toggle("hidden", hide);
+        side.classList.toggle("is-feature-hidden", hide);
+        side.classList.toggle("is-feature-locked", closed && admin);
       }
       const pill = btn.querySelector(".farm-nav-pill");
-      if (!pill) return;
-      let badge = pill.querySelector(".farm-nav-lock");
-      if (locked) {
-        if (badge) badge.remove();
-      } else if (badge) {
-        badge.remove();
+      if (pill) {
+        let badge = pill.querySelector(".farm-nav-maint");
+        if (admin && closed) {
+          if (!badge) {
+            badge = document.createElement("span");
+            badge.className = "farm-nav-maint";
+            badge.textContent = "ปิด";
+            pill.appendChild(badge);
+          }
+        } else if (badge) {
+          badge.remove();
+        }
       }
     });
     paintFeatureDock();
@@ -1553,7 +1562,19 @@
 
   function isAdminUser(p) {
     const row = p || profile;
-    return String(row?.role || "").toLowerCase() === "admin";
+    if (!row) return false;
+    if (row.is_admin === true) return true;
+    return String(row.role || "").toLowerCase() === "admin";
+  }
+
+  function isFeatureClosed(tab) {
+    const key = tab === "cookie_unlock" ? "cookie" : tab;
+    return !!featureLocks[key];
+  }
+
+  function isFeatureLocked(tab) {
+    if (isAdminUser()) return false;
+    return isFeatureClosed(tab);
   }
 
   function normalizeFeatureKey(feature) {
@@ -4677,7 +4698,12 @@
     try {
       const data = await api("/api/farm/gate");
       lastGate = data;
+      if (data.is_admin && profile) {
+        profile.role = "admin";
+        profile.is_admin = true;
+      }
       if (data.feature_locks) applyFeatureLocks(data.feature_locks);
+      else paintFeatureLocks();
       const queueStatus = data.me?.status;
       const isQueued = queueStatus === "waiting" || queueStatus === "active";
       if (isQueued) {
@@ -4908,7 +4934,7 @@
           " หัวใจ\n" +
           "ใช้ rotating proxy ของคุณสำหรับสร้าง guest\n" +
           "ระบบจะสร้างเพื่อน guest ชั่วคราวแล้วลบทิ้งให้เอง (เพื่อนจริงไม่ถูกแตะ)\nอาจใช้เวลาหลายนาที",
-        icon: "assets/bbc_stat_iconHeart.png",
+        icon: "assets/Heart.png",
         locked: false,
       });
       modalActions.classList.add("row");
@@ -10466,6 +10492,7 @@
       menuRental.className = "account-card-rental" + (rental.kind ? " " + rental.kind : "");
     }
     paintPassStatus();
+    paintFeatureLocks();
     updateFarmAvailability();
   }
 
@@ -10518,7 +10545,7 @@
     heart: {
       title: "สถานะฟาร์มหัวใจ",
       runningSub: "กำลังฟาร์มหัวใจ… ใช้งานหน้าอื่นได้ระหว่างรอ",
-      heroIcon: "assets/bbc_stat_iconHeart.png",
+      heroIcon: "assets/Heart.png",
       steps: [
         { id: "login", label: "เข้าสู่ระบบเกม" },
         { id: "guests", label: "สร้างเพื่อน guest" },
@@ -14012,7 +14039,7 @@
       mode: "result",
       title: "สรุปผลฟาร์มหัวใจ",
       bodyHtml: html,
-      icon: "assets/bbc_stat_iconHeart.png",
+      icon: "assets/Heart.png",
       locked: false,
     });
     $("modal-body")?.classList.add("result-stagger");

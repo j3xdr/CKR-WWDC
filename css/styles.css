@@ -2318,6 +2318,22 @@ body:has(#job-status-root.is-expanded:not(.hidden)) .farm-history-tab {
   display: none !important;
 }
 
+.farm-nav-maint {
+  margin-left: auto;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #3a2410;
+  background: #f0c14b;
+  border-radius: 999px;
+  padding: 2px 7px;
+  line-height: 1.2;
+}
+
+.farm-sidebar-link.is-feature-hidden {
+  display: none !important;
+}
+
 .devplay-shortcuts {
   margin-top: 16px;
   padding-top: 16px;
