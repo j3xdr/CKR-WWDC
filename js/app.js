@@ -586,7 +586,6 @@
     "cookie",
     "reroll",
     "quest",
-    "invite",
     "afterplay_fast",
     "unlock_l",
     "account",
@@ -1431,17 +1430,6 @@
       const pin = $("farm-tab-devplay");
       if (pin) nav.insertBefore(pin, nav.firstChild);
     }
-    const menuNav = document.querySelector(".farm-sidebar-features");
-    if (menuNav) {
-      const topup = $("menu-nav-topup");
-      const history = $("menu-nav-history");
-      farmFeatureOrder.forEach((key) => {
-        const btn = $("menu-nav-" + key);
-        if (btn) menuNav.appendChild(btn);
-      });
-      if (history) menuNav.appendChild(history);
-      if (topup) menuNav.insertBefore(topup, menuNav.firstChild);
-    }
     paintFeatureDock();
   }
 
@@ -2093,7 +2081,6 @@
     const panel = document.querySelector(".invite-panel");
     panel?.classList.toggle("is-invite-running", inviteRunning);
     document.body.classList.toggle("invite-job-running", inviteRunning);
-    $("farm-tab-invite")?.classList.toggle("is-live-running", inviteRunning);
     $("menu-nav-invite")?.classList.toggle("is-live-running", inviteRunning);
     const startBtn = $("invite-start-btn");
     const link = $("invite-link-input");
@@ -2974,7 +2961,6 @@
   function setAfterplayRunning(on) {
     afterplayRunning = !!on;
     $("farm-tab-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
-    $("menu-nav-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
     const cancelBtn = $("afterplay-cancel-btn");
     if (cancelBtn) {
       cancelBtn.hidden = !afterplayRunning;
@@ -3432,7 +3418,6 @@
   function setUnlockLRunning(on) {
     unlockLRunning = !!on;
     $("farm-tab-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
-    $("menu-nav-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
     const cancelBtn = $("unlockl-cancel-btn");
     if (cancelBtn) {
       cancelBtn.hidden = !unlockLRunning;
@@ -5606,12 +5591,7 @@
         connected && !featureLocked ? "false" : "true"
       );
     });
-    // Invite is always available when logged in (credit-gated, not rental).
-    const inviteBtn = $("farm-tab-invite");
-    if (inviteBtn) {
-      inviteBtn.classList.remove("is-locked", "is-feature-locked");
-      inviteBtn.setAttribute("aria-disabled", "false");
-    }
+    // Invite is opened from the Menu section only (not a farm-feature tab).
     paintFeatureLocks();
   }
 
@@ -14772,17 +14752,8 @@
   $("invite-start-btn")?.addEventListener("click", () => {
     startInviteJob().catch(() => {});
   });
-  $("farm-tab-invite")?.addEventListener("click", () => onFarmTabClick(INVITE_TAB));
   $("farm-tab-afterplay_fast")?.addEventListener("click", () => onFarmTabClick(AFTERPLAY_FAST_TAB));
   $("farm-tab-unlock_l")?.addEventListener("click", () => onFarmTabClick(UNLOCK_L_TAB));
-  $("menu-nav-afterplay_fast")?.addEventListener("click", () => {
-    closeNavDrawer();
-    onFarmTabClick(AFTERPLAY_FAST_TAB);
-  });
-  $("menu-nav-unlock_l")?.addEventListener("click", () => {
-    closeNavDrawer();
-    onFarmTabClick(UNLOCK_L_TAB);
-  });
   $("afterplay-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   $("unlockl-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   $("afterplay-preview-btn")?.addEventListener("click", () => {
