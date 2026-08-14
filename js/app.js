@@ -538,7 +538,7 @@
     },
     afterplay_fast: {
       title: "ฟาร์มเงิน/XP",
-      hint: "ใส่เป้าเหรียญหรือเลเวล · คำนวณรอบชัวร์จากไอดีจริง",
+      hint: "1 รอบ = 1 หัวใจ · ใส่เป้าเหรียญหรือเลเวล",
       blurb: "ฟาร์มเหรียญและ XP แบบ Hardcore จากไอดีที่ล็อกอิน",
       icon: "Cookie0023_head.png",
     },
@@ -597,6 +597,7 @@
   const INVITE_CHARGE_KEY = "ckr_invite_last_charge";
   let invitePackages = [];
   let inviteSelectedPackageId = null;
+  let inviteCustomAmountBaht = null;
   let invitePollTimer = null;
   let inviteBusy = false;
   let invitePoolAvailable = true;
@@ -619,7 +620,25 @@
   let afterplayLastEdit = "level";
   let afterplayPreviewTimer = null;
   let afterplaySnapCache = { at: 0, sid: "", data: null };
+  let afterplayCreditPerRun = 0.2;
   const AFTERPLAY_SNAP_TTL_MS = 8000;
+  const AFTERPLAY_MODE_KEY = "ckr_afterplay_farm_mode";
+  let afterplayFarmMode = "money_xp";
+  let afterplayEboxSelected = new Set();
+  let afterplayEboxCatalog = [];
+  let afterplayEboxCreditPerRun = 0.5;
+  let afterplayPricesMeta = {
+    eboxEnabled: true,
+    eboxMaxRuns: 50,
+    money_xp: { allow_customer_box_max: true, lock_box_max: false, box_max: 0, box_pick: "all" },
+    episode_box: {
+      allow_customer_box_max: true,
+      lock_box_max: false,
+      box_max: 0,
+      box_pick: "all",
+      default_runs_per_ep: 5,
+    },
+  };
   let unlockLCatalog = [];
   let unlockLSelected = new Set();
   let unlockLPrices = { each: 15, bundle: 100 };
@@ -806,6 +825,7 @@
   let dockElapsedTimer = null;
   let dockHistoryTab = "all"; // "all" | "active" | "admin"
   let dockLiveLogOpen = false;
+  let adminJobLogActive = false;
   let farmActivityData = null;
   let farmDockFlash = { text: "", kind: "muted" };
   let apiReady = false;
@@ -915,6 +935,7 @@
     password_changed: "เปลี่ยนรหัสผ่านสำเร็จ — เข้าสู่ระบบด้วยรหัสใหม่ได้เลย",
     api_not_ready: "รอให้เซิร์ฟเวอร์พร้อม (ไฟเขียว) ก่อนเข้าสู่ระบบ",
     invalid_username: "ชื่อผู้ใช้ไม่ถูกต้อง (ห้ามใช้อีเมล)",
+    signup_closed: "ขณะนี้ปิดรับสมัครผ่านเว็บ กรุณาติดต่อแอดมินทาง Telegram",
     signup_rate_limited: "สมัครถี่เกินไป รอสักครู่แล้วลองใหม่",
     service_role_not_configured: "ระบบสมัครยังไม่พร้อม ลองใหม่ภายหลัง",
     auth_not_configured: "ระบบยืนยันตัวตนยังไม่พร้อม",
@@ -1459,38 +1480,43 @@
     const admin = isAdminUser();
     FARM_DOCK_TABS.forEach((t) => {
       const btn = $("farm-tab-" + t);
-      if (!btn) return;
       const closed = isFeatureClosed(t);
       const hide = isFeatureLocked(t);
-      btn.classList.toggle("is-feature-locked", closed && admin);
-      btn.classList.toggle("is-feature-hidden", hide);
-      btn.hidden = hide;
-      btn.title = closed && admin
-        ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
-        : "";
+      if (btn) {
+        btn.classList.toggle("is-feature-locked", closed && admin);
+        btn.classList.toggle("is-feature-hidden", hide);
+        btn.hidden = hide;
+        btn.title = closed && admin
+          ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
+          : "";
+        const pill = btn.querySelector(".farm-nav-pill");
+        if (pill) {
+          let badge = pill.querySelector(".farm-nav-maint");
+          if (admin && closed) {
+            if (!badge) {
+              badge = document.createElement("span");
+              badge.className = "farm-nav-maint";
+              badge.textContent = "ปิด";
+              pill.appendChild(badge);
+            }
+          } else if (badge) {
+            badge.remove();
+          }
+        }
+      }
       const side = $("menu-nav-" + t);
       if (side) {
         side.hidden = hide;
         side.classList.toggle("hidden", hide);
         side.classList.toggle("is-feature-hidden", hide);
         side.classList.toggle("is-feature-locked", closed && admin);
-      }
-      const pill = btn.querySelector(".farm-nav-pill");
-      if (pill) {
-        let badge = pill.querySelector(".farm-nav-maint");
-        if (admin && closed) {
-          if (!badge) {
-            badge = document.createElement("span");
-            badge.className = "farm-nav-maint";
-            badge.textContent = "ปิด";
-            pill.appendChild(badge);
-          }
-        } else if (badge) {
-          badge.remove();
-        }
+        side.title = closed && admin
+          ? "ปิดปรับปรุงสำหรับลูกค้า — แอดมินใช้ได้"
+          : "";
       }
     });
     paintFeatureDock();
+    syncCreditJobLogButtons();
   }
 
   function devPlayCookiePortraitUrl(name) {
@@ -1576,6 +1602,7 @@
   }
 
   function paintMaintenanceBanner(health) {
+    applySignupClosed(!!(health && health.signup_closed));
     const el = $("maintenance-banner");
     if (!el) return;
     if (health && Array.isArray(health.farm_feature_order)) applyFarmFeatureOrder(health.farm_feature_order);
@@ -1592,6 +1619,32 @@
     if (topup) parts.push("เติมเงิน");
     el.textContent = "ปิดปรับปรุงชั่วคราว: " + parts.join(" · ");
     el.classList.remove("hidden");
+  }
+
+  const SIGNUP_HINT_OPEN = "ตั้งชื่อผู้ใช้และรหัสผ่าน (ยืนยันรหัสผ่านให้ตรงกัน)";
+  const SIGNUP_HINT_CLOSED = "ขณะนี้ปิดรับสมัครผ่านเว็บ กรุณาติดต่อแอดมินทาง Telegram เพื่อขอเปิดบัญชี";
+
+  function applySignupClosed(closed) {
+    const on = !!closed;
+    const form = $("signup-form");
+    const closedEl = $("signup-closed");
+    const hint = $("signup-hint");
+    const tab = $("tab-signup");
+    if (form) {
+      form.classList.toggle("hidden", on);
+      form.hidden = on;
+      form.querySelectorAll("input, button").forEach((el) => {
+        el.disabled = on;
+      });
+    }
+    if (closedEl) {
+      closedEl.classList.toggle("hidden", !on);
+      closedEl.hidden = !on;
+    }
+    if (hint) hint.textContent = on ? SIGNUP_HINT_CLOSED : SIGNUP_HINT_OPEN;
+    if (tab) tab.setAttribute("aria-controls", on ? "signup-closed" : "signup-form");
+    const tg = $("signup-telegram-btn");
+    if (tg) tg.setAttribute("href", TELEGRAM_URL);
   }
 
   async function ensureApiReady() {
@@ -2265,6 +2318,10 @@
   }
 
   function selectedInviteCoins() {
+    if (inviteSelectedPackageId === "invite_custom") {
+      const n = Math.floor(Number(inviteCustomAmountBaht) || 0);
+      return n >= 1 ? n : 0;
+    }
     const list = invitePackages.length ? invitePackages : fallbackInvitePackages();
     const pkg =
       list.find((p) => p.id === inviteSelectedPackageId) || list[0] || null;
@@ -2273,7 +2330,32 @@
 
   function paintInviteSelectedCoin() {
     const el = $("invite-selected-coin");
-    if (el) el.textContent = formatNumTh(selectedInviteCoins());
+    if (el) el.textContent = formatNumTh(selectedInviteCoins() || 0);
+    const custom = $("invite-credit-custom-amount");
+    if (custom && inviteSelectedPackageId === "invite_custom" && document.activeElement !== custom) {
+      const n = selectedInviteCoins();
+      custom.value = n > 0 ? String(n) : "";
+    }
+  }
+
+  function applyInviteCustomAmount(raw, { copy } = {}) {
+    const n = Math.floor(Number(String(raw ?? "").replace(/[^\d]/g, "")) || 0);
+    if (n < 1) {
+      setStatus($("invite-credit-status"), "ใส่จำนวนอย่างน้อย 1 บาท", "err");
+      return false;
+    }
+    if (n > 100000) {
+      setStatus($("invite-credit-status"), "สูงสุด 100,000 บาทต่อครั้ง", "err");
+      return false;
+    }
+    inviteCustomAmountBaht = n;
+    inviteSelectedPackageId = "invite_custom";
+    if ($("invite-credit-custom-amount")) $("invite-credit-custom-amount").value = String(n);
+    renderInviteCreditPackages();
+    paintInviteSelectedCoin();
+    if (copy) copyInviteCoinAmount(n).catch(() => {});
+    else setStatus($("invite-credit-status"), "ใช้ยอด " + formatNumTh(n) + " coin — สร้างซองแล้ววางลิงก์", "ok");
+    return true;
   }
 
   async function copyInviteCoinAmount(amount) {
@@ -2517,34 +2599,26 @@
       showToast("รอให้งานเชิญเพื่อนเสร็จก่อน", "err");
       return;
     }
-    if (!invitePoolAvailable) {
-      setStatus($("invite-status"), "Pool หมด — เติม Credit ไม่ได้ชั่วคราว", "err");
-      showToast("Pool หมด — เติม Credit ไม่ได้", "err");
-      return;
-    }
     paintInviteStats({ invite_credit_balance: inviteCreditBalance() });
     setStatus($("invite-credit-status"), "", "muted");
     if ($("invite-credit-voucher")) $("invite-credit-voucher").value = "";
     // Must use animateOpen + is-open — otherwise invisible overlay freezes the page.
     renderInviteCreditPackages();
+    paintInviteSelectedCoin();
     animateOpen(modal);
     lockBodyScroll("invite-credit-open");
     const sheet = modal.querySelector(".invite-credit-sheet") || modal;
     trapFocus(sheet);
     loadInvitePackages()
-      .then((packs) => {
+      .then(() => {
         renderInviteCreditPackages();
-        if (!invitePoolAvailable) {
-          closeInviteCreditModal();
-          setStatus($("invite-status"), "Pool หมด — เติม Credit ไม่ได้ชั่วคราว", "err");
-        }
-        return packs;
+        paintInviteSelectedCoin();
       })
       .catch(() => {
         renderInviteCreditPackages();
-        setStatus($("invite-credit-status"), "โหลดแพ็กไม่สำเร็จ — ใช้แพ็กเริ่มต้น", "err");
+        setStatus($("invite-credit-status"), "โหลดแพ็กไม่สำเร็จ — ใช้แพ็กเริ่มต้น หรือใส่จำนวนเอง", "err");
       });
-    setTimeout(() => $("invite-credit-voucher")?.focus(), 220);
+    setTimeout(() => $("invite-credit-custom-amount")?.focus(), 220);
   }
 
   function closeInviteCreditModal() {
@@ -2562,8 +2636,12 @@
     if (typeof data.pool_available === "boolean") {
       invitePoolAvailable = data.pool_available;
     }
-    if (!invitePackages.some((p) => p.id === inviteSelectedPackageId)) {
-      inviteSelectedPackageId = invitePackages[0]?.id || "invite_14";
+    if (
+      inviteSelectedPackageId &&
+      inviteSelectedPackageId !== "invite_custom" &&
+      !invitePackages.some((p) => p.id === inviteSelectedPackageId)
+    ) {
+      inviteSelectedPackageId = invitePackages[0]?.id || "invite_custom";
     }
     return invitePackages;
   }
@@ -2593,7 +2671,8 @@
     root.innerHTML = "";
     const list = invitePackages.length ? invitePackages : fallbackInvitePackages();
     if (!inviteSelectedPackageId) {
-      inviteSelectedPackageId = list[0]?.id || "invite_14";
+      inviteSelectedPackageId = "invite_custom";
+      if (!inviteCustomAmountBaht) inviteCustomAmountBaht = 14;
     }
     list.forEach((pkg) => {
       const credits = pkg.credits || pkg.price_baht;
@@ -2622,6 +2701,10 @@
         '<span class="invite-pack-baht">coin</span>';
       btn.addEventListener("click", () => {
         inviteSelectedPackageId = pkg.id;
+        inviteCustomAmountBaht = Number(credits) || null;
+        if ($("invite-credit-custom-amount")) {
+          $("invite-credit-custom-amount").value = String(credits);
+        }
         renderInviteCreditPackages();
         paintInviteSelectedCoin();
         copyInviteCoinAmount(credits).catch(() => {});
@@ -2643,46 +2726,63 @@
 
   function routeInviteCreditVoucher(voucher, detail) {
     const v = String(voucher || "").trim();
-    if (detail?.invite_package_id) {
+    const credits = Number(detail?.credits || detail?.amount_baht || 0) || 0;
+    if (detail?.invite_package_id === "invite_custom") {
+      inviteSelectedPackageId = "invite_custom";
+      inviteCustomAmountBaht = credits || null;
+    } else if (detail?.invite_package_id) {
       inviteSelectedPackageId = detail.invite_package_id;
+      inviteCustomAmountBaht = credits || null;
+    } else if (credits > 0) {
+      inviteSelectedPackageId = "invite_custom";
+      inviteCustomAmountBaht = credits;
     }
     closeVaultModal();
     openInviteCreditModal();
     if (v && $("invite-credit-voucher")) {
       $("invite-credit-voucher").value = v;
     }
-    const credits = detail?.credits || detail?.amount_baht;
+    if ($("invite-credit-custom-amount") && credits > 0) {
+      $("invite-credit-custom-amount").value = String(credits);
+    }
     setStatus(
       $("invite-credit-status"),
       credits
-        ? "ซองนี้ " + formatNumTh(credits) + " coin สำหรับเชิญเพื่อน — กดยืนยันเติมได้เลย"
-        : "ซองนี้สำหรับเชิญเพื่อน — กดยืนยันเติม Credit",
+        ? "ซองนี้ " + formatNumTh(credits) + " coin สำหรับ Credit — กดยืนยันเติมได้เลย"
+        : "ซองนี้สำหรับ Credit — กดยืนยันเติมได้เลย",
       "ok"
     );
-    showToast("พาไปเติม Credit เชิญเพื่อนแล้ว", "ok");
+    showToast("พาไปเติม Credit แล้ว", "ok");
   }
 
   async function redeemInviteCredit() {
     if (inviteBusy) return;
-    if (!invitePoolAvailable) {
-      setStatus($("invite-credit-status"), "Pool หมด — เติม Credit ไม่ได้", "err");
-      return;
-    }
     const voucher = String($("invite-credit-voucher")?.value || "").trim();
     if (!voucher) {
       setStatus($("invite-credit-status"), "วางลิงก์ซอง TrueMoney ก่อน", "err");
       return;
     }
-    if (!inviteSelectedPackageId) {
-      setStatus($("invite-credit-status"), "เลือกแพ็กก่อน", "err");
+    const customInput = $("invite-credit-custom-amount");
+    if (customInput && String(customInput.value || "").trim()) {
+      if (!applyInviteCustomAmount(customInput.value)) return;
+    }
+    const amount = selectedInviteCoins();
+    if (!amount || amount < 1) {
+      setStatus($("invite-credit-status"), "ใส่จำนวนเงินหรือเลือกแพ็กก่อน", "err");
       return;
     }
+    const body =
+      inviteSelectedPackageId === "invite_custom" ||
+      !inviteSelectedPackageId ||
+      !(invitePackages || []).some((p) => p.id === inviteSelectedPackageId)
+        ? { voucher, package_id: "invite_custom", amount_baht: amount }
+        : { voucher, package_id: inviteSelectedPackageId };
     inviteBusy = true;
     setStatus($("invite-credit-status"), "กำลังเติม Credit…", "muted");
     try {
       const data = await api("/api/invite/topup/redeem", {
         method: "POST",
-        body: { voucher, package_id: inviteSelectedPackageId },
+        body,
       });
       if (profile && data.invite_credit_balance != null) {
         profile.invite_credit_balance = data.invite_credit_balance;
@@ -2690,33 +2790,23 @@
       paintInviteStats({ invite_credit_balance: data.invite_credit_balance });
       setStatus(
         $("invite-credit-status"),
-        "เติม +" + formatNumTh(data.credits_credited || 0) + " Credit สำเร็จ",
+        "เติม +" + formatCredit(data.credits_credited || 0) + " Credit สำเร็จ",
         "ok"
       );
-      showToast("เติม Invite Credit สำเร็จ", "ok");
+      showToast("เติม Credit สำเร็จ", "ok");
       if ($("invite-credit-voucher")) $("invite-credit-voucher").value = "";
-      await refreshInviteStatus();
+      await refreshInviteStatus().catch(() => {});
+      paintAfterplayStartEnabled();
+      paintUnlockLQuote();
     } catch (e) {
       const detail = e?.data?.detail && typeof e.data.detail === "object" ? e.data.detail : e?.data;
-      const code = e?.code || detail?.code;
-      if (code === "invite_pool_empty") {
-        invitePoolAvailable = false;
-        paintInviteStats({
-          invite_credit_balance: inviteCreditBalance(),
-          pool_available: false,
-          ready: detail?.ready,
-          links_available: detail?.links_available,
-        });
-        setStatus($("invite-credit-status"), "Pool หมด — เติม Credit ไม่ได้", "err");
-      } else {
-        const msg =
-          e?.userMessage ||
-          detail?.message ||
-          e?.message ||
-          thError(e?.data?.detail || e?.message) ||
-          "เติมไม่สำเร็จ";
-        setStatus($("invite-credit-status"), String(msg), "err");
-      }
+      const msg =
+        e?.userMessage ||
+        detail?.message ||
+        e?.message ||
+        thError(e?.data?.detail || e?.message) ||
+        "เติมไม่สำเร็จ";
+      setStatus($("invite-credit-status"), String(msg), "err");
     } finally {
       inviteBusy = false;
     }
@@ -2955,12 +3045,108 @@
     const fill = $(prefix + "-progress-fill");
     if (fill) fill.style.width = pct + "%";
     const logs = Array.isArray(job?.logs) ? job.logs : [];
+    if (prefix === "unlockl") {
+      const ep = Number(prog.ep) || 0;
+      document.querySelectorAll("#unlockl-grid .unlockl-card").forEach((el) => {
+        el.classList.toggle("is-running", status === "running" && ep > 0 && Number(el.dataset.ep) === ep);
+      });
+    }
+    syncCreditJobLogButtons();
     return logs.map(String).slice(-200);
+  }
+
+  function syncCreditJobLogButtons() {
+    const admin = isAdminUser();
+    ["afterplay-log-open-btn", "unlockl-log-open-btn"].forEach((id) => {
+      const btn = $(id);
+      if (!btn) return;
+      btn.hidden = !admin;
+      btn.classList.toggle("hidden", !admin);
+    });
+  }
+
+  function isAfterplayEbox() {
+    return afterplayFarmMode === "episode_box";
+  }
+
+  function readAfterplayBoxMax() {
+    const n = Math.floor(Number($("afterplay-box-max")?.value));
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(3, n));
+  }
+
+  function afterplayUiHints() {
+    return isAfterplayEbox() ? afterplayPricesMeta.episode_box : afterplayPricesMeta.money_xp;
+  }
+
+  function paintAfterplayBoxMaxVisibility() {
+    const wrap = $("afterplay-box-max-wrap");
+    if (!wrap) return;
+    const hints = afterplayUiHints() || {};
+    const allow = hints.allow_customer_box_max !== false && !hints.lock_box_max;
+    wrap.hidden = !allow;
+    wrap.classList.toggle("hidden", !allow);
+  }
+
+  function paintAfterplayModeUi() {
+    const eboxOn = isAfterplayEbox();
+    const panel = $("farm-panel-afterplay_fast");
+    panel?.classList.toggle("is-ebox", eboxOn);
+    ["afterplay-mode-money_xp", "afterplay-mode-episode_box"].forEach((id) => {
+      const btn = $(id);
+      if (!btn) return;
+      const on = btn.getAttribute("data-farm-mode") === afterplayFarmMode;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    const eboxBtn = $("afterplay-mode-episode_box");
+    if (eboxBtn) {
+      const show = afterplayPricesMeta.eboxEnabled !== false;
+      eboxBtn.hidden = !show;
+      eboxBtn.classList.toggle("hidden", !show);
+    }
+    const goal = $("afterplay-goal-grid");
+    if (goal) {
+      goal.hidden = eboxOn;
+      goal.classList.toggle("hidden", eboxOn);
+    }
+    const ebox = $("afterplay-ebox-panel");
+    if (ebox) {
+      ebox.hidden = !eboxOn;
+      ebox.classList.toggle("hidden", !eboxOn);
+    }
+    const keyWrap = $("afterplay-snap-key-wrap");
+    if (keyWrap) {
+      keyWrap.hidden = !eboxOn;
+      keyWrap.classList.toggle("hidden", !eboxOn);
+    }
+    const title = $("afterplay-start-btn-title");
+    if (title && !afterplayRunning) {
+      title.textContent = eboxOn ? "เริ่มเก็บกล่องด่าน" : "เริ่มฟาร์มเงิน/XP";
+    }
+    paintAfterplayBoxMaxVisibility();
+    paintAfterplayCreditHint();
+  }
+
+  function setAfterplayFarmMode(mode, opts) {
+    const options = opts || {};
+    let next = mode === "episode_box" ? "episode_box" : "money_xp";
+    if (next === "episode_box" && afterplayPricesMeta.eboxEnabled === false) next = "money_xp";
+    afterplayFarmMode = next;
+    try {
+      localStorage.setItem(AFTERPLAY_MODE_KEY, next);
+    } catch (_) {}
+    afterplaySnapCache = { at: 0, sid: "", data: null };
+    paintAfterplayModeUi();
+    if (!options.silent) {
+      scheduleAfterplayPreview(next === "episode_box" ? "ebox" : afterplayLastEdit);
+    }
   }
 
   function setAfterplayRunning(on) {
     afterplayRunning = !!on;
     $("farm-tab-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
+    $("menu-nav-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
     const cancelBtn = $("afterplay-cancel-btn");
     if (cancelBtn) {
       cancelBtn.hidden = !afterplayRunning;
@@ -2971,35 +3157,98 @@
     paintAfterplayStartEnabled();
   }
 
+  function paintAfterplayCreditHint(rate) {
+    if (rate != null && Number.isFinite(Number(rate))) {
+      if (isAfterplayEbox()) afterplayEboxCreditPerRun = Number(rate);
+      else afterplayCreditPerRun = Number(rate);
+    }
+    const shown = isAfterplayEbox() ? afterplayEboxCreditPerRun : afterplayCreditPerRun;
+    const el = $("afterplay-credit-per-run");
+    if (el) el.textContent = formatCredit(shown);
+    const kicker = $("afterplay-estimate")?.querySelector(".afterplay-summary-kicker");
+    if (kicker && isAfterplayEbox()) {
+      kicker.innerHTML = "1 รอบกล่อง = <strong id=\"afterplay-credit-per-run\">" + formatCredit(shown) + "</strong> Credit";
+    } else if (kicker && !isAfterplayEbox()) {
+      kicker.innerHTML = "1 รอบ = 1 หัวใจ = <strong id=\"afterplay-credit-per-run\">" + formatCredit(shown) + "</strong> Credit";
+    }
+    const hintEl = $("farm-panel-hint");
+    if (farmTab === "afterplay_fast" && hintEl) {
+      if (isAfterplayEbox()) {
+        hintEl.textContent =
+          "เก็บกล่องด่าน · 1 รอบกล่อง = " + formatCredit(shown) + " Credit · ไม่สุ่ม L";
+      } else {
+        hintEl.textContent =
+          "1 รอบ = 1 หัวใจ = " + formatCredit(shown) + " Credit";
+      }
+    }
+  }
+
   function paintAfterplayStartEnabled() {
     const btn = $("afterplay-start-btn");
     if (!btn) return;
     const plan = afterplayPlan;
-    const runs = Number(plan?.runs || 0);
-    const enoughLife = !!plan?.enough_life;
+    const ebox = isAfterplayEbox();
+    const runs = Number(ebox ? plan?.planned || plan?.runs || 0 : plan?.runs || 0);
+    const enoughLife = ebox ? Number(plan?.life || 0) >= 1 && runs > 0 : !!plan?.enough_life;
     const bal = inviteCreditBalance();
-    const cost = Number(plan?.credit || 0);
+    const cost = Number(plan?.credit || plan?.cost || 0);
+    const needEps = !ebox || afterplayEboxSelected.size > 0;
     const can =
       !afterplayRunning &&
       !afterplayBusy &&
       runs > 0 &&
       enoughLife &&
+      needEps &&
       bal + 1e-9 >= cost &&
       !!devplaySession?.id;
     btn.disabled = !can;
     btn.classList.toggle("is-disabled-look", !can);
     const warn = $("afterplay-life-warn");
     if (warn) {
-      const show = runs > 0 && plan && !enoughLife;
+      const show = ebox ? runs > 0 && Number(plan?.life || 0) < 1 : runs > 0 && plan && !enoughLife;
       warn.hidden = !show;
       warn.classList.toggle("hidden", !show);
+      if (ebox) warn.textContent = "หัวใจเป็น 0 — ห้ามเริ่ม";
+      else warn.textContent = "หัวใจไม่พอ — ห้ามเริ่ม";
+    }
+    const hint = $("afterplay-ebox-hint");
+    if (hint) {
+      const life = Number(plan?.life || 0);
+      const show = ebox && runs > 0 && life >= 1 && life < runs;
+      hint.hidden = !show;
+      hint.classList.toggle("hidden", !show);
+    }
+    const keyWarn = $("afterplay-ebox-key-warn");
+    if (keyWarn) {
+      const needKey = ebox && afterplayEboxSelected.has(5);
+      const locked = (afterplayEboxCatalog || []).some((r) => Number(r.ep) === 5 && !r.unlocked);
+      const keys = Number(plan?.key ?? $("afterplay-snap-key")?.textContent) || 0;
+      const show = needKey && locked && keys < 1;
+      keyWarn.hidden = !show;
+      keyWarn.classList.toggle("hidden", !show);
     }
     if ($("afterplay-start-btn-sub") && !afterplayRunning) {
       if (!devplaySession?.id) $("afterplay-start-btn-sub").textContent = "ล็อกอิน DevPlay ก่อน";
+      else if (ebox && afterplayEboxSelected.size < 1) $("afterplay-start-btn-sub").textContent = "เลือกด่านอย่างน้อย 1 ด่าน";
       else if (!enoughLife && runs > 0) $("afterplay-start-btn-sub").textContent = "หัวใจไม่พอ — ห้ามเริ่ม";
       else if (runs > 0) $("afterplay-start-btn-sub").textContent = "หัก " + formatCredit(cost) + " Credit · " + formatNumTh(runs) + " รอบ";
-      else $("afterplay-start-btn-sub").textContent = "ใส่เป้าเหรียญหรือเลเวล";
+      else $("afterplay-start-btn-sub").textContent = ebox ? "เลือกด่านแล้วใส่จำนวนรอบ" : "ใส่เป้าเหรียญหรือเลเวล";
     }
+  }
+
+  function paintAfterplayBound(prefix, lo, hi, opts) {
+    const a = Number(lo || 0);
+    const b = Number(hi == null || hi === "" ? a : hi);
+    const minV = Math.min(a, b);
+    const maxV = Math.max(a, b);
+    const wrap = $(prefix + "-wrap");
+    wrap?.classList.toggle("is-single", minV === maxV);
+    const fmt = (n) => {
+      const t = formatNumTh(n);
+      return opts && opts.plus && n > 0 ? "+" + t : t;
+    };
+    if ($(prefix + "-min")) $(prefix + "-min").textContent = fmt(minV);
+    if ($(prefix + "-max")) $(prefix + "-max").textContent = fmt(maxV);
   }
 
   function paintAfterplayPlan(data) {
@@ -3010,27 +3259,29 @@
       profile.invite_credit_balance = data.invite_credit_balance;
       paintInviteStats({ invite_credit_balance: data.invite_credit_balance });
     }
+    if (plan?.credit_per_run != null) paintAfterplayCreditHint(plan.credit_per_run);
+    else if (data?.afterplay_fast_credit_per_run != null) {
+      paintAfterplayCreditHint(data.afterplay_fast_credit_per_run);
+    }
     if ($("afterplay-snap-level")) $("afterplay-snap-level").textContent = snap.level != null ? formatNumTh(snap.level) : "—";
     if ($("afterplay-snap-exp")) $("afterplay-snap-exp").textContent = snap.exp != null ? formatNumTh(snap.exp) : "—";
     if ($("afterplay-snap-life")) $("afterplay-snap-life").textContent = snap.life != null ? formatNumTh(snap.life) : "—";
     if ($("afterplay-snap-coin")) $("afterplay-snap-coin").textContent = snap.coin != null ? formatNumTh(snap.coin) : "—";
+    if ($("afterplay-snap-key")) $("afterplay-snap-key").textContent = snap.key != null ? formatNumTh(snap.key) : "—";
+    if (Array.isArray(data?.episodes)) {
+      afterplayEboxCatalog = data.episodes;
+      paintAfterplayEboxGrid();
+    }
     if (plan) {
-      if ($("afterplay-est-runs")) $("afterplay-est-runs").textContent = formatNumTh(plan.runs || 0);
-      if ($("afterplay-est-xp")) {
-        $("afterplay-est-xp").textContent =
-          formatNumTh(plan.xp_gain_min || 0) + "–" + formatNumTh(plan.xp_gain_max || 0);
-      }
-      if ($("afterplay-est-credit")) $("afterplay-est-credit").textContent = formatCredit(plan.credit || 0);
+      const planned = Number(plan.planned || plan.runs || 0);
+      if ($("afterplay-est-runs")) $("afterplay-est-runs").textContent = formatNumTh(planned);
+      if ($("afterplay-est-credit")) $("afterplay-est-credit").textContent = formatCredit(plan.credit || plan.cost || 0);
       if ($("afterplay-est-hearts")) {
-        const have = Number(plan.life || snap.life || 0);
-        const need = Number(plan.hearts_required || 0);
-        $("afterplay-est-hearts").textContent =
-          "มี " + formatNumTh(have) + " / ต้อง " + formatNumTh(need) + (plan.enough_life ? " · พร้อม" : " · ไม่พอ");
+        const need = isAfterplayEbox() ? Number(plan.life || snap.life || 0) : Number(plan.hearts_required || 0);
+        $("afterplay-est-hearts").textContent = formatNumTh(need);
       }
-      if ($("afterplay-est-coin")) {
-        $("afterplay-est-coin").textContent =
-          formatNumTh(plan.coin_min || 0) + "–" + formatNumTh(plan.coin_max || 0);
-      }
+      paintAfterplayBound("afterplay-est-xp", plan.xp_gain_min, plan.xp_gain_max, { plus: true });
+      paintAfterplayBound("afterplay-est-coin", plan.coin_min, plan.coin_max, { plus: true });
       const before = plan.before || snap;
       const safe = plan.after_safe || {};
       const best = plan.after_best || {};
@@ -3043,20 +3294,64 @@
           if ($("afterplay-cmp-before-level")) $("afterplay-cmp-before-level").textContent = formatNumTh(before.level || 0);
           if ($("afterplay-cmp-before-coin")) $("afterplay-cmp-before-coin").textContent = formatNumTh(before.coin || 0);
           if ($("afterplay-cmp-before-life")) $("afterplay-cmp-before-life").textContent = formatNumTh(before.life || 0);
-          if ($("afterplay-cmp-after-level")) {
-            const a = Number(safe.level || 0);
-            const b = Number(best.level || a);
-            $("afterplay-cmp-after-level").textContent = a === b ? formatNumTh(a) : formatNumTh(a) + "–" + formatNumTh(b);
-          }
-          if ($("afterplay-cmp-after-coin")) {
-            $("afterplay-cmp-after-coin").textContent =
-              formatNumTh(safe.coin || 0) + "–" + formatNumTh(best.coin || 0);
-          }
+          paintAfterplayBound("afterplay-cmp-after-level", safe.level, best.level);
+          paintAfterplayBound("afterplay-cmp-after-coin", safe.coin, best.coin);
           if ($("afterplay-cmp-after-life")) $("afterplay-cmp-after-life").textContent = formatNumTh(safe.life || 0);
         }
       }
     }
+    paintAfterplayGoalCards();
     paintAfterplayStartEnabled();
+  }
+
+  function paintAfterplayGoalCards() {
+    $("afterplay-goal-level")?.classList.toggle("is-active", afterplayLastEdit !== "coin");
+    $("afterplay-goal-coin")?.classList.toggle("is-active", afterplayLastEdit === "coin");
+  }
+
+  function setAfterplayGoal(kind) {
+    afterplayLastEdit = kind === "coin" ? "coin" : "level";
+    paintAfterplayGoalCards();
+  }
+
+  async function refreshAfterplayPrices() {
+    try {
+      const data = await api("/api/farm/afterplay/prices", { timeoutMs: 12000 });
+      if (data?.afterplay_fast_credit_per_run != null) {
+        afterplayCreditPerRun = Number(data.afterplay_fast_credit_per_run) || afterplayCreditPerRun;
+      }
+      if (data?.afterplay_episode_box_credit_per_run != null) {
+        afterplayEboxCreditPerRun = Number(data.afterplay_episode_box_credit_per_run) || afterplayEboxCreditPerRun;
+      }
+      afterplayPricesMeta.eboxEnabled = data?.afterplay_episode_box_enabled !== false;
+      afterplayPricesMeta.eboxMaxRuns = Number(data?.afterplay_episode_box_max_runs || 50) || 50;
+      if (data?.money_xp && typeof data.money_xp === "object") afterplayPricesMeta.money_xp = data.money_xp;
+      if (data?.episode_box && typeof data.episode_box === "object") afterplayPricesMeta.episode_box = data.episode_box;
+      if (data?.unlock_l_credit_each != null) {
+        unlockLPrices.each = Number(data.unlock_l_credit_each) || unlockLPrices.each;
+      }
+      if (data?.unlock_l_credit_bundle != null) {
+        unlockLPrices.bundle = Number(data.unlock_l_credit_bundle) || unlockLPrices.bundle;
+      }
+      const eboxRuns = $("afterplay-ebox-runs");
+      if (eboxRuns && !eboxRuns.dataset.touched) {
+        eboxRuns.value = String(afterplayPricesMeta.episode_box.default_runs_per_ep || 5);
+        eboxRuns.max = String(afterplayPricesMeta.eboxMaxRuns || 50);
+      }
+      const boxMax = $("afterplay-box-max");
+      if (boxMax && !boxMax.dataset.touched) {
+        const hints = afterplayUiHints() || {};
+        boxMax.value = String(hints.box_max == null ? 0 : hints.box_max);
+      }
+      if (!afterplayPricesMeta.eboxEnabled && afterplayFarmMode === "episode_box") {
+        setAfterplayFarmMode("money_xp", { silent: true });
+      }
+      paintAfterplayModeUi();
+      paintAfterplayCreditHint();
+      return data;
+    } catch (_) {
+      return null;
+    }
   }
 
   async function refreshAfterplayPreview(opts) {
@@ -3077,16 +3372,43 @@
     }
     const tgtNum = Math.floor(Number($("afterplay-target-level")?.value || 0));
     const coinNum = Math.floor(Number($("afterplay-target-coin")?.value || 0));
-    const body = { devplay_session_id: sid };
-    if (tgtNum >= 1) body.target_level = Math.max(1, Math.min(110, tgtNum));
-    if (coinNum >= 1) body.target_coin = coinNum;
+    const body = { devplay_session_id: sid, farm_mode: afterplayFarmMode };
+    const boxMax = readAfterplayBoxMax();
+    body.box_max = boxMax;
+    if (isAfterplayEbox()) {
+      body.target_eps = [...afterplayEboxSelected];
+      const runsNum = Math.floor(Number($("afterplay-ebox-runs")?.value || 0));
+      if (runsNum >= 1) body.runs = runsNum;
+    } else {
+      if (tgtNum >= 1) body.target_level = Math.max(1, Math.min(110, tgtNum));
+      if (coinNum >= 1) body.target_coin = coinNum;
+    }
     setStatus($("afterplay-status"), "กำลังอ่านไอดี…", "muted");
     try {
       const data = await api("/api/farm/afterplay/preview", { method: "POST", body, timeoutMs: 45000 });
       afterplaySnapCache = { at: Date.now(), sid, data };
       paintAfterplayPlan(data);
       const plan = data?.plan;
-      if (plan?.capped) {
+      if (isAfterplayEbox()) {
+        if (!afterplayEboxSelected.size) {
+          setStatus($("afterplay-status"), "เลือกด่านอย่างน้อย 1 ด่าน", "muted");
+        } else if (plan?.capped) {
+          setStatus(
+            $("afterplay-status"),
+            "รอบ/ด่านเกินเพดาน " + formatNumTh(plan.max_runs || 0) + " — ใช้จำนวนสูงสุด",
+            "err"
+          );
+        } else if (plan?.planned) {
+          setStatus(
+            $("afterplay-status"),
+            formatNumTh(plan.runs) + " รอบ/ด่าน × " + formatNumTh(plan.eps?.length || afterplayEboxSelected.size) +
+              " ด่าน = " + formatNumTh(plan.planned) + " รอบ · หัวใจ" + (Number(plan.life || 0) >= 1 ? "พร้อมเริ่ม" : "เป็น 0"),
+            Number(plan.life || 0) >= 1 ? "ok" : "err"
+          );
+        } else {
+          setStatus($("afterplay-status"), "ใส่จำนวนรอบ/ด่าน", "muted");
+        }
+      } else if (plan?.capped) {
         setStatus(
           $("afterplay-status"),
           "เป้าเกินเพดาน " + formatNumTh(plan.max_runs || 0) + " รอบ — ใช้จำนวนสูงสุด",
@@ -3109,7 +3431,7 @@
       } else if (tgtNum >= 1 && !coinNum && Number(data?.snapshot?.level || 0) >= tgtNum) {
         setStatus($("afterplay-status"), "เลเวลถึงหรือเกินเป้าแล้ว", "ok");
       } else {
-        setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวลแล้วกดคำนวณ", "muted");
+        setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวล", "muted");
       }
       return data;
     } catch (err) {
@@ -3120,6 +3442,7 @@
 
   function scheduleAfterplayPreview(source) {
     afterplayLastEdit = source || afterplayLastEdit;
+    paintAfterplayGoalCards();
     if (afterplayPreviewTimer) clearTimeout(afterplayPreviewTimer);
     afterplayPreviewTimer = setTimeout(() => {
       afterplayPreviewTimer = null;
@@ -3138,22 +3461,45 @@
     if (afterplayBusy || afterplayRunning) return;
     const sid = requireDevplaySessionId();
     if (!sid) return;
-    const tgt = Math.floor(Number($("afterplay-target-level")?.value || 0));
-    const coin = Math.floor(Number($("afterplay-target-coin")?.value || 0));
-    if (tgt < 1 && coin < 1) {
-      setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวลก่อน", "err");
-      return;
-    }
-    if (afterplayPlan && !afterplayPlan.enough_life) {
-      setStatus($("afterplay-status"), "หัวใจไม่พอ — ห้ามเริ่ม", "err");
-      return;
+    if (isAfterplayEbox()) {
+      if (afterplayEboxSelected.size < 1) {
+        setStatus($("afterplay-status"), "เลือกด่านอย่างน้อย 1 ด่าน", "err");
+        return;
+      }
+      const runsNum = Math.floor(Number($("afterplay-ebox-runs")?.value || 0));
+      if (runsNum < 1) {
+        setStatus($("afterplay-status"), "ใส่จำนวนรอบ/ด่าน", "err");
+        return;
+      }
+      if (Number(afterplayPlan?.life || 0) < 1) {
+        setStatus($("afterplay-status"), "หัวใจเป็น 0 — ห้ามเริ่ม", "err");
+        return;
+      }
+    } else {
+      const tgt = Math.floor(Number($("afterplay-target-level")?.value || 0));
+      const coin = Math.floor(Number($("afterplay-target-coin")?.value || 0));
+      if (tgt < 1 && coin < 1) {
+        setStatus($("afterplay-status"), "ใส่เป้าเหรียญหรือเลเวลก่อน", "err");
+        return;
+      }
+      if (afterplayPlan && !afterplayPlan.enough_life) {
+        setStatus($("afterplay-status"), "หัวใจไม่พอ — ห้ามเริ่ม", "err");
+        return;
+      }
     }
     afterplayBusy = true;
     setStatus($("afterplay-status"), "กำลังเริ่มงาน…", "muted");
     try {
-      const body = { devplay_session_id: sid };
-      if (tgt >= 1) body.target_level = Math.max(1, Math.min(110, tgt));
-      if (coin >= 1) body.target_coin = coin;
+      const body = { devplay_session_id: sid, farm_mode: afterplayFarmMode, box_max: readAfterplayBoxMax() };
+      if (isAfterplayEbox()) {
+        body.target_eps = [...afterplayEboxSelected];
+        body.runs = Math.max(1, Math.floor(Number($("afterplay-ebox-runs")?.value || 1)));
+      } else {
+        const tgt = Math.floor(Number($("afterplay-target-level")?.value || 0));
+        const coin = Math.floor(Number($("afterplay-target-coin")?.value || 0));
+        if (tgt >= 1) body.target_level = Math.max(1, Math.min(110, tgt));
+        if (coin >= 1) body.target_coin = coin;
+      }
       const data = await api("/api/farm/afterplay/start", { method: "POST", body, timeoutMs: 45000 });
       if (data?.invite_credit_balance != null && profile) {
         profile.invite_credit_balance = data.invite_credit_balance;
@@ -3195,26 +3541,18 @@
           persistKeyedJob(AFTERPLAY_JOB_KEY, null);
           setAfterplayRunning(false);
           await refreshInviteStatus().catch(() => {});
-          const res = job.result || {};
-          const summary = $("afterplay-result-summary");
-          if (summary) {
-            summary.hidden = false;
-            summary.classList.remove("hidden");
-            summary.textContent =
-              (job.status === "succeeded" ? "สำเร็จ " : job.status === "cancelled" ? "ยกเลิก " : "ไม่สำเร็จ ") +
-              formatNumTh(res.runs_done || 0) +
-              "/" +
-              formatNumTh(res.runs || job.ticket_count || 0) +
-              " รอบ" +
-              (res.ok200 ? " · 200: " + formatNumTh(res.ok200) : "") +
-              (res.flagged ? " · ธง 210: " + formatNumTh(res.flagged) + " (ไปต่อ)" : "") +
-              (res.failed_send ? " · ส่งไม่ติด: " + formatNumTh(res.failed_send) : "") +
-              (res.refunded ? " · คืน " + formatCredit(res.refunded) + " Credit" : "");
+          const jobKey = String(job.id || jobId);
+          if (afterplayResultShownFor !== jobKey) {
+            afterplayResultShownFor = jobKey;
+            showAfterplayResultModal(job);
           }
-          paintAfterplayResultCompare(res);
           setStatus(
             $("afterplay-status"),
-            job.status === "succeeded" ? "ฟาร์มเงิน/XP สำเร็จ" : "จบ: " + (job.error || job.status),
+            job.status === "succeeded"
+              ? isAfterplayEbox()
+                ? "เก็บกล่องด่านสำเร็จ"
+                : "ฟาร์มเงิน/XP สำเร็จ"
+              : "จบ: " + (job.error || job.status),
             job.status === "succeeded" ? "ok" : "err"
           );
           refreshAfterplayPreview({ force: true, source: afterplayLastEdit }).catch(() => {});
@@ -3230,39 +3568,6 @@
     if (v > 0) return "+" + formatNumTh(v);
     if (v < 0) return formatNumTh(v);
     return "0";
-  }
-
-  function paintAfterplayResultCompare(res) {
-    const box = $("afterplay-result-compare");
-    if (!box) return;
-    const before = res?.before || {};
-    const after = res?.after || {};
-    const delta = res?.delta || {};
-    if (before.level == null && after.level == null) {
-      box.hidden = true;
-      box.classList.add("hidden");
-      box.textContent = "";
-      return;
-    }
-    box.hidden = false;
-    box.classList.remove("hidden");
-    const lv = formatNumTh(before.level || 0) + " → " + formatNumTh(after.level || before.level || 0) + " (" + signedDelta(delta.level) + ")";
-    const coin = formatNumTh(before.coin || 0) + " → " + formatNumTh(after.coin || before.coin || 0) + " (" + signedDelta(delta.coin) + ")";
-    const life = formatNumTh(before.life || 0) + " → " + formatNumTh(after.life || before.life || 0) + " (" + signedDelta(delta.life) + ")";
-    box.replaceChildren();
-    const mk = (title, value) => {
-      const p = document.createElement("p");
-      const s = document.createElement("span");
-      s.textContent = title + " ";
-      const strong = document.createElement("strong");
-      strong.textContent = value;
-      p.append(s, strong);
-      return p;
-    };
-    const head = document.createElement("p");
-    head.className = "afterplay-compare-h";
-    head.textContent = "สรุปก่อน vs หลัง";
-    box.append(head, mk("เลเวล", lv), mk("เหรียญ", coin), mk("หัวใจ", life));
   }
 
   async function cancelAfterplayJob() {
@@ -3287,28 +3592,126 @@
     return { n, credit, billable };
   }
 
+  const UNLOCK_L_EP_IMAGES = {
+    1: "assets/King_Choco_Drop.png",
+    2: "assets/Tiger_Lily_Cookie.png",
+    3: "assets/Fire_Spirit_Cookie.png",
+    4: "assets/Moonlight_Cookie.png",
+    5: "assets/Wind_Archer_Cookie.png",
+    6: "assets/Blooming_Dancheong_Cookie.png",
+    7: "assets/unlock_l_ep7.png",
+  };
+
+  function unlockLEpImage(ep, name) {
+    const mapped = UNLOCK_L_EP_IMAGES[Number(ep)];
+    if (mapped) return mapped;
+    const n = String(name || "").trim();
+    if (!n) return "assets/Tiger_Lily_Cookie.png";
+    return "assets/" + n.replace(/\s+/g, "_").replace(/[()]/g, "") + ".png";
+  }
+
+  function afterplayEboxRows() {
+    const rows = afterplayEboxCatalog && afterplayEboxCatalog.length ? afterplayEboxCatalog : [
+      { ep: 1, name: "ด่าน 1" },
+      { ep: 2, name: "ด่าน 2" },
+      { ep: 3, name: "ด่าน 3" },
+      { ep: 4, name: "ด่าน 4" },
+      { ep: 5, name: "ด่าน 5 · Ice Tower" },
+      { ep: 6, name: "ด่าน 6" },
+      { ep: 7, name: "ด่าน 7" },
+    ];
+    return rows.filter((r) => Number(r.ep) >= 1 && Number(r.ep) <= 7);
+  }
+
+  function paintAfterplayEboxGrid() {
+    const grid = $("afterplay-ebox-grid");
+    if (!grid) return;
+    grid.innerHTML = "";
+    afterplayEboxRows().forEach((row) => {
+      const ep = Number(row.ep);
+      const selected = afterplayEboxSelected.has(ep);
+      const owned = !!row.owned;
+      const unlocked = row.unlocked !== false;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "unlockl-card" + (selected ? " is-selected" : "");
+      btn.dataset.ep = String(ep);
+      btn.title = row.name || ("EP " + ep);
+      btn.setAttribute(
+        "aria-label",
+        "EP " + ep + (owned ? " มี L แล้ว" : "") + (unlocked ? "" : " ยังไม่ปลดด่าน")
+      );
+      const check = document.createElement("span");
+      check.className = "unlockl-card-check";
+      check.textContent = selected ? "✓" : "";
+      const img = document.createElement("img");
+      img.className = "unlockl-card-img";
+      img.src = unlockLEpImage(ep, row.name);
+      img.alt = "";
+      img.width = 88;
+      img.height = 88;
+      img.loading = "lazy";
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = "assets/Tiger_Lily_Cookie.png";
+      };
+      const epEl = document.createElement("span");
+      epEl.className = "unlockl-ep";
+      epEl.textContent = "EP " + ep;
+      const stateEl = document.createElement("span");
+      stateEl.className = "unlockl-state";
+      if (selected) stateEl.textContent = "เลือกแล้ว";
+      else if (!unlocked) stateEl.textContent = "ยังไม่ปลด";
+      else if (owned) stateEl.textContent = "มี L แล้ว";
+      else stateEl.textContent = "เก็บกล่องได้";
+      btn.append(check, img, epEl, stateEl);
+      btn.addEventListener("click", () => {
+        if (afterplayEboxSelected.has(ep)) afterplayEboxSelected.delete(ep);
+        else afterplayEboxSelected.add(ep);
+        paintAfterplayEboxGrid();
+        scheduleAfterplayPreview("ebox");
+      });
+      grid.appendChild(btn);
+    });
+  }
+
   function paintUnlockLGrid() {
     const grid = $("unlockl-grid");
     if (!grid) return;
     grid.innerHTML = "";
     unlockLCatalog.forEach((row) => {
       const ep = Number(row.ep);
+      const owned = !!row.owned;
+      const selected = !owned && unlockLSelected.has(ep);
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "unlockl-card";
+      btn.className = "unlockl-card" + (owned ? " is-owned" : "") + (selected ? " is-selected" : "");
       btn.dataset.ep = String(ep);
-      btn.disabled = !!row.owned;
-      btn.classList.toggle("is-owned", !!row.owned);
-      btn.classList.toggle("is-selected", !row.owned && unlockLSelected.has(ep));
-      btn.innerHTML =
-        "<span class=\"unlockl-ep\">EP " +
-        ep +
-        "</span><strong>" +
-        escapeHtml(row.name || ("L " + ep)) +
-        "</strong><span class=\"unlockl-state\">" +
-        (row.owned ? "มีแล้ว" : "ยังไม่มี") +
-        "</span>";
-      if (!row.owned) {
+      btn.disabled = owned;
+      btn.title = row.name || ("EP " + ep);
+      btn.setAttribute("aria-label", "EP " + ep + (owned ? " มีแล้ว" : " ยังไม่มี"));
+      const check = document.createElement("span");
+      check.className = "unlockl-card-check";
+      check.textContent = selected ? "✓" : "";
+      const img = document.createElement("img");
+      img.className = "unlockl-card-img";
+      img.src = unlockLEpImage(ep, row.name);
+      img.alt = "";
+      img.width = 88;
+      img.height = 88;
+      img.loading = "lazy";
+      img.onerror = () => {
+        img.onerror = null;
+        img.src = "assets/Tiger_Lily_Cookie.png";
+      };
+      const epEl = document.createElement("span");
+      epEl.className = "unlockl-ep";
+      epEl.textContent = "EP " + ep;
+      const stateEl = document.createElement("span");
+      stateEl.className = "unlockl-state";
+      stateEl.textContent = owned ? "มีแล้ว" : selected ? "เลือกแล้ว" : "ยังไม่มี";
+      btn.append(check, img, epEl, stateEl);
+      if (!owned) {
         btn.addEventListener("click", () => {
           if (unlockLSelected.has(ep)) unlockLSelected.delete(ep);
           else unlockLSelected.add(ep);
@@ -3326,6 +3729,11 @@
     if ($("unlockl-quote")) $("unlockl-quote").textContent = formatCredit(q.credit) + " Credit";
     if ($("unlockl-price-each")) $("unlockl-price-each").textContent = formatCredit(unlockLPrices.each);
     if ($("unlockl-price-bundle")) $("unlockl-price-bundle").textContent = formatCredit(unlockLPrices.bundle);
+    if ($("unlockl-toolbar-meta")) {
+      $("unlockl-toolbar-meta").textContent = q.n
+        ? "เลือก " + formatNumTh(q.n) + " ตัว · " + formatCredit(q.credit) + " Credit"
+        : "เลือกตัวที่ยังไม่มี · " + formatCredit(unlockLPrices.each) + " Credit/ตัว · ครบ 7 = " + formatCredit(unlockLPrices.bundle);
+    }
     if ($("unlockl-snap-life")) $("unlockl-snap-life").textContent = formatNumTh(unlockLSnap.life || 0);
     if ($("unlockl-snap-key")) $("unlockl-snap-key").textContent = formatNumTh(unlockLSnap.key || 0);
     const btn = $("unlockl-start-btn");
@@ -3360,7 +3768,7 @@
       else if (noLife) $("unlockl-start-btn-sub").textContent = "หัวใจเป็น 0 — ห้ามเริ่ม";
       else if (noKey) $("unlockl-start-btn-sub").textContent = "EP5 ต้องมีกุญแจ";
       else if (bal + 1e-9 < q.credit) $("unlockl-start-btn-sub").textContent = "Credit ไม่พอ (" + formatCredit(q.credit) + ")";
-      else $("unlockl-start-btn-sub").textContent = "หัก " + formatCredit(q.credit) + " Credit";
+      else $("unlockl-start-btn-sub").textContent = "เริ่มปลดล็อค · " + formatNumTh(q.n) + " ตัว · " + formatCredit(q.credit) + " Credit";
     }
   }
 
@@ -3422,6 +3830,7 @@
   function setUnlockLRunning(on) {
     unlockLRunning = !!on;
     $("farm-tab-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
+    $("menu-nav-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
     const cancelBtn = $("unlockl-cancel-btn");
     if (cancelBtn) {
       cancelBtn.hidden = !unlockLRunning;
@@ -3504,18 +3913,10 @@
           persistKeyedJob(UNLOCKL_JOB_KEY, null);
           setUnlockLRunning(false);
           await refreshInviteStatus().catch(() => {});
-          const res = job.result || {};
-          const summary = $("unlockl-result-summary");
-          if (summary) {
-            summary.hidden = false;
-            summary.classList.remove("hidden");
-            const unlocked = Array.isArray(res.unlocked) ? res.unlocked : [];
-            summary.textContent =
-              (job.status === "succeeded" ? "สำเร็จ " : "จบ ") +
-              "ปลด " +
-              unlocked.join(", ") +
-              (res.already_owned?.length ? " · มีแล้ว " + res.already_owned.join(", ") : "") +
-              (res.refunded ? " · คืน " + formatCredit(res.refunded) + " Credit" : "");
+          const jobKey = String(job.id || jobId);
+          if (unlockLResultShownFor !== jobKey) {
+            unlockLResultShownFor = jobKey;
+            showUnlockLResultModal(job);
           }
           setStatus(
             $("unlockl-status"),
@@ -3638,6 +4039,141 @@
     });
     $("modal-body")?.classList.add("result-stagger");
     spawnPixelConfetti();
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
+  function showAfterplayResultModal(job) {
+    const res = job?.result && typeof job.result === "object" ? job.result : {};
+    const before = res.before || {};
+    const after = res.after || {};
+    const delta = res.delta || {};
+    const ebox = String(res.farm_mode || "") === "episode_box";
+    const ok = job?.status === "succeeded" || !!res.ok;
+    const nick = escapeHtml(String(devplaySession?.nickname || "—"));
+    const levelNow = after.level ?? before.level;
+    const account =
+      nick + (levelNow != null ? " · level " + escapeHtml(formatNumTh(levelNow)) : "");
+    const runsDone = formatNumTh(res.runs_done || 0);
+    const runsTotal = formatNumTh(res.runs || job?.ticket_count || 0);
+    const rows = [
+      ["บัญชีเกม", account],
+      ["โหมด", ebox ? "Episode Box · กล่องด่าน" : "เงิน/XP"],
+      ["รอบ", runsDone + " / " + runsTotal + " สำเร็จ"],
+    ];
+    if (ebox && Array.isArray(res.target_eps) && res.target_eps.length) {
+      rows.push(["ด่าน", escapeHtml(res.target_eps.join(", "))]);
+    }
+    if (ebox && res.boxes != null) {
+      rows.push(["กล่อง", formatNumTh(res.boxes)]);
+    }
+    if (before.level != null || after.level != null) {
+      rows.push([
+        "เลเวล",
+        escapeHtml(formatNumTh(before.level || 0)) +
+          " → " +
+          escapeHtml(formatNumTh(after.level || before.level || 0)) +
+          ' <span class="result-delta">' +
+          escapeHtml(signedDelta(delta.level)) +
+          "</span>",
+      ]);
+    }
+    rows.push(
+      [
+        "เหรียญ",
+        '<span class="result-delta">' +
+          escapeHtml(signedDelta(delta.coin)) +
+          "</span> → ยอดรวม " +
+          escapeHtml(formatNumTh(after.coin ?? before.coin ?? "—")),
+      ],
+      [
+        "XP",
+        '<span class="result-delta">' +
+          escapeHtml(signedDelta(delta.exp)) +
+          "</span> → ยอดรวม " +
+          escapeHtml(formatNumTh(after.exp ?? before.exp ?? "—")),
+      ],
+      [
+        "หัวใจ",
+        escapeHtml(formatNumTh(before.life || 0)) +
+          " → " +
+          escapeHtml(formatNumTh(after.life ?? before.life ?? 0)) +
+          ' <span class="result-delta">' +
+          escapeHtml(signedDelta(delta.life)) +
+          "</span>",
+      ]
+    );
+    if (res.ok200) rows.push(["รอบ 200", formatNumTh(res.ok200)]);
+    if (res.flagged) rows.push(["ธง 210 (ไปต่อ)", formatNumTh(res.flagged)]);
+    if (res.failed_send) rows.push(["ส่งไม่ติด", formatNumTh(res.failed_send)]);
+    if (res.refunded) rows.push(["คืน Credit", formatCredit(res.refunded)]);
+    if (!ok && (job?.error || res.error)) {
+      rows.push(["รายละเอียด", escapeHtml(String(job.error || res.error))]);
+    }
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows.map(([k, v]) => "<tr><th>" + k + "</th><td>" + v + "</td></tr>").join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ถ้าในเกมยังไม่เห็นยอด ให้ปิดเกมแล้วเข้าใหม่</p>';
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: ok
+        ? ebox
+          ? "สรุปผลกล่องด่าน"
+          : "สรุปผลฟาร์มเงิน/XP"
+        : ebox
+          ? "กล่องด่านจบแล้ว"
+          : "ฟาร์มเงิน/XP จบแล้ว",
+      bodyHtml: html,
+      icon: "assets/Cookie0023_head.png",
+      locked: false,
+    });
+    $("modal-body")?.classList.add("result-stagger");
+    if (ok) spawnPixelConfetti();
+    modalActions.appendChild(
+      makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
+    );
+  }
+
+  function unlockLEpLabel(ep) {
+    const row = (unlockLCatalog || []).find((r) => Number(r.ep) === Number(ep));
+    return row?.name ? "EP" + ep + " " + row.name : "EP " + ep;
+  }
+
+  function showUnlockLResultModal(job) {
+    const res = job?.result && typeof job.result === "object" ? job.result : {};
+    const ok = job?.status === "succeeded" || !!res.ok;
+    const unlocked = Array.isArray(res.unlocked) ? res.unlocked : [];
+    const already = Array.isArray(res.already_owned) ? res.already_owned : [];
+    const rows = [
+      ["บัญชีเกม", escapeHtml(String(devplaySession?.nickname || "—"))],
+      ["สถานะ", ok ? "สำเร็จ" : job?.status === "cancelled" ? "ยกเลิก" : "ไม่สำเร็จ"],
+      ["ปลดแล้ว", unlocked.length ? unlocked.map(unlockLEpLabel).map(escapeHtml).join(", ") : "—"],
+    ];
+    if (already.length) {
+      rows.push(["มีอยู่แล้ว", already.map(unlockLEpLabel).map(escapeHtml).join(", ")]);
+    }
+    if (res.refunded) rows.push(["คืน Credit", formatCredit(res.refunded)]);
+    if (!ok && (job?.error || res.error)) {
+      rows.push(["รายละเอียด", escapeHtml(String(job.error || res.error))]);
+    }
+    const html =
+      '<table class="result-table"><tbody>' +
+      rows.map(([k, v]) => "<tr><th>" + k + "</th><td>" + v + "</td></tr>").join("") +
+      "</tbody></table>" +
+      '<p class="queue-note" style="margin-top:12px">ถ้าในเกมยังไม่เห็นด่าน ให้ปิดเกมแล้วเข้าใหม่</p>';
+    clearModalActions();
+    openModal({
+      mode: "result",
+      title: ok ? "สรุปผลปลดล็อค L" : "ปลดล็อค L จบแล้ว",
+      bodyHtml: html,
+      icon: "assets/Tiger_Lily_Cookie.png",
+      locked: false,
+    });
+    $("modal-body")?.classList.add("result-stagger");
+    if (ok) spawnPixelConfetti();
     modalActions.appendChild(
       makeBtn("ตกลง", "btn-candy", () => forceCloseModal())
     );
@@ -4411,6 +4947,7 @@
       adminCancelId: canCancel ? row.job_id : "",
       jobId: row.job_id || "",
       stuck,
+      adminJobId: row.job_id || "",
     };
   }
 
@@ -6270,6 +6807,9 @@
         panel.classList.toggle("is-entering", active);
       }
     });
+    ["invite", "afterplay_fast", "unlock_l"].forEach((t) => {
+      $("menu-nav-" + t)?.classList.toggle("is-active", farmTab === t);
+    });
     const meta = FARM_TAB_META[farmTab];
     if (meta) {
       const titleEl = $("farm-panel-title");
@@ -6278,6 +6818,7 @@
       if (titleEl) titleEl.textContent = meta.title;
       if (hintEl) hintEl.textContent = meta.hint;
       if (iconEl && meta.icon) iconEl.src = "assets/" + meta.icon;
+      if (farmTab === "afterplay_fast") paintAfterplayCreditHint();
     }
     const partyBtn = $("farm-btn");
     const powderBtn = $("powder-btn");
@@ -6331,6 +6872,7 @@
       loadDsAllowlist(false).catch(() => {});
     }
     if (farmTab === AFTERPLAY_FAST_TAB) {
+      refreshAfterplayPrices().catch(() => {});
       refreshAfterplayPreview({ fromTab: true, source: afterplayLastEdit }).catch(() => {});
     }
     if (farmTab === UNLOCK_L_TAB) {
@@ -9791,14 +10333,57 @@
         escapeHtml(formatNumTh(row.coin))
       );
     }
-    return (
-      "S " +
-      escapeHtml(formatNumTh(row.score)) +
-      " · C " +
-      escapeHtml(formatNumTh(row.coin)) +
-      " · XP " +
-      escapeHtml(formatNumTh(row.exp))
-    );
+    if (mode === "afterplay_fast") {
+      const farmMode = String(res.farm_mode || row.params?.farm_mode || "");
+      if (farmMode === "episode_box") {
+        const done = Number(res.runs_done ?? 0) || 0;
+        const total = Number(res.runs ?? res.planned_runs ?? row.ticket_count ?? 0) || 0;
+        const boxes = Number(res.boxes ?? 0) || 0;
+        const parts = ["ฟาร์มเงิน/XP · กล่องด่าน", escapeHtml(formatNumTh(done)) + "/" + escapeHtml(formatNumTh(total)) + " รอบ"];
+        if (boxes) parts.push("กล่อง " + escapeHtml(formatNumTh(boxes)));
+        return parts.join(" · ");
+      }
+      const runs = Number(res.runs ?? res.rounds ?? row.ticket_count ?? 0) || 0;
+      const xp = Number(res.xp_gain ?? res.exp_gain ?? row.exp ?? 0) || 0;
+      const coin = Number(res.coin_gain ?? row.coin ?? 0) || 0;
+      const parts = ["ฟาร์มเงิน/XP"];
+      if (runs) parts.push(escapeHtml(formatNumTh(runs)) + " รอบ");
+      if (coin) parts.push("C +" + escapeHtml(formatNumTh(coin)));
+      if (xp) parts.push("XP +" + escapeHtml(formatNumTh(xp)));
+      return parts.join(" · ");
+    }
+    if (mode === "unlock_l") {
+      const done = Number(res.unlocked ?? res.items_done ?? res.count ?? 0) || 0;
+      const eps = Array.isArray(res.target_eps)
+        ? res.target_eps.length
+        : Number(res.items_total ?? res.selected ?? 0) || 0;
+      return (
+        "ปลดล็อค L · " +
+        escapeHtml(formatNumTh(done)) +
+        (eps ? "/" + escapeHtml(formatNumTh(eps)) : "") +
+        " ตัว"
+      );
+    }
+    if (mode === "invite" || mode === "invite_friend") {
+      const ok = Number(res.success ?? res.invited ?? res.count ?? 0) || 0;
+      const tgt = Number(res.target ?? res.requested ?? 29) || 29;
+      return (
+        "เชิญเพื่อน · " +
+        escapeHtml(formatNumTh(ok)) +
+        "/" +
+        escapeHtml(formatNumTh(tgt)) +
+        " คน"
+      );
+    }
+    const title = jobTitleForMode(mode) || JOB_KIND_TH[mode] || mode || "ฟาร์ม";
+    return escapeHtml(title);
+  }
+
+  function farmHistoryModeIcon(mode) {
+    const meta = FARM_TAB_META[mode === "cookie_unlock" ? "cookie" : mode === "quest_claim" ? "quest" : mode];
+    if (meta?.icon) return "assets/" + meta.icon;
+    if (mode === "invite" || mode === "invite_friend") return "assets/icon_giftpoint.png";
+    return "assets/notice_b20.png";
   }
 
   function farmHistoryListHtml(items) {
@@ -9828,17 +10413,22 @@
             : st === "failed" || st === "cancelled"
               ? "hist-warn"
               : "";
+        const mode = resolveFarmJobMode(row) || parseFarmJobResult(row.result).mode || "";
         const summary = farmHistoryRowSummary(row);
+        const icon = farmHistoryModeIcon(mode);
         return (
           "<li>" +
-          "<span>" +
+          '<span class="hist-summary">' +
           summary +
           "</span>" +
-          '<span class="' +
+          '<span class="hist-status ' +
           stClass +
           '">' +
           escapeHtml(stLabel) +
           "</span>" +
+          '<img class="hist-icon" src="' +
+          escapeHtml(icon) +
+          '" alt="" width="36" height="36" />' +
           '<span class="hist-meta">' +
           escapeHtml(formatTopupDay(row.created_at)) +
           (row.error ? " · " + escapeHtml(String(row.error).slice(0, 60)) : "") +
@@ -11204,6 +11794,7 @@
     if (mode === "quest_claim") return "รับรางวัลเควส";
     if (mode === "afterplay_fast") return "ฟาร์มเงิน/XP";
     if (mode === "unlock_l") return "ปลดล็อค L";
+    if (mode === "invite" || mode === "invite_friend") return "เชิญเพื่อน";
     return "ฟาร์ม";
   }
 
@@ -11845,16 +12436,22 @@
           : ""
       : "";
     // Admin cards get an explicit labeled action button in the footer.
-    const adminActionHtml =
-      card.cancelable && card.adminCancelId
-        ? '<div class="farm-dock-tx-admin-actions"><button type="button" class="farm-dock-tx-forcekill' +
-          (card.stuck ? " is-stuck" : "") +
-          '" data-admin-cancel="' +
-          escapeHtml(card.adminCancelId) +
-          '">' +
-          (card.stuck ? "บังคับจบงานค้าง" : "ยกเลิก / บังคับจบ") +
-          "</button></div>"
-        : "";
+    const adminActionHtml = card.adminJobId
+      ? '<div class="farm-dock-tx-admin-actions">' +
+        '<button type="button" class="farm-dock-tx-admin-log" data-admin-log="' +
+        escapeHtml(card.adminJobId) +
+        '">Log</button>' +
+        (card.cancelable && card.adminCancelId
+          ? '<button type="button" class="farm-dock-tx-forcekill' +
+            (card.stuck ? " is-stuck" : "") +
+            '" data-admin-cancel="' +
+            escapeHtml(card.adminCancelId) +
+            '">' +
+            (card.stuck ? "บังคับจบงานค้าง" : "ยกเลิก / บังคับจบ") +
+            "</button>"
+          : "") +
+        "</div>"
+      : "";
     article.innerHTML =
       '<div class="farm-dock-tx-top">' +
       '<div class="farm-dock-tx-icon" aria-hidden="true">' +
@@ -13092,6 +13689,7 @@
   }
 
   function paintJobLogModalBody(logLines) {
+    if (adminJobLogActive) return;
     const modal = $("job-log-modal");
     const body = $("job-log-body");
     if (!modal || !body || modal.classList.contains("hidden")) return;
@@ -13106,6 +13704,7 @@
   }
 
   function openJobLogModal() {
+    adminJobLogActive = false;
     const modal = $("job-log-modal");
     if (!modal) return;
     const snap = buildDockSnapshot();
@@ -13127,9 +13726,43 @@
   function closeJobLogModal() {
     const modal = $("job-log-modal");
     if (!modal || modal.classList.contains("hidden")) return;
+    adminJobLogActive = false;
     unlockBodyScroll("job-log-open");
     releaseFocusTrap();
     animateClose(modal);
+  }
+
+  async function openAdminJobLog(jobId) {
+    const id = String(jobId || "").trim();
+    if (!id) return;
+    const modal = $("job-log-modal");
+    if (!modal) return;
+    adminJobLogActive = true;
+    const eyebrow = $("job-log-eyebrow");
+    if (eyebrow) eyebrow.textContent = "Admin";
+    const title = $("job-log-title");
+    if (title) title.textContent = "Log จริง";
+    const body = $("job-log-body");
+    if (body) body.textContent = "กำลังโหลด…";
+    animateOpen(modal);
+    lockBodyScroll("job-log-open");
+    const sheet = modal.querySelector(".job-log-sheet") || modal;
+    trapFocus(sheet);
+    try {
+      const data = await api("/api/admin/jobs/" + encodeURIComponent(id), { timeoutMs: 20000 });
+      const kind = data.kind || "";
+      const name = data.username || "";
+      const shortId = id.slice(0, 8);
+      if (eyebrow) eyebrow.textContent = [name, JOB_KIND_TH[kind] || kind, shortId].filter(Boolean).join(" · ");
+      if (title) title.textContent = "Log จริง";
+      const logs = Array.isArray(data.logs) ? data.logs : [];
+      if (body) {
+        body.textContent = jobLogLinesAsText(logs) || (data.error ? String(data.error) : "ยังไม่มี log");
+        body.scrollTop = body.scrollHeight;
+      }
+    } catch (e) {
+      if (body) body.textContent = thError(e.message) || e.message || "โหลด log ไม่สำเร็จ";
+    }
   }
 
   function renderLiveStatus(snap) {
@@ -14595,6 +15228,10 @@
 
   $("signup-form")?.addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (lastHealth && lastHealth.signup_closed) {
+      applySignupClosed(true);
+      return;
+    }
     const remember = !!$("signup-remember")?.checked;
     setRememberPref(remember);
     if ($("remember-me")) $("remember-me").checked = remember;
@@ -14657,6 +15294,7 @@
       const raw = String(e.message || "");
       let title = "สมัครสมาชิกไม่สำเร็จ";
       if (raw.includes("username_taken")) title = "ชื่อผู้ใช้ซ้ำ";
+      else if (raw.includes("signup_closed")) title = "ปิดรับสมัครผ่านเว็บ";
       else if (raw.includes("signup_rate_limited")) title = "สมัครถี่เกินไป";
       else if (raw.includes("password_mismatch")) title = "ยืนยันรหัสผ่านไม่ตรง";
       else if (raw.includes("invalid_username")) title = "ชื่อผู้ใช้ไม่ถูกต้อง";
@@ -14724,6 +15362,14 @@
     closeNavDrawer();
     openInviteFriendTab();
   });
+  $("menu-nav-afterplay_fast")?.addEventListener("click", () => {
+    closeNavDrawer();
+    onFarmTabClick(AFTERPLAY_FAST_TAB);
+  });
+  $("menu-nav-unlock_l")?.addEventListener("click", () => {
+    closeNavDrawer();
+    onFarmTabClick(UNLOCK_L_TAB);
+  });
   $("menu-nav-history")?.addEventListener("click", () => {
     closeNavDrawer();
     showFarmHistoryModal().catch(() => {});
@@ -14743,6 +15389,19 @@
     copyInviteCoinAmount().catch(() => {});
   });
   $("invite-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
+  $("invite-credit-custom-apply")?.addEventListener("click", () => {
+    applyInviteCustomAmount($("invite-credit-custom-amount")?.value, { copy: true });
+  });
+  $("invite-credit-custom-amount")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      applyInviteCustomAmount($("invite-credit-custom-amount")?.value, { copy: true });
+    }
+  });
+  $("invite-credit-custom-amount")?.addEventListener("change", () => {
+    const raw = $("invite-credit-custom-amount")?.value;
+    if (String(raw || "").trim()) applyInviteCustomAmount(raw);
+  });
   $("invite-refresh-btn")?.addEventListener("click", () => {
     if (inviteRunning) {
       setStatus($("invite-status"), "รอให้งานเชิญเพื่อนเสร็จก่อน", "err");
@@ -14760,8 +15419,17 @@
   $("farm-tab-unlock_l")?.addEventListener("click", () => onFarmTabClick(UNLOCK_L_TAB));
   $("afterplay-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   $("unlockl-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
-  $("afterplay-preview-btn")?.addEventListener("click", () => {
-    refreshAfterplayPreview({ force: true, source: afterplayLastEdit }).catch(() => {});
+  document.querySelectorAll("[data-afterplay-goal]").forEach((card) => {
+    card.addEventListener("click", (ev) => {
+      if (ev.target?.closest?.("input")) return;
+      setAfterplayGoal(card.getAttribute("data-afterplay-goal"));
+    });
+    card.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Enter" && ev.key !== " ") return;
+      if (ev.target?.closest?.("input")) return;
+      ev.preventDefault();
+      setAfterplayGoal(card.getAttribute("data-afterplay-goal"));
+    });
   });
   $("afterplay-start-btn")?.addEventListener("click", () => {
     startAfterplayJob().catch(() => {});
@@ -14776,6 +15444,26 @@
   $("afterplay-target-level")?.addEventListener("change", () => scheduleAfterplayPreview("level"));
   $("afterplay-target-coin")?.addEventListener("input", () => scheduleAfterplayPreview("coin"));
   $("afterplay-target-coin")?.addEventListener("change", () => scheduleAfterplayPreview("coin"));
+  $("afterplay-box-max")?.addEventListener("input", () => {
+    if ($("afterplay-box-max")) $("afterplay-box-max").dataset.touched = "1";
+    scheduleAfterplayPreview("box");
+  });
+  $("afterplay-ebox-runs")?.addEventListener("input", () => {
+    if ($("afterplay-ebox-runs")) $("afterplay-ebox-runs").dataset.touched = "1";
+    scheduleAfterplayPreview("ebox");
+  });
+  $("afterplay-ebox-runs")?.addEventListener("change", () => scheduleAfterplayPreview("ebox"));
+  document.querySelectorAll("[data-farm-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setAfterplayFarmMode(btn.getAttribute("data-farm-mode"));
+    });
+  });
+  try {
+    const savedMode = localStorage.getItem(AFTERPLAY_MODE_KEY);
+    if (savedMode === "episode_box" || savedMode === "money_xp") afterplayFarmMode = savedMode;
+  } catch (_) {}
+  paintAfterplayModeUi();
+  paintAfterplayEboxGrid();
   $("unlockl-refresh-btn")?.addEventListener("click", () => {
     refreshUnlockLCatalog({ force: true }).catch(() => {});
   });
@@ -15586,6 +16274,16 @@
           showErrorModal(thError(e.message) || "ยกเลิกไม่สำเร็จ", "Admin")
         );
       }
+      return;
+    }
+    const adminLogBtn = ev.target?.closest?.("[data-admin-log]");
+    if (adminLogBtn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const id = adminLogBtn.getAttribute("data-admin-log");
+      if (id) openAdminJobLog(id).catch((e) =>
+        showErrorModal(thError(e.message) || "โหลด log ไม่สำเร็จ", "Admin")
+      );
     }
   }
 

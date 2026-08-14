@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260814-nav1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260814-apmode1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -133,7 +133,7 @@
 
           <div id="signup-mode" class="hidden">
             <h2 class="panel-title">สมัครสมาชิก</h2>
-            <p class="panel-hint">ตั้งชื่อผู้ใช้และรหัสผ่าน (ยืนยันรหัสผ่านให้ตรงกัน)</p>
+            <p class="panel-hint" id="signup-hint">ตั้งชื่อผู้ใช้และรหัสผ่าน (ยืนยันรหัสผ่านให้ตรงกัน)</p>
             <form id="signup-form" autocomplete="on" role="tabpanel" aria-labelledby="tab-signup">
               <label class="field">
                 <span>ชื่อผู้ใช้</span>
@@ -208,6 +208,18 @@
               </button>
               <p id="signup-status" class="status" role="status"></p>
             </form>
+            <div id="signup-closed" class="signup-closed hidden" role="tabpanel" aria-labelledby="tab-signup" hidden>
+              <a
+                href="https://t.me/j3xdr"
+                class="btn btn-telegram"
+                id="signup-telegram-btn"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <img src="assets/telegram_logo.svg" alt="" width="22" height="22" />
+                <span>ติดต่อ Telegram แอดมิน</span>
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -1065,66 +1077,160 @@
                 </div>
               </div>
 
-              <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="farm-tab-afterplay_fast" hidden>
-                <div class="upgrade-panel-layout invite-panel afterplay-panel">
-                  <section class="upgrade-section">
-                    <ol class="invite-steps" aria-label="ขั้นตอนฟาร์มเงิน/XP">
-                      <li><span class="invite-step-n">1</span> ใส่เป้าเหรียญหรือเลเวลที่อยากได้ จากไอดีที่ล็อกอินอยู่</li>
-                      <li><span class="invite-step-n">2</span> ระบบคำนวณรอบแบบชัวร์ (ยึดค่าต่ำสุดต่อรอบ) แล้วเช็กหัวใจ</li>
-                      <li><span class="invite-step-n">3</span> 1 รอบ = 1 หัวใจ = 0.5 Credit · หัวใจไม่พอห้ามเริ่ม</li>
-                    </ol>
+              <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="menu-nav-afterplay_fast" hidden>
+                <div class="upgrade-panel-layout afterplay-panel">
+                  <div class="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
+                    <button type="button" class="afterplay-mode-btn is-active" id="afterplay-mode-money_xp" data-farm-mode="money_xp" role="tab" aria-selected="true">เงิน/XP</button>
+                    <button type="button" class="afterplay-mode-btn" id="afterplay-mode-episode_box" data-farm-mode="episode_box" role="tab" aria-selected="false">Episode Box</button>
+                  </div>
+                  <section class="afterplay-snap-grid" aria-label="สถานะไอดี">
+                    <div class="afterplay-snap">
+                      <img src="assets/level.png" alt="" width="28" height="28" />
+                      <span>เลเวล</span>
+                      <strong id="afterplay-snap-level">—</strong>
+                    </div>
+                    <div class="afterplay-snap">
+                      <img src="assets/score.png" alt="" width="28" height="28" />
+                      <span>XP</span>
+                      <strong id="afterplay-snap-exp">—</strong>
+                    </div>
+                    <div class="afterplay-snap">
+                      <img src="assets/Heart.png" alt="" width="28" height="28" />
+                      <span>หัวใจ</span>
+                      <strong id="afterplay-snap-life">—</strong>
+                    </div>
+                    <div class="afterplay-snap" id="afterplay-snap-coin-wrap">
+                      <img src="assets/coin_silver.png" alt="" width="28" height="28" />
+                      <span>เหรียญ</span>
+                      <strong id="afterplay-snap-coin">—</strong>
+                    </div>
+                    <div class="afterplay-snap hidden" id="afterplay-snap-key-wrap" hidden>
+                      <img src="assets/score.png" alt="" width="28" height="28" />
+                      <span>กุญแจ</span>
+                      <strong id="afterplay-snap-key">—</strong>
+                    </div>
                   </section>
-                  <section class="upgrade-section invite-balance-card">
-                    <div class="invite-balance-row">
-                      <div>
-                        <p class="invite-kicker">เครดิตของคุณ</p>
-                        <p class="invite-balance-value"><strong id="afterplay-stat-credit">0</strong> <span>Credit</span></p>
+                  <section class="afterplay-goal-grid" id="afterplay-goal-grid" aria-label="เลือกเป้า">
+                    <div class="afterplay-goal-card is-active" id="afterplay-goal-level" data-afterplay-goal="level" role="button" tabindex="0">
+                      <img src="assets/level.png" alt="" width="40" height="40" />
+                      <span class="afterplay-goal-label">เป้าเลเวล</span>
+                      <input id="afterplay-target-level" type="number" inputmode="numeric" min="1" max="110" step="1" placeholder="เช่น 50" />
+                    </div>
+                    <div class="afterplay-goal-card" id="afterplay-goal-coin" data-afterplay-goal="coin" role="button" tabindex="0">
+                      <img src="assets/coin_silver.png" alt="" width="40" height="40" />
+                      <span class="afterplay-goal-label">เหรียญที่อยากได้เพิ่ม</span>
+                      <input id="afterplay-target-coin" type="number" inputmode="numeric" min="1" step="1000" placeholder="เช่น 1000000" />
+                    </div>
+                  </section>
+                  <section class="afterplay-ebox-panel hidden" id="afterplay-ebox-panel" hidden>
+                    <p class="afterplay-ebox-note">ไม่สุ่ม L · มีตัว L แล้วก็เก็บกล่องด่านนั้นได้ · ช่วงปลดด่านกินหัวใจเพิ่ม (ไม่คิดเงินรอบปลดด่าน)</p>
+                    <div id="afterplay-ebox-grid" class="unlockl-grid" role="group" aria-label="เลือกด่านเก็บกล่อง"></div>
+                    <label class="afterplay-box-max-field" for="afterplay-ebox-runs">
+                      <span>รอบ/ด่าน</span>
+                      <input id="afterplay-ebox-runs" type="number" inputmode="numeric" min="1" max="50" step="1" value="5" />
+                    </label>
+                  </section>
+                  <label class="afterplay-box-max-field" id="afterplay-box-max-wrap" for="afterplay-box-max">
+                    <span>กล่อง/รอบ · 0 = ตามเซิร์ฟ</span>
+                    <input id="afterplay-box-max" type="number" inputmode="numeric" min="0" max="3" step="1" value="0" />
+                  </label>
+                  <section class="afterplay-summary-card" id="afterplay-estimate">
+                    <p class="afterplay-summary-kicker">1 รอบ = 1 หัวใจ = <strong id="afterplay-credit-per-run">0.2</strong> Credit</p>
+                    <div class="afterplay-summary-row">
+                      <div class="afterplay-summary-stat">
+                        <img src="assets/Cookie0023_head.png" alt="" width="22" height="22" />
+                        <span>รอบ</span>
+                        <strong id="afterplay-est-runs">—</strong>
                       </div>
+                      <div class="afterplay-summary-stat">
+                        <img src="assets/Heart.png" alt="" width="22" height="22" />
+                        <span>หัวใจ</span>
+                        <strong id="afterplay-est-hearts">—</strong>
+                      </div>
+                      <div class="afterplay-summary-stat">
+                        <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="22" height="22" />
+                        <span>Credit</span>
+                        <strong id="afterplay-est-credit">—</strong>
+                      </div>
+                    </div>
+                    <div class="afterplay-boxes" id="afterplay-compare" hidden>
+                      <article class="afterplay-box">
+                        <header class="afterplay-box-head">
+                          <img src="assets/level.png" alt="" width="20" height="20" />
+                          เลเวล
+                        </header>
+                        <div class="afterplay-box-pair">
+                          <div class="afterplay-box-col">
+                            <span>ตอนนี้</span>
+                            <strong id="afterplay-cmp-before-level">—</strong>
+                          </div>
+                          <span class="afterplay-box-arrow" aria-hidden="true">→</span>
+                          <div class="afterplay-box-col afterplay-box-col--after" id="afterplay-cmp-after-level-wrap">
+                            <span>หลังฟาร์ม</span>
+                            <strong id="afterplay-cmp-after-level-min">—</strong>
+                            <small class="afterplay-forecast-to">ถึง <strong id="afterplay-cmp-after-level-max">—</strong></small>
+                          </div>
+                        </div>
+                      </article>
+                      <article class="afterplay-box">
+                        <header class="afterplay-box-head">
+                          <img src="assets/coin_silver.png" alt="" width="20" height="20" />
+                          เหรียญในไอดี
+                        </header>
+                        <div class="afterplay-box-pair">
+                          <div class="afterplay-box-col">
+                            <span>ตอนนี้</span>
+                            <strong id="afterplay-cmp-before-coin">—</strong>
+                          </div>
+                          <span class="afterplay-box-arrow" aria-hidden="true">→</span>
+                          <div class="afterplay-box-col afterplay-box-col--after" id="afterplay-cmp-after-coin-wrap">
+                            <span>หลังฟาร์ม</span>
+                            <strong id="afterplay-cmp-after-coin-min">—</strong>
+                            <small class="afterplay-forecast-to">ถึง <strong id="afterplay-cmp-after-coin-max">—</strong></small>
+                          </div>
+                        </div>
+                      </article>
+                      <article class="afterplay-box">
+                        <header class="afterplay-box-head">
+                          <img src="assets/Heart.png" alt="" width="20" height="20" />
+                          หัวใจเหลือ
+                        </header>
+                        <div class="afterplay-box-pair">
+                          <div class="afterplay-box-col">
+                            <span>ตอนนี้</span>
+                            <strong id="afterplay-cmp-before-life">—</strong>
+                          </div>
+                          <span class="afterplay-box-arrow" aria-hidden="true">→</span>
+                          <div class="afterplay-box-col afterplay-box-col--after is-single">
+                            <span>หลังฟาร์ม</span>
+                            <strong id="afterplay-cmp-after-life">—</strong>
+                          </div>
+                        </div>
+                      </article>
+                      <article class="afterplay-box afterplay-box--gain" id="afterplay-est-xp-wrap">
+                        <header class="afterplay-box-head">
+                          <img src="assets/score.png" alt="" width="20" height="20" />
+                          ได้ XP
+                        </header>
+                        <strong id="afterplay-est-xp-min">—</strong>
+                        <small class="afterplay-forecast-to">ถึง <strong id="afterplay-est-xp-max">—</strong></small>
+                      </article>
+                      <article class="afterplay-box afterplay-box--gain" id="afterplay-est-coin-wrap">
+                        <header class="afterplay-box-head">
+                          <img src="assets/coin_silver.png" alt="" width="20" height="20" />
+                          ได้เหรียญ
+                        </header>
+                        <strong id="afterplay-est-coin-min">—</strong>
+                        <small class="afterplay-forecast-to">ถึง <strong id="afterplay-est-coin-max">—</strong></small>
+                      </article>
+                    </div>
+                    <p id="afterplay-life-warn" class="status err hidden" hidden>หัวใจไม่พอ — ห้ามเริ่ม</p>
+                    <p id="afterplay-ebox-key-warn" class="status err hidden" hidden>Ice Tower (EP5) ต้องมีกุญแจ</p>
+                    <p id="afterplay-ebox-hint" class="status muted hidden" hidden>หัวใจน้อยกว่าจำนวนรอบที่วางแผนได้ — จะยิงเท่าที่มี</p>
+                    <div class="afterplay-credit-row">
+                      <span>คงเหลือ <strong id="afterplay-stat-credit">0</strong> Credit</span>
                       <button type="button" class="btn btn-candy btn-sm" id="afterplay-credit-open-btn">เติม Credit</button>
                     </div>
-                    <p class="muted invite-note">ไม่ใช้วันเช่า · คำนวณชัวร์จากไอดีจริง · เหรียญ/รอบ 350k–420k · EXP/รอบ 69k–80k</p>
-                  </section>
-                  <section class="upgrade-section afterplay-snap-grid" aria-label="สถานะไอดี">
-                    <div class="afterplay-snap"><span>เลเวล</span><strong id="afterplay-snap-level">—</strong></div>
-                    <div class="afterplay-snap"><span>XP ในเลเวล</span><strong id="afterplay-snap-exp">—</strong></div>
-                    <div class="afterplay-snap"><span>หัวใจ</span><strong id="afterplay-snap-life">—</strong></div>
-                    <div class="afterplay-snap"><span>เหรียญ</span><strong id="afterplay-snap-coin">—</strong></div>
-                  </section>
-                  <section class="upgrade-section afterplay-plan-fields">
-                    <label class="field" for="afterplay-target-level">
-                      <span>เป้าเลเวล</span>
-                      <input id="afterplay-target-level" type="number" inputmode="numeric" min="1" max="110" step="1" placeholder="เช่น 50" />
-                    </label>
-                    <label class="field" for="afterplay-target-coin">
-                      <span>เหรียญที่อยากได้เพิ่ม</span>
-                      <input id="afterplay-target-coin" type="number" inputmode="numeric" min="1" step="1000" placeholder="เช่น 1000000" />
-                    </label>
-                    <button type="button" class="btn btn-ghost btn-sm" id="afterplay-preview-btn">คำนวณ</button>
-                  </section>
-                  <section class="upgrade-section afterplay-estimate-card" id="afterplay-estimate">
-                    <p class="invite-kicker">ประมาณการแบบชัวร์</p>
-                    <div class="invite-meta-grid">
-                      <div class="invite-meta"><span>รอบที่ต้องทำ</span><strong id="afterplay-est-runs">—</strong></div>
-                      <div class="invite-meta"><span>หัวใจ</span><strong id="afterplay-est-hearts">—</strong></div>
-                      <div class="invite-meta"><span>Credit</span><strong id="afterplay-est-credit">—</strong></div>
-                      <div class="invite-meta"><span>XP ที่ได้</span><strong id="afterplay-est-xp">—</strong></div>
-                      <div class="invite-meta"><span>เหรียญที่ได้</span><strong id="afterplay-est-coin">—</strong></div>
-                    </div>
-                    <div class="afterplay-compare" id="afterplay-compare" hidden>
-                      <div class="afterplay-compare-col">
-                        <p class="afterplay-compare-h">ก่อน</p>
-                        <p>เลเวล <strong id="afterplay-cmp-before-level">—</strong></p>
-                        <p>เหรียญ <strong id="afterplay-cmp-before-coin">—</strong></p>
-                        <p>หัวใจ <strong id="afterplay-cmp-before-life">—</strong></p>
-                      </div>
-                      <div class="afterplay-compare-col">
-                        <p class="afterplay-compare-h">หลัง (ชัวร์–สูงสุด)</p>
-                        <p>เลเวล <strong id="afterplay-cmp-after-level">—</strong></p>
-                        <p>เหรียญ <strong id="afterplay-cmp-after-coin">—</strong></p>
-                        <p>หัวใจ <strong id="afterplay-cmp-after-life">—</strong></p>
-                      </div>
-                    </div>
-                    <p id="afterplay-life-warn" class="status err hidden" hidden>หัวใจไม่พอ — ห้ามเริ่ม (ไม่ลดรอบให้อัตโนมัติ)</p>
                   </section>
                   <p id="afterplay-status" class="status muted" role="status"></p>
                   <div id="afterplay-progress-card" class="invite-progress-card hidden" hidden>
@@ -1137,15 +1243,13 @@
                         </p>
                       </div>
                       <div class="invite-progress-actions">
-                        <button type="button" class="btn btn-ghost btn-sm" id="afterplay-log-open-btn">ดู Log</button>
+                        <button type="button" class="btn btn-ghost btn-sm hidden" id="afterplay-log-open-btn" hidden>ดู Log</button>
                         <button type="button" class="btn btn-danger btn-sm hidden" id="afterplay-cancel-btn" hidden>ยกเลิก</button>
                       </div>
                     </div>
                     <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="afterplay-progress-track">
                       <div class="invite-progress-fill" id="afterplay-progress-fill"></div>
                     </div>
-                    <p id="afterplay-result-summary" class="invite-result-summary hidden" hidden></p>
-                    <div id="afterplay-result-compare" class="afterplay-compare hidden" hidden></div>
                   </div>
                   <button class="btn btn-run" type="button" id="afterplay-start-btn">
                     <img src="assets/Cookie0023_head.png" alt="" width="28" height="28" />
@@ -1157,38 +1261,36 @@
                 </div>
               </div>
 
-              <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="farm-tab-unlock_l" hidden>
-                <div class="upgrade-panel-layout invite-panel afterplay-panel">
-                  <section class="upgrade-section">
-                    <ol class="invite-steps" aria-label="ขั้นตอนปลดล็อค L">
-                      <li><span class="invite-step-n">1</span> เลือก L ที่ยังไม่มี · ตัวที่มีแล้วไม่คิดเงิน</li>
-                      <li><span class="invite-step-n">2</span> 1–6 ตัว = 15 Credit/ตัว · ครบ 7 ตัว = 100 Credit</li>
-                      <li><span class="invite-step-n">3</span> Ice Tower (ep5) ตามเอนจินเดิม</li>
-                    </ol>
+              <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="menu-nav-unlock_l" hidden>
+                <div class="upgrade-panel-layout afterplay-panel unlockl-panel">
+                  <section class="unlockl-toolbar">
+                    <p class="unlockl-toolbar-meta" id="unlockl-toolbar-meta">เลือกตัวที่ยังไม่มี · 15 Credit/ตัว · ครบ 7 = 100</p>
+                    <button type="button" class="btn btn-ghost btn-sm" id="unlockl-select-all-btn">เลือกทั้งหมดที่ยังไม่มี</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="unlockl-refresh-btn">รีเฟรช</button>
                   </section>
-                  <section class="upgrade-section invite-balance-card">
-                    <div class="invite-balance-row">
-                      <div>
-                        <p class="invite-kicker">เครดิตของคุณ</p>
-                        <p class="invite-balance-value"><strong id="unlockl-stat-credit">0</strong> <span>Credit</span></p>
-                      </div>
-                      <button type="button" class="btn btn-candy btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
+                  <div id="unlockl-grid" class="unlockl-grid" role="group" aria-label="เลือกปลดล็อค L"></div>
+                  <div class="unlockl-footer-bar">
+                    <div class="unlockl-footer-stat">
+                      <img src="assets/Heart.png" alt="" width="20" height="20" />
+                      <span>หัวใจ</span>
+                      <strong id="unlockl-snap-life">—</strong>
                     </div>
-                    <div class="invite-meta-grid">
-                      <div class="invite-meta"><span>ต่อตัว</span><strong><span id="unlockl-price-each">15</span> Credit</strong></div>
-                      <div class="invite-meta"><span>ครบ 7 ตัว</span><strong><span id="unlockl-price-bundle">100</span> Credit</strong></div>
-                      <div class="invite-meta"><span>ยอดที่เลือก</span><strong id="unlockl-quote">0 Credit</strong></div>
-                      <div class="invite-meta"><span>หัวใจ</span><strong id="unlockl-snap-life">—</strong></div>
-                      <div class="invite-meta"><span>กุญแจ</span><strong id="unlockl-snap-key">—</strong></div>
-                      <button type="button" class="invite-refresh-link" id="unlockl-refresh-btn">รีเฟรชคลัง</button>
+                    <div class="unlockl-footer-stat">
+                      <img src="assets/score.png" alt="" width="20" height="20" />
+                      <span>กุญแจ</span>
+                      <strong id="unlockl-snap-key">—</strong>
                     </div>
-                  </section>
-                  <section class="upgrade-section">
-                    <div class="unlockl-toolbar">
-                      <button type="button" class="btn btn-ghost btn-sm" id="unlockl-select-all-btn">เลือกทั้งหมดที่ยังไม่มี</button>
+                    <div class="unlockl-footer-stat">
+                      <span>คงเหลือ</span>
+                      <strong id="unlockl-stat-credit">0</strong>
+                      <span>Credit</span>
                     </div>
-                    <div id="unlockl-grid" class="unlockl-grid" role="group" aria-label="เลือกปลดล็อค L"></div>
-                  </section>
+                    <button type="button" class="btn btn-candy btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
+                  </div>
+                  <p class="unlockl-price-hint muted">
+                    <span id="unlockl-price-each">15</span> Credit/ตัว · ครบ 7 = <span id="unlockl-price-bundle">100</span>
+                    · ยอดที่เลือก <strong id="unlockl-quote">0 Credit</strong>
+                  </p>
                   <p id="unlockl-life-warn" class="status err hidden" hidden>หัวใจเป็น 0 — ห้ามเริ่มปลดล็อค L</p>
                   <p id="unlockl-key-warn" class="status err hidden" hidden>Ice Tower (EP5) ต้องมีกุญแจ</p>
                   <p id="unlockl-status" class="status muted" role="status"></p>
@@ -1202,14 +1304,13 @@
                         </p>
                       </div>
                       <div class="invite-progress-actions">
-                        <button type="button" class="btn btn-ghost btn-sm" id="unlockl-log-open-btn">ดู Log</button>
+                        <button type="button" class="btn btn-ghost btn-sm hidden" id="unlockl-log-open-btn" hidden>ดู Log</button>
                         <button type="button" class="btn btn-danger btn-sm hidden" id="unlockl-cancel-btn" hidden>ยกเลิก</button>
                       </div>
                     </div>
                     <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="unlockl-progress-track">
                       <div class="invite-progress-fill" id="unlockl-progress-fill"></div>
                     </div>
-                    <p id="unlockl-result-summary" class="invite-result-summary hidden" hidden></p>
                   </div>
                   <button class="btn btn-run" type="button" id="unlockl-start-btn">
                     <img src="assets/Tiger_Lily_Cookie.png" alt="" width="28" height="28" />
@@ -1220,7 +1321,6 @@
                   </button>
                 </div>
               </div>
-
               <div class="farm-tab-panel hidden" id="farm-panel-account" role="tabpanel" aria-labelledby="farm-tab-account" hidden>
                 <div class="upgrade-panel-layout">
                   <section class="upgrade-section upgrade-section-settings">
@@ -1437,36 +1537,6 @@
         <button
           type="button"
           class="farm-nav-item is-locked"
-          id="farm-tab-afterplay_fast"
-          data-tab="afterplay_fast"
-          role="tab"
-          aria-controls="farm-panel-afterplay_fast"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/Cookie0023_head.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">ฟาร์มเงิน/XP</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
-          id="farm-tab-unlock_l"
-          data-tab="unlock_l"
-          role="tab"
-          aria-controls="farm-panel-unlock_l"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/Tiger_Lily_Cookie.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">ปลดล็อค L</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
           id="farm-tab-account"
           data-tab="account"
           role="tab"
@@ -1523,12 +1593,32 @@
                 <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
                 <span>เชิญเพื่อน 29 คน</span>
               </button>
+              <button
+                type="button"
+                class="farm-sidebar-link is-feature-hidden"
+                id="menu-nav-afterplay_fast"
+                data-menu-action="afterplay_fast"
+                hidden
+              >
+                <img src="assets/Cookie0023_head.png" alt="" width="20" height="20" />
+                <span>ฟาร์มเงิน/XP</span>
+              </button>
+              <button
+                type="button"
+                class="farm-sidebar-link is-feature-hidden"
+                id="menu-nav-unlock_l"
+                data-menu-action="unlock_l"
+                hidden
+              >
+                <img src="assets/Tiger_Lily_Cookie.png" alt="" width="20" height="20" />
+                <span>ปลดล็อค L</span>
+              </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <path d="M12 8v5l3 2" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                   <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
                 </svg>
-                <span>ประวัติ Powder</span>
+                <span>ประวัติฟาร์ม</span>
               </button>
             </nav>
           </section>
@@ -1710,17 +1800,32 @@
     >
       <div class="vault-modal-head">
         <div class="vault-modal-titles">
-          <p class="pass-eyebrow">เชิญเพื่อน 29 คน</p>
+          <p class="pass-eyebrow" id="invite-credit-eyebrow">Credit ร่วม</p>
           <h2 class="panel-title" id="invite-credit-title">เติม Credit</h2>
         </div>
         <button type="button" class="vault-modal-close" id="invite-credit-close" aria-label="ปิด" data-invite-credit-close>×</button>
       </div>
-      <p class="panel-hint">เลือกจำนวน coin → สร้างซอง TrueMoney ตามจำนวนนั้น → วางลิงก์ด้านล่าง · 1 coin = 1 Credit</p>
+      <p class="panel-hint" id="invite-credit-hint">ใส่จำนวนเงิน → สร้างซอง TrueMoney ตามยอดนั้น (รับได้ 1 คน) → วางลิงก์ · 1 coin = 1 Credit · ใช้ได้กับเชิญเพื่อน / ฟาร์มเงิน·XP / ปลดล็อค L</p>
       <p class="invite-credit-balance-line">คงเหลือ <strong id="invite-credit-balance-label">0</strong> Credit</p>
-      <p class="invite-pack-label">เลือกแพ็ก <span class="invite-pack-hint">(แตะเพื่อคัดลอกยอด)</span></p>
+      <label class="field invite-credit-custom-field" for="invite-credit-custom-amount">
+        <span>จำนวนที่ต้องการเติม (บาท)</span>
+        <div class="invite-credit-custom-row">
+          <input
+            id="invite-credit-custom-amount"
+            type="number"
+            inputmode="numeric"
+            min="1"
+            max="100000"
+            step="1"
+            placeholder="เช่น 5, 20, 100"
+          />
+          <button type="button" class="btn btn-ghost btn-sm" id="invite-credit-custom-apply">ใช้ยอดนี้</button>
+        </div>
+      </label>
+      <p class="invite-pack-label">หรือเลือกแพ็กด่วน <span class="invite-pack-hint">(แตะเพื่อคัดลอกยอด)</span></p>
       <div id="invite-credit-packages" class="invite-pack-row" role="listbox" aria-label="แพ็ก Invite Credit"></div>
       <div class="invite-selected-copy-row">
-        <span class="invite-selected-copy-text">ยอดที่เลือก: <strong id="invite-selected-coin">14</strong> coin</span>
+        <span class="invite-selected-copy-text">ยอดที่ต้องสร้างซอง: <strong id="invite-selected-coin">14</strong> coin</span>
         <button type="button" class="btn btn-ghost btn-sm" id="invite-copy-coin-btn">คัดลอก</button>
       </div>
       <label class="field" for="invite-credit-voucher">
@@ -2139,6 +2244,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260814-maxruns1"></script>
+  <script src="js/app.js?v=20260814-apmode1"></script>
 </body>
 </html>
