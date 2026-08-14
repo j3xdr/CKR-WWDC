@@ -3087,7 +3087,11 @@
       paintAfterplayPlan(data);
       const plan = data?.plan;
       if (plan?.capped) {
-        setStatus($("afterplay-status"), "เป้าเกินเพดาน " + formatNumTh(plan.max_runs || 200) + " รอบ — ใช้จำนวนสูงสุด", "err");
+        setStatus(
+          $("afterplay-status"),
+          "เป้าเกินเพดาน " + formatNumTh(plan.max_runs || 0) + " รอบ — ใช้จำนวนสูงสุด",
+          "err"
+        );
       } else if (plan?.runs) {
         const why =
           plan.goal === "both"
