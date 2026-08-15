@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260814-apmode1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260815-ice1" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -1123,8 +1123,21 @@
                     </div>
                   </section>
                   <section class="afterplay-ebox-panel hidden" id="afterplay-ebox-panel" hidden>
-                    <p class="afterplay-ebox-note">ไม่สุ่ม L · มีตัว L แล้วก็เก็บกล่องด่านนั้นได้ · ช่วงปลดด่านกินหัวใจเพิ่ม (ไม่คิดเงินรอบปลดด่าน)</p>
-                    <div id="afterplay-ebox-grid" class="unlockl-grid" role="group" aria-label="เลือกด่านเก็บกล่อง"></div>
+                    <p class="afterplay-ebox-note">เลือกด่านที่จะเก็บกล่อง · ด่านที่ยังไม่ปลดจะกินหัวใจเพิ่มตอนปลด (ไม่คิดเงินรอบปลดด่าน) · EP5 ใช้กุญแจ Ice Tower</p>
+                    <label class="afterplay-box-max-field afterplay-ebox-ep-field" for="afterplay-ebox-ep">
+                      <span>Episode</span>
+                      <select id="afterplay-ebox-ep" aria-label="เลือก Episode">
+                        <option value="">เลือกด่าน</option>
+                        <option value="all">ทุกด่าน (1–7)</option>
+                        <option value="1">Episode 1</option>
+                        <option value="2">Episode 2</option>
+                        <option value="3">Episode 3</option>
+                        <option value="4">Episode 4</option>
+                        <option value="5">Episode 5 · Ice Tower</option>
+                        <option value="6">Episode 6</option>
+                        <option value="7">Episode 7</option>
+                      </select>
+                    </label>
                     <label class="afterplay-box-max-field" for="afterplay-ebox-runs">
                       <span>รอบ/ด่าน</span>
                       <input id="afterplay-ebox-runs" type="number" inputmode="numeric" min="1" max="50" step="1" value="5" />
@@ -1317,6 +1330,62 @@
                     <span class="btn-run-copy">
                       <span class="btn-run-title" id="unlockl-start-btn-title">เริ่มปลดล็อค L</span>
                       <span class="btn-run-sub" id="unlockl-start-btn-sub">เลือกอย่างน้อย 1 ตัว</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="farm-tab-panel hidden" id="farm-panel-ice_tower" role="tabpanel" aria-labelledby="menu-nav-ice_tower" hidden>
+                <div class="upgrade-panel-layout afterplay-panel unlockl-panel ice-tower-panel">
+                  <section class="unlockl-toolbar">
+                    <p class="unlockl-toolbar-meta" id="ice-tower-toolbar-meta">2 Credit/ชั้น · เลือกครบที่เหลือสูงสุด 180 Credit</p>
+                    <button type="button" class="btn btn-ghost btn-sm" id="ice-tower-select-all-btn">เลือกทั้งหมดที่ยังไม่ครบ</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="ice-tower-refresh-btn">รีเฟรช</button>
+                  </section>
+                  <section class="ice-tower-controls">
+                    <label>ไปถึงชั้น
+                      <input id="ice-tower-target-floor" type="number" min="1" max="100" value="100" />
+                    </label>
+                    <label>ดาวเป้าหมาย
+                      <select id="ice-tower-default-stars">
+                        <option value="1">1 ดาว</option>
+                        <option value="2">2 ดาว</option>
+                        <option value="3" selected>3 ดาว</option>
+                      </select>
+                    </label>
+                  </section>
+                  <div class="ice-tower-summary" id="ice-tower-summary">เชื่อม DevPlay แล้วกดรีเฟรช</div>
+                  <div id="ice-tower-grid" class="ice-tower-grid" role="group" aria-label="เลือกชั้น Ice Tower"></div>
+                  <div class="unlockl-footer-bar">
+                    <div class="unlockl-footer-stat"><img src="assets/Heart.png" alt="" /><span>หัวใจ</span><strong id="ice-tower-snap-life">—</strong></div>
+                    <div class="unlockl-footer-stat"><img src="assets/score.png" alt="" /><span>กุญแจ</span><strong id="ice-tower-snap-key">—</strong></div>
+                    <div class="unlockl-footer-stat"><span>คงเหลือ</span><strong id="ice-tower-stat-credit">0</strong><span>Credit</span></div>
+                    <button type="button" class="btn btn-candy btn-sm" id="ice-tower-credit-open-btn">เติม Credit</button>
+                  </div>
+                  <p class="unlockl-price-hint muted">
+                    <span id="ice-tower-price-each">2</span> Credit/ชั้น · เลือกครบที่เหลือสูงสุด
+                    <span id="ice-tower-price-bundle">180</span> · ยอดที่เลือก <strong id="ice-tower-quote">0 Credit</strong>
+                  </p>
+                  <p id="ice-tower-status" class="status muted" role="status"></p>
+                  <div id="ice-tower-progress-card" class="invite-progress-card hidden" hidden>
+                    <div class="invite-progress-head">
+                      <div>
+                        <p class="invite-progress-label" id="ice-tower-progress-label">รอเริ่มงาน…</p>
+                        <p class="invite-progress-count"><strong id="ice-tower-progress-current">0</strong>/<span id="ice-tower-progress-total">0</span> <span class="invite-progress-pct" id="ice-tower-progress-pct">0%</span></p>
+                      </div>
+                      <div class="invite-progress-actions">
+                        <button type="button" class="btn btn-ghost btn-sm hidden" id="ice-tower-log-open-btn" hidden>ดู Log</button>
+                        <button type="button" class="btn btn-danger btn-sm hidden" id="ice-tower-cancel-btn" hidden>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="ice-tower-progress-track">
+                      <div class="invite-progress-fill" id="ice-tower-progress-fill"></div>
+                    </div>
+                  </div>
+                  <button class="btn btn-run" type="button" id="ice-tower-start-btn">
+                    <img src="assets/score.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title">เริ่มไต่ Ice Tower</span>
+                      <span class="btn-run-sub" id="ice-tower-start-btn-sub">เลือกอย่างน้อย 1 ชั้น</span>
                     </span>
                   </button>
                 </div>
@@ -1612,6 +1681,16 @@
               >
                 <img src="assets/Tiger_Lily_Cookie.png" alt="" width="20" height="20" />
                 <span>ปลดล็อค L</span>
+              </button>
+              <button
+                type="button"
+                class="farm-sidebar-link is-feature-hidden"
+                id="menu-nav-ice_tower"
+                data-menu-action="ice_tower"
+                hidden
+              >
+                <img src="assets/score.png" alt="" width="20" height="20" />
+                <span>Ice Tower</span>
               </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -2244,6 +2323,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260814-apmode1"></script>
+  <script src="js/app.js?v=20260815-ice1"></script>
 </body>
 </html>

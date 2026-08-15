@@ -11799,6 +11799,10 @@ body.has-job-status .job-status-mini:not(.hidden) {
   color: var(--cream-dim);
   line-height: 1.45;
 }
+#afterplay-ebox-panel:not(.hidden) {
+  display: grid;
+  gap: 8px;
+}
 .afterplay-box-max-field {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 88px;
@@ -11811,7 +11815,8 @@ body.has-job-status .job-status-mini:not(.hidden) {
   color: var(--cream-dim);
   font-size: 0.82rem;
 }
-.afterplay-box-max-field input {
+.afterplay-box-max-field input,
+.afterplay-ebox-ep-field select {
   width: 100%;
   border-radius: 8px;
   border: 1px solid rgba(240, 180, 41, 0.2);
@@ -11820,6 +11825,21 @@ body.has-job-status .job-status-mini:not(.hidden) {
   font: inherit;
   padding: 8px 10px;
   text-align: center;
+}
+.afterplay-ebox-ep-field {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+.afterplay-ebox-ep-field select {
+  text-align: left;
+  text-align-last: left;
+  cursor: pointer;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--gold) 50%),
+    linear-gradient(135deg, var(--gold) 50%, transparent 50%);
+  background-position: calc(100% - 16px) calc(50% - 3px), calc(100% - 10px) calc(50% - 3px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
 }
 #farm-panel-afterplay_fast.is-ebox .afterplay-goal-grid,
 #farm-panel-afterplay_fast.is-ebox #afterplay-compare,
@@ -12105,7 +12125,8 @@ body.has-job-status .job-status-mini:not(.hidden) {
   gap: 8px;
 }
 #run #farm-panel-afterplay_fast:not(.hidden),
-#run #farm-panel-unlock_l:not(.hidden) {
+#run #farm-panel-unlock_l:not(.hidden),
+#run #farm-panel-ice_tower:not(.hidden) {
   gap: 8px;
 }
 #run .afterplay-panel .btn-run {
@@ -12219,6 +12240,64 @@ body.has-job-status .job-status-mini:not(.hidden) {
 }
 .unlockl-footer-bar .btn {
   margin-left: auto;
+}
+.ice-tower-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.ice-tower-controls label {
+  display: grid;
+  gap: 4px;
+  color: var(--cream-dim);
+  font-size: 0.78rem;
+}
+.ice-tower-controls input,
+.ice-tower-controls select {
+  min-width: 130px;
+}
+.ice-tower-summary {
+  padding: 10px 12px;
+  border: 1px solid rgba(240, 180, 41, 0.16);
+  border-radius: 12px;
+  color: var(--cream-dim);
+  font-size: 0.82rem;
+}
+.ice-tower-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 7px;
+  max-height: 340px;
+  overflow: auto;
+  padding: 2px;
+}
+.ice-tower-floor {
+  display: grid;
+  place-items: center;
+  gap: 3px;
+  min-height: 56px;
+  padding: 7px 4px;
+  border: 1px solid rgba(240, 180, 41, 0.18);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--cream);
+  font: inherit;
+  cursor: pointer;
+}
+.ice-tower-floor span {
+  color: var(--gold);
+  font-size: 0.68rem;
+  letter-spacing: -0.04em;
+}
+.ice-tower-floor.is-selected {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold);
+  background: rgba(255, 214, 120, 0.1);
+}
+.ice-tower-floor.is-full,
+.ice-tower-floor:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 @media (max-width: 720px) {
   .afterplay-snap-grid,
