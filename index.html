@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260815-ice1" />
+  <link rel="stylesheet" href="css/styles.css?v=20260817-3" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
@@ -535,7 +535,7 @@
 
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" aria-labelledby="farm-tab-heart" hidden>
                 <p class="heart-info-note muted" id="heart-proxy-hint">
-                  ใช้ Proxy ร้าน (US · rotating) อัตโนมัติ — ไม่ต้องตั้งเอง
+                  ใช้ Proxy ร้าน (Thordata) อัตโนมัติ — ไม่ต้องตั้งเอง
                 </p>
 
                 <div class="ticket-stepper">
@@ -555,11 +555,11 @@
                     />
                     <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ">+</button>
                   </div>
-                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–100,000 · ใช้ Proxy ร้านอัตโนมัติ</p>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–300 ต่อครั้ง · แอดมินปรับเพดานได้</p>
                 </div>
 
                 <p class="heart-info-note muted">
-                  สร้างเพื่อน guest ชั่วคราวให้ส่งหัวใจ แล้วลบทิ้งอัตโนมัติ — เพื่อนจริงไม่ถูกแตะ
+                  คลังไอดีร้านส่งหัวใจเข้าไอดีที่เชื่อมอยู่ — เพื่อนจริงไม่ถูกแตะ · สูงสุด 300 ต่อครั้ง
                 </p>
 
                 <button class="btn btn-run btn-run-heart hidden" type="submit" id="heart-btn" disabled hidden>
@@ -917,91 +917,6 @@
                 </div>
               </div>
 
-              <div class="farm-tab-panel hidden" id="farm-panel-reroll" role="tabpanel" aria-labelledby="farm-tab-reroll" hidden>
-                <div class="upgrade-panel-layout">
-                  <section class="upgrade-section upgrade-section-settings">
-                    <div class="upgrade-settings-head">
-                      <h3 class="upgrade-section-title">โหมดรีโรล</h3>
-                    </div>
-                    <div class="upgrade-mode-row" id="reroll-mode-row" role="group" aria-label="โหมดรีโรล">
-                      <button type="button" class="upgrade-mode-btn is-active" data-reroll-mode="guest" id="reroll-mode-guest">สร้างไอดีใหม่</button>
-                      <button type="button" class="upgrade-mode-btn" data-reroll-mode="accounts" id="reroll-mode-accounts">ใช้ไอดีที่มี</button>
-                    </div>
-                  </section>
-
-                  <section class="upgrade-section" id="reroll-guest-section">
-                    <div class="ticket-stepper">
-                      <span class="ticket-stepper-label">จำนวนไอดีที่จะสร้าง</span>
-                      <div class="ticket-stepper-controls">
-                        <button type="button" class="ticket-step-btn" id="reroll-minus" aria-label="ลดจำนวน">−</button>
-                        <input
-                          id="reroll-count"
-                          class="ticket-count-display"
-                          name="reroll_count"
-                          type="text"
-                          inputmode="numeric"
-                          pattern="[0-9]*"
-                          autocomplete="off"
-                          value="1"
-                          aria-label="จำนวนไอดีรีโรล"
-                        />
-                        <button type="button" class="ticket-step-btn" id="reroll-plus" aria-label="เพิ่มจำนวน">+</button>
-                      </div>
-                      <p class="ticket-stepper-hint">สูงสุด 50 ไอดีต่อครั้ง</p>
-                    </div>
-                  </section>
-
-                  <section class="upgrade-section hidden" id="reroll-accounts-section" hidden>
-                    <label class="field" for="reroll-accounts">
-                      <span>รายการบัญชี (อีเมลแล้วแท็บตามด้วยรหัส บรรทัดละ 1)</span>
-                      <textarea
-                        id="reroll-accounts"
-                        name="reroll_accounts"
-                        rows="6"
-                        placeholder="email&#9;password"
-                        spellcheck="false"
-                        autocomplete="off"
-                      ></textarea>
-                    </label>
-                  </section>
-
-                  <p class="muted farm-panel-hint-line">รีโรล — สุ่มของจากตั๋วในไอดีใหม่ (สูงสุด 50 บัญชี)</p>
-
-                  <button class="btn btn-run" type="button" id="reroll-btn" disabled>
-                    <img src="assets/gem.png" alt="" width="28" height="28" />
-                    <span class="btn-run-copy">
-                      <span class="btn-run-title">เริ่มรีโรล</span>
-                      <span class="btn-run-sub" id="reroll-btn-sub">เชื่อม DevPlay ก่อน</span>
-                    </span>
-                  </button>
-                  <div id="reroll-results" class="reroll-results hidden" hidden aria-live="polite"></div>
-                </div>
-              </div>
-
-              <div class="farm-tab-panel hidden" id="farm-panel-quest" role="tabpanel" aria-labelledby="farm-tab-quest" hidden>
-                <div class="upgrade-panel-layout">
-                  <section class="upgrade-section upgrade-section-settings">
-                    <div class="upgrade-settings-head">
-                      <h3 class="upgrade-section-title">รายการเควส</h3>
-                      <div class="cookie-toolbar">
-                        <button type="button" class="upgrade-reload-btn" id="quest-reload-btn" disabled>โหลดรายการเควส</button>
-                      </div>
-                    </div>
-                    <p class="muted farm-panel-hint-line">ดูและรับรางวัลเควสที่ทำครบแล้ว</p>
-                  </section>
-                  <section class="upgrade-section">
-                    <div id="quest-list" class="quest-list" aria-live="polite"></div>
-                  </section>
-                  <button class="btn btn-run" type="button" id="quest-claim-btn" disabled>
-                    <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
-                    <span class="btn-run-copy">
-                      <span class="btn-run-title">รับรางวัลที่เลือก</span>
-                      <span class="btn-run-sub" id="quest-claim-btn-sub">เลือกเควสที่รับได้</span>
-                    </span>
-                  </button>
-                </div>
-              </div>
-
               <div class="farm-tab-panel hidden" id="farm-panel-invite" role="tabpanel" aria-labelledby="farm-tab-invite" hidden>
                 <div class="upgrade-panel-layout invite-panel">
                   <section class="upgrade-section">
@@ -1079,7 +994,7 @@
 
               <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="menu-nav-afterplay_fast" hidden>
                 <div class="upgrade-panel-layout afterplay-panel">
-                  <div class="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
+                  <div class="afterplay-mode-switch" id="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
                     <button type="button" class="afterplay-mode-btn is-active" id="afterplay-mode-money_xp" data-farm-mode="money_xp" role="tab" aria-selected="true">เงิน/XP</button>
                     <button type="button" class="afterplay-mode-btn" id="afterplay-mode-episode_box" data-farm-mode="episode_box" role="tab" aria-selected="false">Episode Box</button>
                   </div>
@@ -1122,6 +1037,7 @@
                       <input id="afterplay-target-coin" type="number" inputmode="numeric" min="1" step="1000" placeholder="เช่น 1000000" />
                     </div>
                   </section>
+                  <p class="afterplay-goal-note">เลือกได้อย่างเดียว — เลเวล <strong>หรือ</strong> เหรียญ · ตัวเลขหลังฟาร์มเป็นค่าโดยประมาณ</p>
                   <section class="afterplay-ebox-panel hidden" id="afterplay-ebox-panel" hidden>
                     <p class="afterplay-ebox-note">เลือกด่านที่จะเก็บกล่อง · ด่านที่ยังไม่ปลดจะกินหัวใจเพิ่มตอนปลด (ไม่คิดเงินรอบปลดด่าน) · EP5 ใช้กุญแจ Ice Tower</p>
                     <label class="afterplay-box-max-field afterplay-ebox-ep-field" for="afterplay-ebox-ep">
@@ -1138,7 +1054,7 @@
                         <option value="7">Episode 7</option>
                       </select>
                     </label>
-                    <label class="afterplay-box-max-field" for="afterplay-ebox-runs">
+                    <label class="afterplay-box-max-field" for="afterplay-ebox-runs" id="afterplay-ebox-runs-wrap">
                       <span>รอบ/ด่าน</span>
                       <input id="afterplay-ebox-runs" type="number" inputmode="numeric" min="1" max="50" step="1" value="5" />
                     </label>
@@ -1179,7 +1095,7 @@
                           </div>
                           <span class="afterplay-box-arrow" aria-hidden="true">→</span>
                           <div class="afterplay-box-col afterplay-box-col--after" id="afterplay-cmp-after-level-wrap">
-                            <span>หลังฟาร์ม</span>
+                            <span>หลังฟาร์ม (ประมาณ)</span>
                             <strong id="afterplay-cmp-after-level-min">—</strong>
                             <small class="afterplay-forecast-to">ถึง <strong id="afterplay-cmp-after-level-max">—</strong></small>
                           </div>
@@ -1197,7 +1113,7 @@
                           </div>
                           <span class="afterplay-box-arrow" aria-hidden="true">→</span>
                           <div class="afterplay-box-col afterplay-box-col--after" id="afterplay-cmp-after-coin-wrap">
-                            <span>หลังฟาร์ม</span>
+                            <span>หลังฟาร์ม (ประมาณ)</span>
                             <strong id="afterplay-cmp-after-coin-min">—</strong>
                             <small class="afterplay-forecast-to">ถึง <strong id="afterplay-cmp-after-coin-max">—</strong></small>
                           </div>
@@ -1223,7 +1139,7 @@
                       <article class="afterplay-box afterplay-box--gain" id="afterplay-est-xp-wrap">
                         <header class="afterplay-box-head">
                           <img src="assets/score.png" alt="" width="20" height="20" />
-                          ได้ XP
+                          ได้ XP (ประมาณ)
                         </header>
                         <strong id="afterplay-est-xp-min">—</strong>
                         <small class="afterplay-forecast-to">ถึง <strong id="afterplay-est-xp-max">—</strong></small>
@@ -1231,7 +1147,7 @@
                       <article class="afterplay-box afterplay-box--gain" id="afterplay-est-coin-wrap">
                         <header class="afterplay-box-head">
                           <img src="assets/coin_silver.png" alt="" width="20" height="20" />
-                          ได้เหรียญ
+                          ได้เหรียญ (ประมาณ)
                         </header>
                         <strong id="afterplay-est-coin-min">—</strong>
                         <small class="afterplay-forecast-to">ถึง <strong id="afterplay-est-coin-max">—</strong></small>
@@ -1277,7 +1193,7 @@
               <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="menu-nav-unlock_l" hidden>
                 <div class="upgrade-panel-layout afterplay-panel unlockl-panel">
                   <section class="unlockl-toolbar">
-                    <p class="unlockl-toolbar-meta" id="unlockl-toolbar-meta">เลือกตัวที่ยังไม่มี · 15 Credit/ตัว · ครบ 7 = 100</p>
+                    <p class="unlockl-toolbar-meta" id="unlockl-toolbar-meta">เลือกตัวที่ยังไม่มี · 15 Credit/ตัว · ครบ 7 = 100 · สมบัติ Special 15 Credit/ชิ้น</p>
                     <button type="button" class="btn btn-ghost btn-sm" id="unlockl-select-all-btn">เลือกทั้งหมดที่ยังไม่มี</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="unlockl-refresh-btn">รีเฟรช</button>
                   </section>
@@ -1302,10 +1218,12 @@
                   </div>
                   <p class="unlockl-price-hint muted">
                     <span id="unlockl-price-each">15</span> Credit/ตัว · ครบ 7 = <span id="unlockl-price-bundle">100</span>
+                    · สมบัติ Special <span id="unlockl-price-treasure">15</span> Credit/ชิ้น
                     · ยอดที่เลือก <strong id="unlockl-quote">0 Credit</strong>
                   </p>
-                  <p id="unlockl-life-warn" class="status err hidden" hidden>หัวใจเป็น 0 — ห้ามเริ่มปลดล็อค L</p>
-                  <p id="unlockl-key-warn" class="status err hidden" hidden>Ice Tower (EP5) ต้องมีกุญแจ</p>
+                  <p id="unlockl-life-warn" class="status err hidden" hidden>หัวใจเป็น 0 — ต้องมีหัวใจเพื่อปลดด่านหรือล่าตัว L</p>
+                  <p id="unlockl-key-warn" class="status err hidden" hidden>กุญแจในไอดีเป็น 0 — สมบัติ Special / ปลด EP5 ใช้กุญแจ</p>
+                  <p id="unlockl-key-hint" class="status muted hidden" hidden></p>
                   <p id="unlockl-status" class="status muted" role="status"></p>
                   <div id="unlockl-progress-card" class="invite-progress-card hidden" hidden>
                     <div class="invite-progress-head">
@@ -1365,6 +1283,8 @@
                     <span id="ice-tower-price-each">2</span> Credit/ชั้น · เลือกครบที่เหลือสูงสุด
                     <span id="ice-tower-price-bundle">180</span> · ยอดที่เลือก <strong id="ice-tower-quote">0 Credit</strong>
                   </p>
+                  <p id="ice-tower-key-warn" class="status err hidden" hidden>กุญแจในไอดีเป็น 0 — ห้ามเริ่ม</p>
+                  <p id="ice-tower-key-hint" class="status muted hidden" hidden></p>
                   <p id="ice-tower-status" class="status muted" role="status"></p>
                   <div id="ice-tower-progress-card" class="invite-progress-card hidden" hidden>
                     <div class="invite-progress-head">
@@ -1382,76 +1302,12 @@
                     </div>
                   </div>
                   <button class="btn btn-run" type="button" id="ice-tower-start-btn">
-                    <img src="assets/score.png" alt="" width="28" height="28" />
+                    <img src="assets/ice_tower.png" alt="" width="28" height="28" />
                     <span class="btn-run-copy">
                       <span class="btn-run-title">เริ่มไต่ Ice Tower</span>
                       <span class="btn-run-sub" id="ice-tower-start-btn-sub">เลือกอย่างน้อย 1 ชั้น</span>
                     </span>
                   </button>
-                </div>
-              </div>
-              <div class="farm-tab-panel hidden" id="farm-panel-account" role="tabpanel" aria-labelledby="farm-tab-account" hidden>
-                <div class="upgrade-panel-layout">
-                  <section class="upgrade-section upgrade-section-settings">
-                    <div class="upgrade-settings-head">
-                      <h3 class="upgrade-section-title">ข้อมูลไอดี</h3>
-                      <div class="cookie-toolbar">
-                        <button type="button" class="upgrade-reload-btn" id="account-reload-btn" disabled>โหลดข้อมูลไอดี</button>
-                      </div>
-                    </div>
-                    <p class="muted farm-panel-hint-line">ดูคุกกี้ สัตว์เลี้ยง สมบัติ และทรัพยากรในไอดี</p>
-                  </section>
-
-                  <div class="devplay-stat-grid" id="account-summary">
-                    <div class="devplay-stat" data-stat="level"><img src="assets/level.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เลเวล</span><strong id="account-stat-level">—</strong></div>
-                    <div class="devplay-stat" data-stat="coin"><img src="assets/coin_silver.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เหรียญ</span><strong id="account-stat-coin">—</strong></div>
-                    <div class="devplay-stat" data-stat="gem"><img src="assets/gem.png" alt="" width="40" height="40" /><span class="devplay-stat-label">เพชร</span><strong id="account-stat-gem">—</strong></div>
-                    <div class="devplay-stat" data-stat="life"><img src="assets/Heart.png" alt="" width="40" height="40" /><span class="devplay-stat-label">หัวใจ</span><strong id="account-stat-life">—</strong></div>
-                    <div class="devplay-stat" data-stat="tickets"><img src="assets/reward_icon_partyrun_ticket.png" alt="" width="40" height="40" /><span class="devplay-stat-label">ตั๋ว PR</span><strong id="account-stat-tickets">—</strong></div>
-                    <div class="devplay-stat" data-stat="keys"><img src="assets/score.png" alt="" width="40" height="40" /><span class="devplay-stat-label">กุญแจ</span><strong id="account-stat-keys">—</strong></div>
-                    <div class="devplay-stat" data-stat="trophy"><img src="assets/score.png" alt="" width="40" height="40" /><span class="devplay-stat-label">ถ้วย</span><strong id="account-stat-trophy">—</strong></div>
-                    <div class="devplay-stat" data-stat="exp"><img src="assets/score.png" alt="" width="40" height="40" /><span class="devplay-stat-label">EXP</span><strong id="account-stat-exp">—</strong></div>
-                  </div>
-
-                  <section class="upgrade-section">
-                    <h3 class="upgrade-section-title">คุกกี้</h3>
-                    <div id="account-cookies" class="account-item-grid" aria-live="polite"></div>
-                  </section>
-                  <section class="upgrade-section">
-                    <h3 class="upgrade-section-title">สัตว์เลี้ยง</h3>
-                    <div id="account-pets" class="account-item-grid" aria-live="polite"></div>
-                  </section>
-                  <section class="upgrade-section">
-                    <h3 class="upgrade-section-title">สมบัติ</h3>
-                    <div id="account-treasures" class="account-item-grid" aria-live="polite"></div>
-                  </section>
-                </div>
-              </div>
-
-              <div class="farm-tab-panel hidden" id="farm-panel-dstool" role="tabpanel" aria-labelledby="farm-tab-dstool" hidden>
-                <div class="upgrade-panel-layout">
-                  <section class="upgrade-section upgrade-section-settings">
-                    <h3 class="upgrade-section-title">ทดสอบคำสั่งเกม</h3>
-                    <p class="muted farm-panel-hint-line">สำหรับผู้ใช้ขั้นสูง — เลือกคำสั่งที่อนุญาตเท่านั้น</p>
-                    <label class="field" for="ds-path-select">
-                      <span>คำสั่ง (path)</span>
-                      <select id="ds-path-select" disabled>
-                        <option value="">เชื่อม DevPlay แล้วโหลดรายการ</option>
-                      </select>
-                    </label>
-                    <label class="field" for="ds-body">
-                      <span>JSON body</span>
-                      <textarea id="ds-body" rows="5" spellcheck="false" autocomplete="off">{}</textarea>
-                    </label>
-                  </section>
-                  <button class="btn btn-run" type="button" id="ds-call-btn" disabled>
-                    <img src="assets/score.png" alt="" width="28" height="28" />
-                    <span class="btn-run-copy">
-                      <span class="btn-run-title">ส่งคำสั่ง</span>
-                      <span class="btn-run-sub" id="ds-call-btn-sub">เลือกคำสั่งก่อน</span>
-                    </span>
-                  </button>
-                  <pre id="ds-result" class="ds-result" aria-live="polite"></pre>
                 </div>
               </div>
             </div>
@@ -1573,67 +1429,7 @@
             <span class="farm-nav-label">Cookie</span>
           </span>
         </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
-          id="farm-tab-reroll"
-          data-tab="reroll"
-          role="tab"
-          aria-controls="farm-panel-reroll"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/gem.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">รีโรล</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
-          id="farm-tab-quest"
-          data-tab="quest"
-          role="tab"
-          aria-controls="farm-panel-quest"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/icon_giftpoint.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">เควส</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
-          id="farm-tab-account"
-          data-tab="account"
-          role="tab"
-          aria-controls="farm-panel-account"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/notice_b20.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">ข้อมูลไอดี</span>
-          </span>
-        </button>
-        <button
-          type="button"
-          class="farm-nav-item is-locked"
-          id="farm-tab-dstool"
-          data-tab="dstool"
-          role="tab"
-          aria-controls="farm-panel-dstool"
-          aria-selected="false"
-          aria-disabled="true"
-        >
-          <span class="farm-nav-pill">
-            <img src="assets/score.png" alt="" width="40" height="40" />
-            <span class="farm-nav-label">ทดสอบเกม</span>
-          </span>
-        </button>
-            </nav>
+          </nav>
           </section>
 
           <div class="farm-sidebar-divider" role="separator" aria-hidden="true"></div>
@@ -1689,7 +1485,7 @@
                 data-menu-action="ice_tower"
                 hidden
               >
-                <img src="assets/score.png" alt="" width="20" height="20" />
+                <img src="assets/ice_tower.png" alt="" width="20" height="20" />
                 <span>Ice Tower</span>
               </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
@@ -2323,6 +2119,6 @@
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
   <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260815-ice1"></script>
+  <script src="js/app.js?v=20260817-4"></script>
 </body>
 </html>
