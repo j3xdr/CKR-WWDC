@@ -526,7 +526,7 @@
     },
     invite: {
       title: "เชิญเพื่อน 29 คน",
-      hint: "เติม Credit → วางลิงก์ → กดเริ่ม (14 Credit/ครั้ง)",
+      hint: "ใช้สิทธิ์เวลา → วางลิงก์ → กดเริ่ม",
       blurb: "เชิญเพื่อนด้วย Guest Pool 29 คน/ครั้ง",
       icon: "icon_giftpoint.png",
     },
@@ -538,13 +538,13 @@
     },
     unlock_l: {
       title: "ปลดล็อค L",
-      hint: "15 Credit/ตัว · ครบ 7 = 100 · ไม่คิดตัวที่มีแล้ว",
+      hint: "ใช้สิทธิ์เวลา · ไม่คิดตัวที่มีแล้ว",
       blurb: "ปลด L ทีละด่านหรือครบชุด 7 ตัว",
       icon: "Tiger_Lily_Cookie.png",
     },
     ice_tower: {
       title: "Ice Tower",
-      hint: "2 Credit/ชั้น · เลือกครบที่เหลือสูงสุด 180",
+      hint: "ใช้สิทธิ์เวลา · เลือกชั้นและดาวเป้าหมาย",
       blurb: "เลือกชั้นและดาวเป้าหมายเพื่อไต่หอ",
       icon: "ice_tower.png",
     },
@@ -556,6 +556,7 @@
     "giftdraw",
     "upgrade",
     "cookie",
+    "invite",
     "afterplay_fast",
     "unlock_l",
     "ice_tower",
@@ -569,6 +570,7 @@
     "giftdraw",
     "upgrade",
     "cookie",
+    "invite",
     "afterplay_fast",
     "unlock_l",
     "ice_tower",
@@ -716,6 +718,10 @@
     "giftdraw",
     "upgrade",
     "cookie",
+    "invite",
+    "afterplay_fast",
+    "unlock_l",
+    "ice_tower",
   ];
   const FEATURE_LABEL_TH = {
     partyrun: "Party Run",
@@ -724,6 +730,10 @@
     giftdraw: "เปิดกล่องขวัญ",
     upgrade: "อัปเกรดสมบัติ",
     cookie: "ปลดล็อกคุกกี้",
+    invite: "เชิญเพื่อน 29 คน",
+    afterplay_fast: "ฟาร์มเงิน/XP",
+    unlock_l: "ปลดล็อก L",
+    ice_tower: "Ice Tower",
   };
   let walletTutorialStep = 0;
   const WALLET_TUTORIAL_STEPS = [
@@ -2152,7 +2162,7 @@
   }
 
   function inviteCreditBalance() {
-    return Number(profile?.invite_credit_balance || 0) || 0;
+    return 0;
   }
 
   function persistInviteJob(jobId, creditsCharged) {
@@ -2187,10 +2197,9 @@
     const panel = document.querySelector(".invite-panel");
     panel?.classList.toggle("is-invite-running", inviteRunning);
     document.body.classList.toggle("invite-job-running", inviteRunning);
-    $("menu-nav-invite")?.classList.toggle("is-live-running", inviteRunning);
+    $("farm-tab-invite")?.classList.toggle("is-live-running", inviteRunning);
     const startBtn = $("invite-start-btn");
     const link = $("invite-link-input");
-    const topupBtn = $("invite-credit-open-btn");
     const refreshBtn = $("invite-refresh-btn");
     const title = $("invite-start-btn-title");
     const cancelBtn = $("invite-cancel-btn");
@@ -2211,11 +2220,6 @@
       if (startBtn) {
         startBtn.disabled = true;
         startBtn.classList.add("is-disabled-look");
-      }
-      if (topupBtn) {
-        topupBtn.disabled = true;
-        topupBtn.classList.add("is-disabled-look");
-        topupBtn.title = "รอให้งานเชิญเพื่อนเสร็จก่อน";
       }
     } else {
       // Re-apply idle enable rules from latest stats
@@ -2265,33 +2269,17 @@
     const target = inviteTargetGuests(job);
     const effective = inviteEffectiveCount(result);
     const failed = Number(result.failed) || 0;
-    const charged =
-      Number(job?.params?.cost_credits) || inviteLastCharge || 14;
-    const refunded =
-      Number(result.refunded_credits) ||
-      Number(result.billing_outcome?.refund_credits) ||
-      0;
-    const net =
-      result.net_credits != null
-        ? Number(result.net_credits)
-        : charged - refunded;
     let text = "";
     if (status === "cancelled") {
-      text = "ยกเลิกแล้ว · ใช้ไป " + formatNumTh(charged) + " Credit (ไม่คืน)";
+      text = "ยกเลิกแล้ว";
     } else if (status === "succeeded" || result.ok) {
       text =
         "สำเร็จ " +
         formatNumTh(effective) +
         "/" +
-        formatNumTh(target) +
-        " · หักสุทธิ " +
-        formatNumTh(net) +
-        " Credit";
+        formatNumTh(target);
     } else if (effective === 0) {
-      text =
-        "ไม่สำเร็จ — คืนเต็ม " +
-        formatNumTh(refunded || charged) +
-        " Credit";
+      text = "ไม่สำเร็จ";
     } else {
       text =
         "ไม่ครบ " +
@@ -2300,7 +2288,6 @@
         formatNumTh(effective) +
         "/" +
         formatNumTh(target) +
-        (refunded ? " · คืน " + formatNumTh(refunded) + " Credit" : "") +
         (failed ? " · ล้มเหลว " + formatNumTh(failed) : "");
     }
     el.textContent = text;
@@ -2502,31 +2489,9 @@
       result.target_mid ||
       job?.params?.target_mid ||
       "—";
-    const charged =
-      Number(job?.params?.cost_credits) ||
-      inviteLastCharge ||
-      14;
-    const refunded =
-      Number(result.refunded_credits) ||
-      Number(result.billing_outcome?.refund_credits) ||
-      0;
-    const net =
-      result.net_credits != null
-        ? Number(result.net_credits)
-        : charged - refunded;
-    const bal = inviteCreditBalance();
     let statusLabel = "ไม่สำเร็จ";
     if (ok) {
       statusLabel = "สำเร็จ";
-    } else if (effective === 0) {
-      statusLabel = "ไม่สำเร็จ — คืนเต็ม " + formatNumTh(refunded || charged) + " Credit";
-    } else if (refunded > 0) {
-      statusLabel =
-        "ไม่ครบ " +
-        formatNumTh(target) +
-        " — คืน " +
-        formatNumTh(refunded) +
-        " Credit";
     }
     const rows = [
       ["สถานะ", statusLabel],
@@ -2536,13 +2501,7 @@
       ["สำเร็จ (ใหม่)", formatNumTh(success)],
       ["มี referrer แล้ว", formatNumTh(already)],
       ["ล้มเหลว", formatNumTh(failed)],
-      ["เครดิตที่หัก", formatNumTh(charged) + " Credit"],
     ];
-    if (refunded > 0) {
-      rows.push(["คืนเครดิต", formatNumTh(refunded) + " Credit"]);
-    }
-    rows.push(["หักสุทธิ", formatNumTh(net) + " Credit"]);
-    rows.push(["เครดิตคงเหลือ", formatNumTh(bal) + " Credit"]);
     if (!ok && (job?.error || result.error)) {
       rows.push(["รายละเอียด", escapeHtml(String(job.error || result.error))]);
     }
@@ -2572,10 +2531,8 @@
   }
 
   function paintInviteStats(data) {
-    const bal = data?.invite_credit_balance ?? inviteCreditBalance();
     const ready = data?.ready;
     const links = data?.links_available;
-    const cost = data?.cost_credits ?? 14;
     if (data && ("pool_available" in data || ready != null || links != null)) {
       if (typeof data.pool_available === "boolean") {
         invitePoolAvailable = data.pool_available;
@@ -2587,40 +2544,22 @@
           (Number.isFinite(linksN) ? linksN > 0 : true);
       }
     }
-    if ($("invite-stat-credit")) $("invite-stat-credit").textContent = formatCredit(bal);
-    if ($("invite-credit-balance-label")) {
-      $("invite-credit-balance-label").textContent = formatCredit(bal);
-    }
-    if ($("afterplay-stat-credit")) $("afterplay-stat-credit").textContent = formatCredit(bal);
-    if ($("unlockl-stat-credit")) $("unlockl-stat-credit").textContent = formatCredit(bal);
     if ($("invite-stat-ready") && ready != null) {
       $("invite-stat-ready").textContent = formatNumTh(ready);
     }
     if ($("invite-stat-links") && links != null) {
       $("invite-stat-links").textContent = formatNumTh(links);
     }
-    if ($("invite-stat-cost")) $("invite-stat-cost").textContent = String(cost);
     if ($("invite-start-btn-sub") && !inviteRunning) {
       $("invite-start-btn-sub").textContent = invitePoolAvailable
-        ? "หัก " + cost + " Credit ต่อครั้ง"
+        ? "ใช้สิทธิ์เวลาที่เหลือ"
         : "Pool หมด — เริ่มไม่ได้";
     }
     const startBtn = $("invite-start-btn");
     if (startBtn) {
-      const canRun = !inviteRunning && invitePoolAvailable && bal >= cost;
+      const canRun = !inviteRunning && invitePoolAvailable;
       startBtn.classList.toggle("is-disabled-look", !canRun);
       startBtn.disabled = !canRun;
-    }
-    const topupBtn = $("invite-credit-open-btn");
-    if (topupBtn) {
-      const canTopup = !inviteRunning && invitePoolAvailable;
-      topupBtn.classList.toggle("is-disabled-look", !canTopup);
-      topupBtn.disabled = !canTopup;
-      topupBtn.title = inviteRunning
-        ? "รอให้งานเชิญเพื่อนเสร็จก่อน"
-        : invitePoolAvailable
-          ? ""
-          : "Pool หมด — เติม Credit ไม่ได้";
     }
     const note = $("invite-pool-empty-note");
     if (note) {
@@ -2639,7 +2578,7 @@
       paintInviteStats(data);
       return data;
     } catch (_) {
-      paintInviteStats({ invite_credit_balance: inviteCreditBalance() });
+      paintInviteStats({});
       return null;
     }
   }
@@ -2884,14 +2823,8 @@
         method: "POST",
         body: { target, workers: 5 },
       });
-      if (profile && data.invite_credit_balance != null) {
-        profile.invite_credit_balance = data.invite_credit_balance;
-      }
-      paintInviteStats({
-        invite_credit_balance: data.invite_credit_balance,
-      });
-      const charged = data.credits_charged || 14;
-      persistInviteJob(data.job_id, charged);
+      paintInviteStats({});
+      persistInviteJob(data.job_id, 0);
       inviteResultShownFor = null;
       inviteLogLines = ["job " + (data.job_id || "") + " queued…"];
       const summaryEl = $("invite-result-summary");
@@ -2908,7 +2841,7 @@
       setInviteRunning(true);
       setStatus(
         $("invite-status"),
-        "เริ่มแล้ว · MID " + (data.target_mid || "") + " · หัก " + charged + " Credit",
+        "เริ่มแล้ว · MID " + (data.target_mid || "") + " · ใช้สิทธิ์เวลา",
         "ok"
       );
       if (data.job_id) pollInviteJob(data.job_id);
@@ -2916,16 +2849,12 @@
     } catch (e) {
       const detail = e?.data?.detail && typeof e.data.detail === "object" ? e.data.detail : e?.data;
       const code = e?.code || detail?.code;
-      if (code === "insufficient_invite_credit") {
-        setStatus($("invite-status"), "Credit ไม่พอ — กดเติม Credit", "err");
-        openInviteCreditModal();
-      } else if (code === "already_running") {
+      if (code === "already_running") {
         setStatus($("invite-status"), "มีงานกำลังรันอยู่แล้ว", "err");
         resumeInviteJobIfAny().catch(() => {});
       } else if (code === "invite_pool_empty" || code === "invite_pool_race") {
         invitePoolAvailable = false;
         paintInviteStats({
-          invite_credit_balance: inviteCreditBalance(),
           pool_available: false,
           ready: detail?.ready,
           links_available: detail?.links_available,
@@ -3217,7 +3146,7 @@
   function setAfterplayRunning(on) {
     afterplayRunning = !!on;
     $("farm-tab-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
-    $("menu-nav-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
+    $("farm-tab-afterplay_fast")?.classList.toggle("is-live-running", afterplayRunning);
     ["afterplay-cancel-btn"].forEach((id) => {
       const cancelBtn = $(id);
       if (!cancelBtn) return;
@@ -3234,28 +3163,20 @@
       if (isAfterplayEbox()) afterplayEboxCreditPerRun = Number(rate);
       else afterplayCreditPerRun = Number(rate);
     }
-    const shown = isAfterplayEbox() ? afterplayEboxCreditPerRun : afterplayCreditPerRun;
-    const el = $("afterplay-credit-per-run");
-    if (el) el.textContent = formatCredit(shown);
     const kicker = $("afterplay-estimate")?.querySelector(".afterplay-summary-kicker");
     if (kicker && isAfterplayEbox()) {
-      kicker.innerHTML = "1 รอบกล่อง = <strong id=\"afterplay-credit-per-run\">" + formatCredit(shown) + "</strong> Credit";
+      kicker.textContent = "ใช้งานได้ตามสิทธิ์เวลา · ระบบใช้หัวใจในไอดีตามจริง";
     } else if (kicker && !isAfterplayEbox()) {
-      kicker.innerHTML =
-        "1 รอบ = 1 หัวใจ = <strong id=\"afterplay-credit-per-run\">" +
-        formatCredit(shown) +
-        "</strong> Credit · XP/เหรียญที่ได้เป็นค่าโดยประมาณ";
+      kicker.textContent = "ใช้งานได้ตามสิทธิ์เวลา · XP/เหรียญที่ได้เป็นค่าโดยประมาณ";
     }
     const hintEl = $("farm-panel-hint");
     if (farmTab === "afterplay_fast" && hintEl) {
       if (isAfterplayEbox()) {
         hintEl.textContent =
-          "เก็บกล่องด่าน · 1 รอบกล่อง = " + formatCredit(shown) + " Credit · ไม่สุ่ม L";
+          "เก็บกล่องด่านด้วยสิทธิ์เวลา · ไม่สุ่ม L";
       } else {
         hintEl.textContent =
-          "เลือกเป้าเลเวลหรือเหรียญอย่างใดอย่างหนึ่ง · XP/เหรียญที่ได้เป็นค่าโดยประมาณ · 1 รอบ = 1 หัวใจ = " +
-          formatCredit(shown) +
-          " Credit";
+          "เลือกเป้าเลเวลหรือเหรียญอย่างใดอย่างหนึ่ง · XP/เหรียญที่ได้เป็นค่าโดยประมาณ";
       }
     }
   }
@@ -3267,8 +3188,6 @@
     const enoughLife = ebox
       ? Number(plan?.life || 0) >= 1 && runs > 0
       : !!plan?.enough_life;
-    const bal = inviteCreditBalance();
-    const cost = Number(plan?.credit || plan?.cost || 0);
     const needEps = !ebox || afterplayEboxSelected.size > 0;
     const can =
       !afterplayRunning &&
@@ -3276,7 +3195,6 @@
       runs > 0 &&
       enoughLife &&
       needEps &&
-      bal + 1e-9 >= cost &&
       !!devplaySession?.id;
     const btn = $("afterplay-start-btn");
     if (btn) {
@@ -3314,7 +3232,7 @@
       if (!devplaySession?.id) sub.textContent = "ล็อกอิน DevPlay ก่อน";
       else if (ebox && afterplayEboxSelected.size < 1) sub.textContent = "เลือก Episode";
       else if (!enoughLife && runs > 0) sub.textContent = "หัวใจไม่พอ — ห้ามเริ่ม";
-      else if (runs > 0) sub.textContent = "หัก " + formatCredit(cost) + " Credit · " + formatNumTh(runs) + " รอบ";
+      else if (runs > 0) sub.textContent = "ใช้สิทธิ์เวลา · " + formatNumTh(runs) + " รอบ";
       else sub.textContent = ebox
         ? "เลือกด่านแล้วใส่จำนวนรอบ"
         : "ใส่เป้าเลเวลหรือเหรียญอย่างใดอย่างหนึ่ง";
@@ -3364,7 +3282,6 @@
     if (plan) {
       const planned = Number(plan.planned || plan.runs || 0);
       if ($("afterplay-est-runs")) $("afterplay-est-runs").textContent = formatNumTh(planned);
-      if ($("afterplay-est-credit")) $("afterplay-est-credit").textContent = formatCredit(plan.credit || plan.cost || 0);
       if ($("afterplay-est-hearts")) {
         const need = isAfterplayEbox()
           ? Number(plan.life || snap.life || 0)
@@ -3664,7 +3581,7 @@
         afterplayResultShownFor = null;
         setAfterplayRunning(true);
         pollAfterplayJob(data.job_id);
-        setStatus(afterplayStatusNode(), "เข้าคิวแล้ว — หัก " + formatCredit(data.credits_charged) + " Credit", "ok");
+        setStatus(afterplayStatusNode(), "เข้าคิวแล้ว — ใช้สิทธิ์เวลา", "ok");
       }
     } catch (err) {
       setStatus(afterplayStatusNode(), String(err?.userMessage || err?.message || "เริ่มไม่สำเร็จ"), "err");
@@ -3952,19 +3869,14 @@
 
   function paintUnlockLQuote() {
     const q = unlockLQuote(unlockLSelected, unlockLCatalog);
-    if ($("unlockl-quote")) $("unlockl-quote").textContent = formatCredit(q.credit) + " Credit";
-    if ($("unlockl-price-each")) $("unlockl-price-each").textContent = formatCredit(unlockLPrices.each);
-    if ($("unlockl-price-bundle")) $("unlockl-price-bundle").textContent = formatCredit(unlockLPrices.bundle);
-    if ($("unlockl-price-treasure")) $("unlockl-price-treasure").textContent = formatCredit(unlockLPrices.treasure);
     if ($("unlockl-toolbar-meta")) {
       $("unlockl-toolbar-meta").textContent = q.n
-        ? "เลือก " + formatNumTh(q.n) + " รายการ · " + formatCredit(q.credit) + " Credit"
-        : "เลือกตัวที่ยังไม่มี · " + formatCredit(unlockLPrices.each) + " Credit/ตัว · ครบ 7 = " + formatCredit(unlockLPrices.bundle) + " · สมบัติ Special " + formatCredit(unlockLPrices.treasure) + " Credit/ชิ้น";
+        ? "เลือก " + formatNumTh(q.n) + " รายการ · ใช้สิทธิ์เวลา"
+        : "เลือกตัวที่ยังไม่มี · ใช้สิทธิ์เวลา · ไม่คิดค่ารายการ";
     }
     if ($("unlockl-snap-life")) $("unlockl-snap-life").textContent = formatNumTh(unlockLSnap.life || 0);
     if ($("unlockl-snap-key")) $("unlockl-snap-key").textContent = formatNumTh(unlockLSnap.key || 0);
     const btn = $("unlockl-start-btn");
-    const bal = inviteCreditBalance();
     const needLife = unlockLNeedsLife(q.billable, unlockLCatalog);
     const keys = unlockLKeyPlan(q.billable, unlockLCatalog);
     const noLife = needLife && Number(unlockLSnap.life || 0) < 1;
@@ -3973,7 +3885,6 @@
       !unlockLRunning &&
       !unlockLBusy &&
       q.n > 0 &&
-      bal + 1e-9 >= q.credit &&
       !!devplaySession?.id &&
       !noLife &&
       !noKey;
@@ -4031,9 +3942,8 @@
         $("unlockl-start-btn-sub").textContent =
           keys.have < 1 ? "กุญแจในไอดีเป็น 0 — ห้ามเริ่ม" : "กุญแจไม่พอ (มี " + formatNumTh(keys.have) + " ต้อง " + formatNumTh(keys.minNeed) + ")";
       }
-      else if (bal + 1e-9 < q.credit) $("unlockl-start-btn-sub").textContent = "Credit ไม่พอ (" + formatCredit(q.credit) + ")";
       else {
-        let sub = "เริ่มปลดล็อค · " + formatNumTh(q.n) + " ตัว · " + formatCredit(q.credit) + " Credit";
+        let sub = "เริ่มปลดล็อค · " + formatNumTh(q.n) + " ตัว · ใช้สิทธิ์เวลา";
         if (keys.needKey) sub += " · กุญแจสูงสุด ~" + formatNumTh(keys.maxNeed);
         $("unlockl-start-btn-sub").textContent = sub;
       }
@@ -4099,7 +4009,7 @@
   function setUnlockLRunning(on) {
     unlockLRunning = !!on;
     $("farm-tab-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
-    $("menu-nav-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
+    $("farm-tab-unlock_l")?.classList.toggle("is-live-running", unlockLRunning);
     const cancelBtn = $("unlockl-cancel-btn");
     if (cancelBtn) {
       cancelBtn.hidden = !unlockLRunning;
@@ -4152,7 +4062,7 @@
         unlockLResultShownFor = null;
         setUnlockLRunning(true);
         pollUnlockLJob(data.job_id);
-        setStatus($("unlockl-status"), "เข้าคิวแล้ว — หัก " + formatCredit(data.credits_charged) + " Credit", "ok");
+        setStatus($("unlockl-status"), "เข้าคิวแล้ว — ใช้สิทธิ์เวลา", "ok");
       }
     } catch (err) {
       setStatus($("unlockl-status"), String(err?.userMessage || err?.message || "เริ่มไม่สำเร็จ"), "err");
@@ -4236,14 +4146,13 @@
     if (!quote.n) return "เลือกอย่างน้อย 1 ชั้น";
     if (noKey) return "กุญแจในไอดีเป็น 0 — ห้ามเริ่ม";
     if (needsLife) return "หัวใจเป็น 0 — ต้องมีหัวใจเพื่อปลดหอ";
-    if (!enoughCredit) return "Credit ไม่พอ (" + formatCredit(quote.credit) + ")";
     const have = Number(keyInfo?.have || 0);
     const need = Number(keyInfo?.need || 0);
     const keyBit = need > 0 ? " · กุญแจสูงสุด ~" + formatNumTh(need) + " / ในไอดี " + formatNumTh(have) : "";
     if (needsUnlock) {
-      return "ปลดหอก่อน แล้วเริ่ม " + formatNumTh(quote.n) + " ชั้น · " + formatCredit(quote.credit) + " Credit" + keyBit;
+      return "ปลดหอก่อน แล้วเริ่ม " + formatNumTh(quote.n) + " ชั้น · ใช้สิทธิ์เวลา" + keyBit;
     }
-    return "เริ่ม " + formatNumTh(quote.n) + " ชั้น · " + formatCredit(quote.credit) + " Credit" + keyBit;
+    return "เริ่ม " + formatNumTh(quote.n) + " ชั้น · ใช้สิทธิ์เวลา" + keyBit;
   }
 
   function paintIceTower() {
@@ -4279,10 +4188,6 @@
       }
     }
     const q = iceTowerQuote();
-    if ($("ice-tower-quote")) $("ice-tower-quote").textContent = formatCredit(q.credit) + " Credit";
-    if ($("ice-tower-price-each")) $("ice-tower-price-each").textContent = formatCredit(iceTowerPrices.each);
-    if ($("ice-tower-price-bundle")) $("ice-tower-price-bundle").textContent = formatCredit(iceTowerPrices.bundle);
-    if ($("ice-tower-stat-credit")) $("ice-tower-stat-credit").textContent = formatCredit(inviteCreditBalance());
     if ($("ice-tower-snap-life")) $("ice-tower-snap-life").textContent = formatNumTh(ice.life || 0);
     if ($("ice-tower-snap-key")) $("ice-tower-snap-key").textContent = formatNumTh(ice.keys || 0);
     const needsUnlock = ice.ice_unlocked === false;
@@ -4302,7 +4207,7 @@
         const quest = rewarded == null ? "" : " · เควส EP1 " + formatNumTh(rewarded) + "/" + formatNumTh(need);
         $("ice-tower-summary").textContent = unlockBlocked
           ? "Episode Ice Tower ยังไม่ปลด" + quest
-          : "หอยังไม่ปลด — จะปลดด้วย EP1 ให้ก่อน (หัวใจ, ไม่คิด Credit)" + quest + " · " + progress;
+          : "หอยังไม่ปลด — จะปลดด้วย EP1 ให้ก่อน (ใช้หัวใจ)" + quest + " · " + progress;
       } else {
         $("ice-tower-summary").textContent = progress;
       }
@@ -4310,10 +4215,10 @@
     $("ice-tower-summary")?.classList.toggle("is-locked", !!needsUnlock);
     if ($("ice-tower-toolbar-meta")) {
       $("ice-tower-toolbar-meta").textContent = q.n
-        ? "เลือก " + formatNumTh(q.n) + " ชั้น · " + formatCredit(q.credit) + " Credit"
-        : formatCredit(iceTowerPrices.each) + " Credit/ชั้น · เลือกครบที่เหลือสูงสุด " + formatCredit(iceTowerPrices.bundle);
+        ? "เลือก " + formatNumTh(q.n) + " ชั้น · ใช้สิทธิ์เวลา"
+        : "ใช้สิทธิ์เวลาที่เหลือ · เลือกชั้นและดาวเป้าหมายได้";
     }
-    const enoughCredit = inviteCreditBalance() + 1e-9 >= q.credit;
+    const enoughCredit = true;
     const haveKeys = Number(ice.keys || 0);
     const defaultStars = Math.max(1, Math.min(3, Number(plan.default_stars || $("ice-tower-default-stars")?.value || 3)));
     let needKeys = 0;
@@ -4325,7 +4230,7 @@
     if (!needKeys) needKeys = Number(plan.planned_stars || 0);
     const noKey = haveKeys < 1;
     const needsLife = needsUnlock && unlockIfNeeded && Number(ice.life || 0) < 1;
-    const canStart = !iceTowerBusy && !iceTowerRunning && q.n > 0 && enoughCredit && !noKey && !needsLife && !unlockBlocked;
+    const canStart = !iceTowerBusy && !iceTowerRunning && q.n > 0 && !noKey && !needsLife && !unlockBlocked;
     if ($("ice-tower-start-btn")) $("ice-tower-start-btn").disabled = !canStart;
     const iceKeyWarn = $("ice-tower-key-warn");
     if (iceKeyWarn) {
@@ -4414,7 +4319,7 @@
 
   function setIceTowerRunning(on) {
     iceTowerRunning = !!on;
-    $("menu-nav-ice_tower")?.classList.toggle("is-live-running", iceTowerRunning);
+    $("farm-tab-ice_tower")?.classList.toggle("is-live-running", iceTowerRunning);
     const cancel = $("ice-tower-cancel-btn");
     if (cancel) {
       cancel.hidden = !iceTowerRunning;
@@ -4455,8 +4360,7 @@
       pollIceTowerJob(data.job_id);
       setStatus(
         $("ice-tower-status"),
-        (willUnlock ? "เข้าคิวแล้ว — จะปลด Episode Ice Tower ก่อน แล้วไต่หอ · หัก " : "เข้าคิวแล้ว — หัก ") +
-          formatCredit(data.credits_charged) + " Credit",
+        (willUnlock ? "เข้าคิวแล้ว — จะปลด Episode Ice Tower ก่อน แล้วไต่หอ · ใช้สิทธิ์เวลา" : "เข้าคิวแล้ว — ใช้สิทธิ์เวลา"),
         "ok"
       );
     } catch (err) {
@@ -4519,7 +4423,6 @@
       ["ชั้นที่สำเร็จ", floors.length ? floors.map((n) => "ชั้น " + n).join(", ") : "—"],
       ["ดาวที่ยิง", formatNumTh(res.played || 0)],
     ];
-    if (res.refunded) rows.push(["คืน Credit", formatCredit(res.refunded)]);
     const html = '<table class="result-table"><tbody>' +
       rows.map(([k, v]) => "<tr><th>" + k + "</th><td>" + escapeHtml(String(v)) + "</td></tr>").join("") +
       "</tbody></table>";
@@ -15184,53 +15087,17 @@
     closeNavDrawer();
     openVaultModal();
   });
-  $("menu-nav-invite")?.addEventListener("click", () => {
-    closeNavDrawer();
-    openInviteFriendTab();
-  });
-  $("menu-nav-afterplay_fast")?.addEventListener("click", () => {
-    closeNavDrawer();
-    onFarmTabClick(AFTERPLAY_FAST_TAB);
-  });
-  $("menu-nav-unlock_l")?.addEventListener("click", () => {
-    closeNavDrawer();
-    onFarmTabClick(UNLOCK_L_TAB);
-  });
-  $("menu-nav-ice_tower")?.addEventListener("click", () => {
-    closeNavDrawer();
-    onFarmTabClick(ICE_TOWER_TAB);
-  });
   $("menu-nav-history")?.addEventListener("click", () => {
     closeNavDrawer();
     showFarmHistoryModal().catch(() => {});
   });
 
-  document.querySelectorAll("[data-invite-credit-close]").forEach((el) => {
-    el.addEventListener("click", () => closeInviteCreditModal());
-  });
   document.querySelectorAll("[data-invite-log-close]").forEach((el) => {
     el.addEventListener("click", () => closeInviteLogModal());
   });
   $("invite-log-open-btn")?.addEventListener("click", () => openInviteLogModal());
   $("invite-cancel-btn")?.addEventListener("click", () => {
     cancelInviteJob().catch(() => {});
-  });
-  $("invite-copy-coin-btn")?.addEventListener("click", () => {
-    copyInviteCoinAmount().catch(() => {});
-  });
-  $("invite-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
-  $("invite-credit-custom-apply")?.addEventListener("click", () => {
-    applyInviteCustomAmount($("invite-credit-custom-amount")?.value, { copy: true });
-  });
-  $("invite-credit-custom-amount")?.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") {
-      ev.preventDefault();
-      applyInviteCustomAmount($("invite-credit-custom-amount")?.value, { copy: true });
-    }
-  });
-  $("invite-credit-custom-amount")?.addEventListener("change", () => {
-    const raw = $("invite-credit-custom-amount")?.value;
-    if (String(raw || "").trim()) applyInviteCustomAmount(raw);
   });
   $("invite-refresh-btn")?.addEventListener("click", () => {
     if (inviteRunning) {
@@ -15239,18 +15106,13 @@
     }
     refreshInviteStatus().catch(() => {});
   });
-  $("invite-credit-redeem-btn")?.addEventListener("click", () => {
-    redeemInviteCredit().catch(() => {});
-  });
   $("invite-start-btn")?.addEventListener("click", () => {
     startInviteJob().catch(() => {});
   });
+  $("farm-tab-invite")?.addEventListener("click", () => openInviteFriendTab());
   $("farm-tab-afterplay_fast")?.addEventListener("click", () => onFarmTabClick(AFTERPLAY_FAST_TAB));
   $("farm-tab-unlock_l")?.addEventListener("click", () => onFarmTabClick(UNLOCK_L_TAB));
   $("farm-tab-ice_tower")?.addEventListener("click", () => onFarmTabClick(ICE_TOWER_TAB));
-  $("afterplay-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
-  $("unlockl-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
-  $("ice-tower-credit-open-btn")?.addEventListener("click", () => openInviteCreditModal());
   document.querySelectorAll("[data-afterplay-goal]").forEach((card) => {
     card.addEventListener("click", (ev) => {
       if (ev.target?.closest?.("input")) return;

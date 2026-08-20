@@ -921,19 +921,18 @@
                 <div class="upgrade-panel-layout invite-panel">
                   <section class="upgrade-section">
                     <ol class="invite-steps" aria-label="ขั้นตอนใช้งาน">
-                      <li><span class="invite-step-n">1</span> เติม Credit (1 Credit = 1 บาท)</li>
+                      <li><span class="invite-step-n">1</span> ต้องมีสิทธิ์เวลาใช้งาน</li>
                       <li><span class="invite-step-n">2</span> วางลิงก์เชิญเพื่อน</li>
-                      <li><span class="invite-step-n">3</span> กดเริ่ม — หัก 14 Credit / ครั้ง</li>
+                      <li><span class="invite-step-n">3</span> กดเริ่มงานได้ทันที</li>
                     </ol>
                   </section>
 
                   <section class="upgrade-section invite-balance-card">
                     <div class="invite-balance-row">
                       <div>
-                        <p class="invite-kicker">เครดิตของคุณ</p>
-                        <p class="invite-balance-value"><strong id="invite-stat-credit">0</strong> <span>Credit</span></p>
+                        <p class="invite-kicker">สิทธิ์ใช้งาน</p>
+                        <p class="invite-balance-value"><strong>พร้อมใช้งาน</strong></p>
                       </div>
-                      <button type="button" class="btn btn-candy btn-sm" id="invite-credit-open-btn">เติม Credit</button>
                     </div>
                     <div class="invite-meta-grid" id="invite-stats">
                       <div class="invite-meta">
@@ -941,17 +940,13 @@
                         <strong><span id="invite-stat-links">0</span> ลิงก์</strong>
                       </div>
                       <div class="invite-meta">
-                        <span>ราคา / ครั้ง</span>
-                        <strong><span id="invite-stat-cost">14</span> Credit</strong>
-                      </div>
-                      <div class="invite-meta">
                         <span>Pool พร้อมใช้</span>
                         <strong id="invite-stat-ready">0</strong>
                       </div>
                       <button type="button" class="invite-refresh-link" id="invite-refresh-btn">รีเฟรช</button>
                     </div>
-                    <p class="muted invite-note">ไม่ต้องมีวันเช่าฟาร์ม · ระบบใช้ 29 Guest จาก Pool ต่อ 1 ลิงก์</p>
-                    <p id="invite-pool-empty-note" class="status err invite-pool-empty-note hidden" hidden>Pool หมด — เติมเงินและเริ่มเชิญเพื่อนไม่ได้ชั่วคราว</p>
+                    <p class="muted invite-note">ระบบใช้ 29 Guest จาก Pool ต่อ 1 ลิงก์</p>
+                    <p id="invite-pool-empty-note" class="status err invite-pool-empty-note hidden" hidden>Pool หมด — เริ่มเชิญเพื่อนไม่ได้ชั่วคราว</p>
                   </section>
 
                   <section class="upgrade-section">
@@ -986,13 +981,13 @@
                     <img src="assets/icon_giftpoint.png" alt="" width="28" height="28" />
                     <span class="btn-run-copy">
                       <span class="btn-run-title" id="invite-start-btn-title">เริ่มเชิญเพื่อน</span>
-                      <span class="btn-run-sub" id="invite-start-btn-sub">หัก 14 Credit ต่อครั้ง</span>
+                      <span class="btn-run-sub" id="invite-start-btn-sub">ใช้สิทธิ์เวลาที่เหลือ</span>
                     </span>
                   </button>
                 </div>
               </div>
 
-              <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="menu-nav-afterplay_fast" hidden>
+              <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="farm-tab-afterplay_fast" hidden>
                 <div class="upgrade-panel-layout afterplay-panel">
                   <div class="afterplay-mode-switch" id="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
                     <button type="button" class="afterplay-mode-btn is-active" id="afterplay-mode-money_xp" data-farm-mode="money_xp" role="tab" aria-selected="true">เงิน/XP</button>
@@ -1064,7 +1059,7 @@
                     <input id="afterplay-box-max" type="number" inputmode="numeric" min="0" max="3" step="1" value="0" />
                   </label>
                   <section class="afterplay-summary-card" id="afterplay-estimate">
-                    <p class="afterplay-summary-kicker">1 รอบ = 1 หัวใจ = <strong id="afterplay-credit-per-run">0.2</strong> Credit</p>
+                    <p class="afterplay-summary-kicker">ใช้งานได้ตามสิทธิ์เวลา · ระบบใช้หัวใจในไอดีตามจริง</p>
                     <div class="afterplay-summary-row">
                       <div class="afterplay-summary-stat">
                         <img src="assets/Cookie0023_head.png" alt="" width="22" height="22" />
@@ -1075,11 +1070,6 @@
                         <img src="assets/Heart.png" alt="" width="22" height="22" />
                         <span>หัวใจ</span>
                         <strong id="afterplay-est-hearts">—</strong>
-                      </div>
-                      <div class="afterplay-summary-stat">
-                        <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="22" height="22" />
-                        <span>Credit</span>
-                        <strong id="afterplay-est-credit">—</strong>
                       </div>
                     </div>
                     <div class="afterplay-boxes" id="afterplay-compare" hidden>
@@ -1156,10 +1146,6 @@
                     <p id="afterplay-life-warn" class="status err hidden" hidden>หัวใจไม่พอ — ห้ามเริ่ม</p>
                     <p id="afterplay-ebox-key-warn" class="status err hidden" hidden>Ice Tower (EP5) ต้องมีกุญแจ</p>
                     <p id="afterplay-ebox-hint" class="status muted hidden" hidden>หัวใจน้อยกว่าจำนวนรอบที่วางแผนได้ — จะยิงเท่าที่มี</p>
-                    <div class="afterplay-credit-row">
-                      <span>คงเหลือ <strong id="afterplay-stat-credit">0</strong> Credit</span>
-                      <button type="button" class="btn btn-candy btn-sm" id="afterplay-credit-open-btn">เติม Credit</button>
-                    </div>
                   </section>
                   <p id="afterplay-status" class="status muted" role="status"></p>
                   <div id="afterplay-progress-card" class="invite-progress-card hidden" hidden>
@@ -1190,10 +1176,10 @@
                 </div>
               </div>
 
-              <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="menu-nav-unlock_l" hidden>
+              <div class="farm-tab-panel hidden" id="farm-panel-unlock_l" role="tabpanel" aria-labelledby="farm-tab-unlock_l" hidden>
                 <div class="upgrade-panel-layout afterplay-panel unlockl-panel">
                   <section class="unlockl-toolbar">
-                    <p class="unlockl-toolbar-meta" id="unlockl-toolbar-meta">เลือกตัวที่ยังไม่มี · 15 Credit/ตัว · ครบ 7 = 100 · สมบัติ Special 15 Credit/ชิ้น</p>
+                    <p class="unlockl-toolbar-meta" id="unlockl-toolbar-meta">เลือกตัวที่ยังไม่มี · ใช้สิทธิ์เวลา · ไม่คิดค่ารายการ</p>
                     <button type="button" class="btn btn-ghost btn-sm" id="unlockl-select-all-btn">เลือกทั้งหมดที่ยังไม่มี</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="unlockl-refresh-btn">รีเฟรช</button>
                   </section>
@@ -1209,18 +1195,8 @@
                       <span>กุญแจ</span>
                       <strong id="unlockl-snap-key">—</strong>
                     </div>
-                    <div class="unlockl-footer-stat">
-                      <span>คงเหลือ</span>
-                      <strong id="unlockl-stat-credit">0</strong>
-                      <span>Credit</span>
-                    </div>
-                    <button type="button" class="btn btn-candy btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
                   </div>
-                  <p class="unlockl-price-hint muted">
-                    <span id="unlockl-price-each">15</span> Credit/ตัว · ครบ 7 = <span id="unlockl-price-bundle">100</span>
-                    · สมบัติ Special <span id="unlockl-price-treasure">15</span> Credit/ชิ้น
-                    · ยอดที่เลือก <strong id="unlockl-quote">0 Credit</strong>
-                  </p>
+                  <p class="unlockl-price-hint muted">ใช้สิทธิ์เวลาที่เหลือ · ไม่คิดค่าปลดล็อครายตัว</p>
                   <p id="unlockl-life-warn" class="status err hidden" hidden>หัวใจเป็น 0 — ต้องมีหัวใจเพื่อปลดด่านหรือล่าตัว L</p>
                   <p id="unlockl-key-warn" class="status err hidden" hidden>กุญแจในไอดีเป็น 0 — สมบัติ Special / ปลด EP5 ใช้กุญแจ</p>
                   <p id="unlockl-key-hint" class="status muted hidden" hidden></p>
@@ -1252,10 +1228,10 @@
                   </button>
                 </div>
               </div>
-              <div class="farm-tab-panel hidden" id="farm-panel-ice_tower" role="tabpanel" aria-labelledby="menu-nav-ice_tower" hidden>
+              <div class="farm-tab-panel hidden" id="farm-panel-ice_tower" role="tabpanel" aria-labelledby="farm-tab-ice_tower" hidden>
                 <div class="upgrade-panel-layout afterplay-panel unlockl-panel ice-tower-panel">
                   <section class="unlockl-toolbar">
-                    <p class="unlockl-toolbar-meta" id="ice-tower-toolbar-meta">2 Credit/ชั้น · เลือกครบที่เหลือสูงสุด 180 Credit</p>
+                    <p class="unlockl-toolbar-meta" id="ice-tower-toolbar-meta">ใช้สิทธิ์เวลาที่เหลือ · เลือกชั้นและดาวเป้าหมายได้</p>
                     <button type="button" class="btn btn-ghost btn-sm" id="ice-tower-select-all-btn">เลือกทั้งหมดที่ยังไม่ครบ</button>
                     <button type="button" class="btn btn-ghost btn-sm" id="ice-tower-refresh-btn">รีเฟรช</button>
                   </section>
@@ -1276,13 +1252,8 @@
                   <div class="unlockl-footer-bar">
                     <div class="unlockl-footer-stat"><img src="assets/Heart.png" alt="" /><span>หัวใจ</span><strong id="ice-tower-snap-life">—</strong></div>
                     <div class="unlockl-footer-stat"><img src="assets/score.png" alt="" /><span>กุญแจ</span><strong id="ice-tower-snap-key">—</strong></div>
-                    <div class="unlockl-footer-stat"><span>คงเหลือ</span><strong id="ice-tower-stat-credit">0</strong><span>Credit</span></div>
-                    <button type="button" class="btn btn-candy btn-sm" id="ice-tower-credit-open-btn">เติม Credit</button>
                   </div>
-                  <p class="unlockl-price-hint muted">
-                    <span id="ice-tower-price-each">2</span> Credit/ชั้น · เลือกครบที่เหลือสูงสุด
-                    <span id="ice-tower-price-bundle">180</span> · ยอดที่เลือก <strong id="ice-tower-quote">0 Credit</strong>
-                  </p>
+                  <p class="unlockl-price-hint muted">ไม่คิดค่าต่อชั้น · ใช้สิทธิ์เวลาที่เหลือ</p>
                   <p id="ice-tower-key-warn" class="status err hidden" hidden>กุญแจในไอดีเป็น 0 — ห้ามเริ่ม</p>
                   <p id="ice-tower-key-hint" class="status muted hidden" hidden></p>
                   <p id="ice-tower-status" class="status muted" role="status"></p>
@@ -1429,6 +1400,18 @@
             <span class="farm-nav-label">Cookie</span>
           </span>
         </button>
+        <button type="button" class="farm-nav-item is-locked" id="farm-tab-invite" data-tab="invite" role="tab" aria-controls="farm-panel-invite" aria-selected="false">
+          <span class="farm-nav-pill"><img src="assets/icon_giftpoint.png" alt="" width="40" height="40" /><span class="farm-nav-label">เชิญเพื่อน 29 คน</span></span>
+        </button>
+        <button type="button" class="farm-nav-item is-locked" id="farm-tab-afterplay_fast" data-tab="afterplay_fast" role="tab" aria-controls="farm-panel-afterplay_fast" aria-selected="false">
+          <span class="farm-nav-pill"><img src="assets/Cookie0023_head.png" alt="" width="40" height="40" /><span class="farm-nav-label">ฟาร์มเงิน/XP</span></span>
+        </button>
+        <button type="button" class="farm-nav-item is-locked" id="farm-tab-unlock_l" data-tab="unlock_l" role="tab" aria-controls="farm-panel-unlock_l" aria-selected="false">
+          <span class="farm-nav-pill"><img src="assets/Tiger_Lily_Cookie.png" alt="" width="40" height="40" /><span class="farm-nav-label">ปลดล็อค L</span></span>
+        </button>
+        <button type="button" class="farm-nav-item is-locked" id="farm-tab-ice_tower" data-tab="ice_tower" role="tab" aria-controls="farm-panel-ice_tower" aria-selected="false">
+          <span class="farm-nav-pill"><img src="assets/ice_tower.png" alt="" width="40" height="40" /><span class="farm-nav-label">Ice Tower</span></span>
+        </button>
           </nav>
           </section>
 
@@ -1448,45 +1431,6 @@
               >
                 <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="20" height="20" />
                 <span>ต่ออายุ</span>
-              </button>
-              <button
-                type="button"
-                class="farm-sidebar-link"
-                id="menu-nav-invite"
-                data-menu-action="invite"
-              >
-                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
-                <span>เชิญเพื่อน 29 คน</span>
-              </button>
-              <button
-                type="button"
-                class="farm-sidebar-link is-feature-hidden"
-                id="menu-nav-afterplay_fast"
-                data-menu-action="afterplay_fast"
-                hidden
-              >
-                <img src="assets/Cookie0023_head.png" alt="" width="20" height="20" />
-                <span>ฟาร์มเงิน/XP</span>
-              </button>
-              <button
-                type="button"
-                class="farm-sidebar-link is-feature-hidden"
-                id="menu-nav-unlock_l"
-                data-menu-action="unlock_l"
-                hidden
-              >
-                <img src="assets/Tiger_Lily_Cookie.png" alt="" width="20" height="20" />
-                <span>ปลดล็อค L</span>
-              </button>
-              <button
-                type="button"
-                class="farm-sidebar-link is-feature-hidden"
-                id="menu-nav-ice_tower"
-                data-menu-action="ice_tower"
-                hidden
-              >
-                <img src="assets/ice_tower.png" alt="" width="20" height="20" />
-                <span>Ice Tower</span>
               </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-history" data-menu-action="history">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -1661,54 +1605,6 @@
         </button>
         <p id="reset-status" class="status" role="status"></p>
       </form>
-    </div>
-  </div>
-
-  <!-- Invite Friend credit topup (แยกจาก vault วันเช่า) -->
-  <div id="invite-credit-modal" class="vault-modal-root hidden" aria-hidden="true">
-    <div class="vault-modal-backdrop" data-invite-credit-close></div>
-    <div
-      class="panel pass-modal-sheet invite-credit-sheet"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="invite-credit-title"
-    >
-      <div class="vault-modal-head">
-        <div class="vault-modal-titles">
-          <p class="pass-eyebrow" id="invite-credit-eyebrow">Credit ร่วม</p>
-          <h2 class="panel-title" id="invite-credit-title">เติม Credit</h2>
-        </div>
-        <button type="button" class="vault-modal-close" id="invite-credit-close" aria-label="ปิด" data-invite-credit-close>×</button>
-      </div>
-      <p class="panel-hint" id="invite-credit-hint">ใส่จำนวนเงิน → สร้างซอง TrueMoney ตามยอดนั้น (รับได้ 1 คน) → วางลิงก์ · 1 coin = 1 Credit · ใช้ได้กับเชิญเพื่อน / ฟาร์มเงิน·XP / ปลดล็อค L</p>
-      <p class="invite-credit-balance-line">คงเหลือ <strong id="invite-credit-balance-label">0</strong> Credit</p>
-      <label class="field invite-credit-custom-field" for="invite-credit-custom-amount">
-        <span>จำนวนที่ต้องการเติม (บาท)</span>
-        <div class="invite-credit-custom-row">
-          <input
-            id="invite-credit-custom-amount"
-            type="number"
-            inputmode="numeric"
-            min="1"
-            max="100000"
-            step="1"
-            placeholder="เช่น 5, 20, 100"
-          />
-          <button type="button" class="btn btn-ghost btn-sm" id="invite-credit-custom-apply">ใช้ยอดนี้</button>
-        </div>
-      </label>
-      <p class="invite-pack-label">หรือเลือกแพ็กด่วน <span class="invite-pack-hint">(แตะเพื่อคัดลอกยอด)</span></p>
-      <div id="invite-credit-packages" class="invite-pack-row" role="listbox" aria-label="แพ็ก Invite Credit"></div>
-      <div class="invite-selected-copy-row">
-        <span class="invite-selected-copy-text">ยอดที่ต้องสร้างซอง: <strong id="invite-selected-coin">14</strong> coin</span>
-        <button type="button" class="btn btn-ghost btn-sm" id="invite-copy-coin-btn">คัดลอก</button>
-      </div>
-      <label class="field" for="invite-credit-voucher">
-        <span>ลิงก์ซองอั่งเปา</span>
-        <input id="invite-credit-voucher" type="text" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ซอง TrueMoney" />
-      </label>
-      <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">ยืนยันเติม Credit</button>
-      <p id="invite-credit-status" class="status muted" role="status"></p>
     </div>
   </div>
 
