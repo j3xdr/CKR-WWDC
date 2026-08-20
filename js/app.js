@@ -474,6 +474,8 @@
   let heartServiceStatus = null;
   let runStatusAutoCloseTimer = null;
   let balancePollTimer = null;
+  let accessProfilePollTimer = null;
+  let accessProfileRefreshInflight = null;
   let queuePollTimer = null;
   let activityPollTimer = null;
   let modalMode = null; // "empty" | "confirm" | "error" | "queue" | "result" | "peek" | null
@@ -11063,6 +11065,7 @@
 
   function showLogin() {
     stopBalancePoll();
+    stopAccessProfilePoll();
     stopQueuePoll();
     stopActivityPoll();
     stopWatchJobPoll();
@@ -11118,6 +11121,38 @@
     loadProxyPool().catch(() => {});
     startProxyPoolPoll();
     refreshInviteStatus().catch(() => {});
+    startAccessProfilePoll();
+  }
+
+  async function refreshProfileAccess() {
+    if (!accessToken) return null;
+    if (accessProfileRefreshInflight) return accessProfileRefreshInflight;
+    accessProfileRefreshInflight = (async () => {
+      const data = await api("/api/me");
+      if (data?.profile) {
+        profile = data.profile;
+        paintProfile();
+      }
+      return data;
+    })().finally(() => {
+      accessProfileRefreshInflight = null;
+    });
+    return accessProfileRefreshInflight;
+  }
+
+  function startAccessProfilePoll() {
+    stopAccessProfilePoll();
+    accessProfilePollTimer = setInterval(() => {
+      if (!accessToken || document.visibilityState !== "visible") return;
+      refreshProfileAccess().catch(() => {});
+    }, 15000);
+  }
+
+  function stopAccessProfilePoll() {
+    if (accessProfilePollTimer) {
+      clearInterval(accessProfilePollTimer);
+      accessProfilePollTimer = null;
+    }
   }
 
   /* ---------- Mode-aware farm status pipeline ---------- */
@@ -14827,6 +14862,8 @@
         try {
           await refreshMe();
         } catch (_) {}
+      } else {
+        refreshProfileAccess().catch(() => {});
       }
       if (dockPhase === "queued" || lastGate?.me?.status) {
         refreshGateAndQueueUi().catch(() => {});
@@ -14838,6 +14875,10 @@
         loadAdminJobs({ reset: true, silent: true }).catch(() => {});
       }
       pingApiHealth(1).catch(() => {});
+    });
+
+    window.addEventListener("focus", () => {
+      if (accessToken) refreshProfileAccess().catch(() => {});
     });
 
     const { data } = await sb.auth.getSession();
