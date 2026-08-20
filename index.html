@@ -6,7 +6,7 @@
   <title>CKR WWDC</title>
   <meta name="description" content="CKR WWDC" />
   <meta name="color-scheme" content="dark" />
-  <meta name="theme-color" content="#1a0f0a" />
+  <meta name="theme-color" content="#0C0C0C" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="manifest" href="manifest.webmanifest" />
@@ -14,32 +14,76 @@
   <link rel="apple-touch-icon" href="assets/logo_4k.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20260817-3" />
+  <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500&family=Geist:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=20260819-ui29" />
+  <link rel="stylesheet" href="css/theme-basehub.css?v=20260818-ui26" />
+  <script>
+    (function () {
+      var PALETTE = ["#EAD2B0", "#963417", "#3A3F21", "#628981", "#CF893A"];
+      var KEY = "ckr_mesh_history";
+      var hist = [];
+      try {
+        hist = JSON.parse(localStorage.getItem(KEY) || "[]");
+      } catch (e) {}
+      if (!Array.isArray(hist)) hist = [];
+      var combos = [];
+      for (var i = 0; i < PALETTE.length; i++) {
+        for (var j = 0; j < PALETTE.length; j++) {
+          if (j === i) continue;
+          for (var k = 0; k < PALETTE.length; k++) {
+            if (k === i || k === j) continue;
+            combos.push(PALETTE[i] + "," + PALETTE[j] + "," + PALETTE[k]);
+          }
+        }
+      }
+      var pool = combos.filter(function (c) { return hist.indexOf(c) < 0; });
+      if (!pool.length) {
+        hist = [];
+        pool = combos;
+      }
+      var chosen = pool[Math.floor(Math.random() * pool.length)];
+      hist.push(chosen);
+      if (hist.length > 16) hist = hist.slice(-16);
+      try {
+        localStorage.setItem(KEY, JSON.stringify(hist));
+      } catch (e) {}
+      var c = chosen.split(",");
+      var s = document.documentElement.style;
+      s.setProperty("--mesh-a", c[0]);
+      s.setProperty("--mesh-b", c[1]);
+      s.setProperty("--mesh-c", c[2]);
+    })();
+  </script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
   <div class="bakery-bg" aria-hidden="true">
-    <div class="bakery-glow bakery-glow-a"></div>
-    <div class="bakery-glow bakery-glow-b"></div>
-    <div class="crumb-pattern"></div>
-    <div id="bg-floaters" class="bg-floaters"></div>
+    <div id="bg-floaters" class="bg-floaters" hidden></div>
+  </div>
+  <div class="mesh-bg" aria-hidden="true">
+    <span class="mesh-orb mesh-orb-a"></span>
+    <span class="mesh-orb mesh-orb-b"></span>
+    <span class="mesh-orb mesh-orb-c"></span>
   </div>
 
   <header class="topbar pos-topbar">
     <a class="brand" href="#" aria-label="CKR WWDC">
-      <img class="brand-logo" src="assets/logo_4k.png" width="48" height="48" alt="CKR WWDC" />
+      <img class="brand-logo" src="assets/logo_4k.png" width="28" height="28" alt="CKR WWDC" />
       <span class="brand-text">
         <span class="brand-title">CKR WWDC</span>
-        <span class="brand-sub">คุกกี้ฟาร์ม</span>
+        <span class="brand-sub">Farm console</span>
       </span>
     </a>
+    <p class="app-page-title hidden" id="app-page-title">Workspace</p>
     <div class="topbar-end">
+      <button type="button" id="login-trigger" class="btn-toolbar btn-login-trigger">
+        เข้าสู่ระบบ
+      </button>
       <div class="topbar-actions topbar-actions--compact hidden" id="topbar-actions-compact">
         <button
           type="button"
           id="topbar-menu-toggle"
-          class="btn-toolbar btn-menu"
+          class="btn-toolbar btn-menu btn-icon"
           aria-expanded="false"
           aria-controls="farm-sidebar"
           aria-label="เปิดเมนู"
@@ -55,18 +99,17 @@
   <div id="maintenance-banner" class="maintenance-banner hidden" role="status" aria-live="polite"></div>
 
   <main class="shell">
-    <!-- LOGIN -->
-    <section id="login-view" class="view">
+    <!-- Login is intentionally a modal: guests can inspect the workspace first. -->
+    <section id="login-view" class="auth-modal-root hidden" aria-hidden="true">
+      <div class="auth-modal-backdrop" data-auth-close></div>
       <div class="login-stage">
-        <div class="login-hero">
-          <img class="hero-logo" id="login-api-glow" src="assets/logo_4k.png" width="160" height="160" alt="CKR WWDC" />
-          <h1 class="hero-title">CKR WWDC</h1>
-          <p class="hero-lead">ใช้ส่วนตัว กรุณาไม่แชร์ต่อ</p>
-        </div>
-
-        <div class="panel login-panel">
-          <div class="panel-ribbon" aria-hidden="true">
-            <img src="assets/crc_cookie_stone_box.png" alt="" width="52" height="52" />
+        <div class="panel login-panel card" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+          <div class="auth-modal-head">
+            <div>
+              <p class="pass-eyebrow">CKR WWDC</p>
+              <h1 class="panel-title" id="auth-modal-title">เข้าสู่ระบบเพื่อเริ่มใช้งาน</h1>
+            </div>
+            <button type="button" class="vault-modal-close" data-auth-close aria-label="ปิด">×</button>
           </div>
           <div class="auth-tabs" role="tablist" aria-label="โหมดเข้าสู่ระบบ">
             <button type="button" class="auth-tab is-active" id="tab-login" role="tab" aria-selected="true" aria-controls="login-form">
@@ -123,9 +166,11 @@
                 <input id="remember-me" type="checkbox" checked />
                 <span>จำฉันไว้และเข้าอัตโนมัติ</span>
               </label>
-              <button class="btn btn-candy" type="submit" id="login-btn">
-                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+              <button class="btn btn-primary" type="submit" id="login-btn">
                 เข้าสู่ระบบ
+              </button>
+              <button type="button" class="btn btn-ghost hidden" id="ui-preview-btn">
+                ดูตัวอย่าง UI
               </button>
               <p id="login-status" class="status" role="status"></p>
             </form>
@@ -202,8 +247,7 @@
                 <input id="signup-remember" type="checkbox" checked />
                 <span>จำฉันไว้และเข้าอัตโนมัติ</span>
               </label>
-              <button class="btn btn-candy" type="submit" id="signup-btn">
-                <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
+              <button class="btn btn-primary" type="submit" id="signup-btn">
                 สมัครสมาชิก
               </button>
               <p id="signup-status" class="status" role="status"></p>
@@ -226,8 +270,8 @@
     </section>
 
     <!-- APP — POS layout -->
-    <section id="user-view" class="view hidden">
-      <h1 class="visually-hidden">แดชบอร์ดฟาร์มคุกกี้</h1>
+    <section id="user-view" class="view guest-workspace">
+      <h1 class="visually-hidden">แดชบอร์ดฟาร์ม</h1>
       <div class="pos-shell">
         <div class="pos-main">
           <div id="heart-service-banner" class="heart-service-banner hidden" role="status"></div>
@@ -280,11 +324,11 @@
                 </div>
               </div>
               <div class="player-hero-actions" role="toolbar" aria-label="การจัดการบัญชี">
-                <button type="button" class="btn btn-candy-compact btn-candy-refresh player-hero-action" id="devplay-refresh-btn" hidden aria-label="รีเฟรชข้อมูล">
+                <button type="button" class="btn btn-ghost btn-candy-refresh player-hero-action" id="devplay-refresh-btn" hidden aria-label="รีเฟรชข้อมูล">
                   <svg class="player-hero-action-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M17.65 6.35A7.96 7.96 0 0 0 12 4V1L7 6l5 5V7c2.76 0 5 2.24 5 5 0 1.13-.38 2.17-1.02 3.01l1.46 1.46A7.94 7.94 0 0 0 20 12c0-2.21-.9-4.21-2.35-5.65ZM6 12c0-1.13.38-2.17 1.02-3.01L5.56 7.53A7.94 7.94 0 0 0 4 12c0 2.21.9 4.21 2.35 5.65A7.96 7.96 0 0 0 12 20v3l5-5-5-5v3c-2.76 0-5-2.24-5-5Z"/></svg>
                   <span class="player-hero-action-label">รีเฟรช</span>
                 </button>
-                <button type="button" class="btn btn-candy-compact btn-candy-switch player-hero-action" id="devplay-logout-btn" aria-label="สลับไอดี">
+                <button type="button" class="btn btn-ghost btn-candy-switch player-hero-action" id="devplay-logout-btn" aria-label="สลับไอดี">
                   <svg class="player-hero-action-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11v-2H5V5h11V3Zm4.3 4.7-1.4 1.4L18.6 9H8v2h10.6l-1.7 1.7 1.4 1.4L22.4 11l-2.1-2.3Z"/></svg>
                   <span class="player-hero-action-label">สลับไอดี</span>
                 </button>
@@ -314,7 +358,7 @@
                 <span class="player-hero-level" id="player-hero-level">—</span>
               </span>
               <span class="player-chip">
-                <img src="assets/Heart.png" alt="" width="20" height="20" />
+                <img src="assets/Heart.png?v=20260817h" alt="" width="20" height="20" />
                 <span>หัวใจ</span>
                 <strong id="player-stat-life">—</strong>
               </span>
@@ -329,7 +373,7 @@
                 <strong id="player-stat-boxes">—</strong>
               </span>
               <span class="player-chip">
-                <img src="assets/score.png" alt="" width="20" height="20" />
+                <img src="assets/xp.png?v=20260817x" alt="" width="20" height="20" />
                 <span>EXP</span>
                 <strong id="player-stat-xp">—</strong>
               </span>
@@ -376,7 +420,7 @@
 
                     <div class="devplay-creds-section" id="devplay-creds-section">
                     <div class="devplay-login-hero">
-                      <img class="devplay-login-mascot" src="assets/notice_b20.png" alt="" width="72" height="72" />
+                      <img class="devplay-login-mascot" src="assets/devplay.png?v=20260817d" alt="" width="72" height="72" />
                       <div>
                         <h3 class="devplay-login-title">เชื่อมต่อ DevPlay</h3>
                         <p class="devplay-login-lead muted">ใช้บัญชี <strong>DevPlay ของเกม</strong> — ไม่ใช่ชื่อผู้ใช้เว็บนี้</p>
@@ -505,7 +549,7 @@
                   <label class="field field-stat">
                     <span class="field-stat-label">
                       <span class="field-stat-name">
-                        <img src="assets/level.png" alt="" width="22" height="22" />
+                        <img src="assets/xp.png?v=20260817x" alt="" width="22" height="22" />
                         XP
                         <span class="field-stat-note">สูงสุด 52,000</span>
                       </span>
@@ -534,10 +578,6 @@
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" aria-labelledby="farm-tab-heart" hidden>
-                <p class="heart-info-note muted" id="heart-proxy-hint">
-                  ใช้ Proxy ร้าน (Thordata) อัตโนมัติ — ไม่ต้องตั้งเอง
-                </p>
-
                 <div class="ticket-stepper">
                   <span class="ticket-stepper-label">จำนวนหัวใจที่ต้องการ</span>
                   <div class="ticket-stepper-controls">
@@ -550,20 +590,20 @@
                       inputmode="numeric"
                       pattern="[0-9]*"
                       autocomplete="off"
-                      value="100"
+                      value="300"
                       aria-label="จำนวนหัวใจ"
                     />
                     <button type="button" class="ticket-step-btn" id="heart-plus" aria-label="เพิ่มหัวใจ">+</button>
                   </div>
-                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ 1–300 ต่อครั้ง · แอดมินปรับเพดานได้</p>
+                  <p class="ticket-stepper-hint" id="heart-max-hint">ใส่ได้ตามเพดานที่แอดมินตั้ง · ต้องการมากกว่านี้ให้ส่งหลายครั้ง</p>
                 </div>
 
-                <p class="heart-info-note muted">
-                  คลังไอดีร้านส่งหัวใจเข้าไอดีที่เชื่อมอยู่ — เพื่อนจริงไม่ถูกแตะ · สูงสุด 300 ต่อครั้ง
+                <p class="heart-info-note muted" id="heart-info-note">
+                  คลังไอดีร้านส่งหัวใจเข้าไอดีที่เชื่อมอยู่ — เพื่อนจริงไม่ถูกแตะ · สูงสุดตามเพดานที่แอดมินตั้ง
                 </p>
 
                 <button class="btn btn-run btn-run-heart hidden" type="submit" id="heart-btn" disabled hidden>
-                  <img src="assets/Heart.png" alt="" width="28" height="28" />
+                  <img src="assets/Heart.png?v=20260817h" alt="" width="28" height="28" />
                   <span class="btn-run-copy">
                     <span class="btn-run-title">เริ่มฟาร์มหัวใจ</span>
                     <span class="btn-run-sub" id="heart-btn-sub">กรอกบัญชีเกมก่อน</span>
@@ -816,7 +856,7 @@
                   </section>
 
                   <section class="upgrade-section upgrade-section-inventory">
-                    <button type="button" class="btn btn-candy-compact btn-candy-upgrade upgrade-pick-btn" id="upgrade-pick-btn" disabled>
+                    <button type="button" class="btn btn-primary btn-candy-upgrade upgrade-pick-btn" id="upgrade-pick-btn" disabled>
                       <img src="assets/Crystal_Pearl_Earring_2B9.png" alt="" width="20" height="20" />
                       เลือกสมบัติ
                       <span class="upgrade-pick-count" id="upgrade-pick-count">0/10</span>
@@ -933,7 +973,7 @@
                         <p class="invite-kicker">เครดิตของคุณ</p>
                         <p class="invite-balance-value"><strong id="invite-stat-credit">0</strong> <span>Credit</span></p>
                       </div>
-                      <button type="button" class="btn btn-candy btn-sm" id="invite-credit-open-btn">เติม Credit</button>
+                      <button type="button" class="btn btn-primary btn-sm" id="invite-credit-open-btn">เติม Credit</button>
                     </div>
                     <div class="invite-meta-grid" id="invite-stats">
                       <div class="invite-meta">
@@ -994,8 +1034,10 @@
 
               <div class="farm-tab-panel hidden" id="farm-panel-afterplay_fast" role="tabpanel" aria-labelledby="menu-nav-afterplay_fast" hidden>
                 <div class="upgrade-panel-layout afterplay-panel">
-                  <div class="afterplay-mode-switch" id="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
+                  <div class="afterplay-mode-switch is-four" id="afterplay-mode-switch" role="tablist" aria-label="โหมดฟาร์มเงิน/XP">
                     <button type="button" class="afterplay-mode-btn is-active" id="afterplay-mode-money_xp" data-farm-mode="money_xp" role="tab" aria-selected="true">เงิน/XP</button>
+                    <button type="button" class="afterplay-mode-btn" id="afterplay-mode-money" data-farm-mode="money" role="tab" aria-selected="false">เงิน</button>
+                    <button type="button" class="afterplay-mode-btn" id="afterplay-mode-xp" data-farm-mode="xp" role="tab" aria-selected="false">XP</button>
                     <button type="button" class="afterplay-mode-btn" id="afterplay-mode-episode_box" data-farm-mode="episode_box" role="tab" aria-selected="false">Episode Box</button>
                   </div>
                   <section class="afterplay-snap-grid" aria-label="สถานะไอดี">
@@ -1005,12 +1047,12 @@
                       <strong id="afterplay-snap-level">—</strong>
                     </div>
                     <div class="afterplay-snap">
-                      <img src="assets/score.png" alt="" width="28" height="28" />
+                      <img src="assets/xp.png?v=20260817x" alt="" width="28" height="28" />
                       <span>XP</span>
                       <strong id="afterplay-snap-exp">—</strong>
                     </div>
                     <div class="afterplay-snap">
-                      <img src="assets/Heart.png" alt="" width="28" height="28" />
+                      <img src="assets/Heart.png?v=20260817h" alt="" width="28" height="28" />
                       <span>หัวใจ</span>
                       <strong id="afterplay-snap-life">—</strong>
                     </div>
@@ -1037,7 +1079,7 @@
                       <input id="afterplay-target-coin" type="number" inputmode="numeric" min="1" step="1000" placeholder="เช่น 1000000" />
                     </div>
                   </section>
-                  <p class="afterplay-goal-note">เลือกได้อย่างเดียว — เลเวล <strong>หรือ</strong> เหรียญ · ตัวเลขหลังฟาร์มเป็นค่าโดยประมาณ</p>
+                  <p class="afterplay-goal-note" id="afterplay-goal-note">เลือกได้อย่างเดียว — เลเวล <strong>หรือ</strong> เหรียญ · ตัวเลขหลังฟาร์มเป็นค่าโดยประมาณ</p>
                   <section class="afterplay-ebox-panel hidden" id="afterplay-ebox-panel" hidden>
                     <p class="afterplay-ebox-note">เลือกด่านที่จะเก็บกล่อง · ด่านที่ยังไม่ปลดจะกินหัวใจเพิ่มตอนปลด (ไม่คิดเงินรอบปลดด่าน) · EP5 ใช้กุญแจ Ice Tower</p>
                     <label class="afterplay-box-max-field afterplay-ebox-ep-field" for="afterplay-ebox-ep">
@@ -1072,7 +1114,7 @@
                         <strong id="afterplay-est-runs">—</strong>
                       </div>
                       <div class="afterplay-summary-stat">
-                        <img src="assets/Heart.png" alt="" width="22" height="22" />
+                        <img src="assets/Heart.png?v=20260817h" alt="" width="22" height="22" />
                         <span>หัวใจ</span>
                         <strong id="afterplay-est-hearts">—</strong>
                       </div>
@@ -1121,7 +1163,7 @@
                       </article>
                       <article class="afterplay-box">
                         <header class="afterplay-box-head">
-                          <img src="assets/Heart.png" alt="" width="20" height="20" />
+                          <img src="assets/Heart.png?v=20260817h" alt="" width="20" height="20" />
                           หัวใจเหลือ
                         </header>
                         <div class="afterplay-box-pair">
@@ -1138,7 +1180,7 @@
                       </article>
                       <article class="afterplay-box afterplay-box--gain" id="afterplay-est-xp-wrap">
                         <header class="afterplay-box-head">
-                          <img src="assets/score.png" alt="" width="20" height="20" />
+                          <img src="assets/xp.png?v=20260817x" alt="" width="20" height="20" />
                           ได้ XP (ประมาณ)
                         </header>
                         <strong id="afterplay-est-xp-min">—</strong>
@@ -1158,7 +1200,7 @@
                     <p id="afterplay-ebox-hint" class="status muted hidden" hidden>หัวใจน้อยกว่าจำนวนรอบที่วางแผนได้ — จะยิงเท่าที่มี</p>
                     <div class="afterplay-credit-row">
                       <span>คงเหลือ <strong id="afterplay-stat-credit">0</strong> Credit</span>
-                      <button type="button" class="btn btn-candy btn-sm" id="afterplay-credit-open-btn">เติม Credit</button>
+                      <button type="button" class="btn btn-primary btn-sm" id="afterplay-credit-open-btn">เติม Credit</button>
                     </div>
                   </section>
                   <p id="afterplay-status" class="status muted" role="status"></p>
@@ -1200,7 +1242,7 @@
                   <div id="unlockl-grid" class="unlockl-grid" role="group" aria-label="เลือกปลดล็อค L"></div>
                   <div class="unlockl-footer-bar">
                     <div class="unlockl-footer-stat">
-                      <img src="assets/Heart.png" alt="" width="20" height="20" />
+                      <img src="assets/Heart.png?v=20260817h" alt="" width="20" height="20" />
                       <span>หัวใจ</span>
                       <strong id="unlockl-snap-life">—</strong>
                     </div>
@@ -1214,7 +1256,7 @@
                       <strong id="unlockl-stat-credit">0</strong>
                       <span>Credit</span>
                     </div>
-                    <button type="button" class="btn btn-candy btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="unlockl-credit-open-btn">เติม Credit</button>
                   </div>
                   <p class="unlockl-price-hint muted">
                     <span id="unlockl-price-each">15</span> Credit/ตัว · ครบ 7 = <span id="unlockl-price-bundle">100</span>
@@ -1265,19 +1307,19 @@
                     </label>
                     <label>ดาวเป้าหมาย
                       <select id="ice-tower-default-stars">
-                        <option value="1">1 ดาว</option>
-                        <option value="2">2 ดาว</option>
-                        <option value="3" selected>3 ดาว</option>
+                        <option value="1">★☆☆ 1 ดาว</option>
+                        <option value="2">★★☆ 2 ดาว</option>
+                        <option value="3" selected>★★★ 3 ดาว</option>
                       </select>
                     </label>
                   </section>
                   <div class="ice-tower-summary" id="ice-tower-summary">เชื่อม DevPlay แล้วกดรีเฟรช</div>
                   <div id="ice-tower-grid" class="ice-tower-grid" role="group" aria-label="เลือกชั้น Ice Tower"></div>
                   <div class="unlockl-footer-bar">
-                    <div class="unlockl-footer-stat"><img src="assets/Heart.png" alt="" /><span>หัวใจ</span><strong id="ice-tower-snap-life">—</strong></div>
+                    <div class="unlockl-footer-stat"><img src="assets/Heart.png?v=20260817h" alt="" /><span>หัวใจ</span><strong id="ice-tower-snap-life">—</strong></div>
                     <div class="unlockl-footer-stat"><img src="assets/score.png" alt="" /><span>กุญแจ</span><strong id="ice-tower-snap-key">—</strong></div>
                     <div class="unlockl-footer-stat"><span>คงเหลือ</span><strong id="ice-tower-stat-credit">0</strong><span>Credit</span></div>
-                    <button type="button" class="btn btn-candy btn-sm" id="ice-tower-credit-open-btn">เติม Credit</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="ice-tower-credit-open-btn">เติม Credit</button>
                   </div>
                   <p class="unlockl-price-hint muted">
                     <span id="ice-tower-price-each">2</span> Credit/ชั้น · เลือกครบที่เหลือสูงสุด
@@ -1306,6 +1348,98 @@
                     <span class="btn-run-copy">
                       <span class="btn-run-title">เริ่มไต่ Ice Tower</span>
                       <span class="btn-run-sub" id="ice-tower-start-btn-sub">เลือกอย่างน้อย 1 ชั้น</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="farm-tab-panel hidden" id="farm-panel-friend" role="tabpanel" aria-labelledby="farm-tab-friend" hidden>
+                <div class="upgrade-panel-layout afterplay-panel unlockl-panel">
+                  <section class="unlockl-toolbar">
+                    <p class="unlockl-toolbar-meta" id="friend-toolbar-meta">ลบหรือเพิ่มเพื่อนในไอดีที่ล็อกอิน · รวมในวันเช่า</p>
+                    <button type="button" class="btn btn-ghost btn-sm" id="friend-refresh-btn">รีเฟรช</button>
+                  </section>
+                  <div class="afterplay-mode-switch" id="friend-mode-switch" role="tablist" aria-label="โหมดเพื่อน">
+                    <button type="button" class="afterplay-mode-btn is-active" id="friend-mode-remove" data-friend-mode="remove" role="tab" aria-selected="true">ลบเพื่อน</button>
+                    <button type="button" class="afterplay-mode-btn" id="friend-mode-add" data-friend-mode="add" role="tab" aria-selected="false">เพิ่มเพื่อน</button>
+                  </div>
+                  <div class="ice-tower-summary" id="friend-summary">เชื่อม DevPlay แล้วกดรีเฟรช</div>
+                  <section class="ice-tower-controls" id="friend-count-row">
+                    <label>จำนวน
+                      <input id="friend-count" type="number" min="0" max="300" value="0" />
+                    </label>
+                    <span class="muted" id="friend-count-hint">0 = ลบทั้งหมด (Guest ก่อน)</span>
+                  </section>
+                  <div class="unlockl-footer-bar">
+                    <div class="unlockl-footer-stat"><span>เพื่อน</span><strong id="friend-snap-have">—</strong></div>
+                    <div class="unlockl-footer-stat"><span>ว่าง</span><strong id="friend-snap-room">—</strong></div>
+                  </div>
+                  <p class="unlockl-price-hint muted" id="friend-rental-hint">รวมในวันเช่าฟังก์ชันเพื่อน · ไม่คิด Credit — เติมวันใช้งานแยกที่หน้าเติมเงิน</p>
+                  <p id="friend-status" class="status muted" role="status"></p>
+                  <div id="friend-progress-card" class="invite-progress-card hidden" hidden>
+                    <div class="invite-progress-head">
+                      <div>
+                        <p class="invite-progress-label" id="friend-progress-label">รอเริ่มงาน…</p>
+                        <p class="invite-progress-count"><strong id="friend-progress-current">0</strong>/<span id="friend-progress-total">0</span> <span class="invite-progress-pct" id="friend-progress-pct">0%</span></p>
+                      </div>
+                      <div class="invite-progress-actions">
+                        <button type="button" class="btn btn-ghost btn-sm hidden" id="friend-log-open-btn" hidden>ดู Log</button>
+                        <button type="button" class="btn btn-danger btn-sm hidden" id="friend-cancel-btn" hidden>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="friend-progress-track">
+                      <div class="invite-progress-fill" id="friend-progress-fill"></div>
+                    </div>
+                  </div>
+                  <button class="btn btn-run" type="button" id="friend-start-btn">
+                    <img src="assets/Angel_cookie.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title" id="friend-start-btn-title">เริ่มลบเพื่อน</span>
+                      <span class="btn-run-sub" id="friend-start-btn-sub">รวมในวันเช่า</span>
+                    </span>
+                  </button>
+                </div>
+              </div>
+              <div class="farm-tab-panel hidden" id="farm-panel-auto_redeem" role="tabpanel" aria-labelledby="farm-tab-auto_redeem" hidden>
+                <div class="upgrade-panel-layout afterplay-panel unlockl-panel">
+                  <section class="unlockl-toolbar">
+                    <p class="unlockl-toolbar-meta" id="auto-redeem-toolbar-meta">เติมคูปองจาก MID ของไอดีที่ล็อกอิน · รวมในวันเช่า</p>
+                    <button type="button" class="btn btn-ghost btn-sm" id="auto-redeem-refresh-btn">รีเฟรช</button>
+                  </section>
+                  <div class="ice-tower-summary" id="auto-redeem-summary">เชื่อม DevPlay แล้วกดรีเฟรช</div>
+                  <label class="field" for="auto-redeem-coupons">
+                    <span>โค้ดคูปอง (บรรทัดละ 1 โค้ด · สูงสุด 8)</span>
+                    <textarea id="auto-redeem-coupons" rows="5" spellcheck="false" autocomplete="off">Cookierunclassic2m
+Cookierunclassic1m
+COOKIERUNCLASSICNO1
+AMAZINGKIWICOOK2</textarea>
+                  </label>
+                  <div class="unlockl-footer-bar">
+                    <div class="unlockl-footer-stat"><span>MID</span><strong id="auto-redeem-mid">—</strong></div>
+                    <div class="unlockl-footer-stat"><span>จะเติม</span><strong id="auto-redeem-billable">0</strong></div>
+                  </div>
+                  <p class="unlockl-price-hint muted" id="auto-redeem-rental-hint">รวมในวันเช่าฟังก์ชัน Auto Redeem · ไม่คิด Credit — เติมวันใช้งานแยกที่หน้าเติมเงิน</p>
+                  <p id="auto-redeem-disabled-note" class="status muted hidden" hidden>ฟีเจอร์นี้ยังไม่เปิดบนเซิร์ฟ — แอดมินเห็นแท็บนี้เพื่อทดสอบ</p>
+                  <p id="auto-redeem-status" class="status muted" role="status"></p>
+                  <div id="auto-redeem-progress-card" class="invite-progress-card hidden" hidden>
+                    <div class="invite-progress-head">
+                      <div>
+                        <p class="invite-progress-label" id="auto-redeem-progress-label">รอเริ่มงาน…</p>
+                        <p class="invite-progress-count"><strong id="auto-redeem-progress-current">0</strong>/<span id="auto-redeem-progress-total">0</span> <span class="invite-progress-pct" id="auto-redeem-progress-pct">0%</span></p>
+                      </div>
+                      <div class="invite-progress-actions">
+                        <button type="button" class="btn btn-ghost btn-sm hidden" id="auto-redeem-log-open-btn" hidden>ดู Log</button>
+                        <button type="button" class="btn btn-danger btn-sm hidden" id="auto-redeem-cancel-btn" hidden>ยกเลิก</button>
+                      </div>
+                    </div>
+                    <div class="invite-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="auto-redeem-progress-track">
+                      <div class="invite-progress-fill" id="auto-redeem-progress-fill"></div>
+                    </div>
+                  </div>
+                  <button class="btn btn-run" type="button" id="auto-redeem-start-btn">
+                    <img src="assets/gem.png" alt="" width="28" height="28" />
+                    <span class="btn-run-copy">
+                      <span class="btn-run-title">เริ่ม Auto Redeem</span>
+                      <span class="btn-run-sub" id="auto-redeem-start-btn-sub">รวมในวันเช่า</span>
                     </span>
                   </button>
                 </div>
@@ -1340,7 +1474,7 @@
           aria-selected="true"
         >
           <span class="farm-nav-pill">
-            <img src="assets/notice_b20.png" alt="" width="40" height="40" />
+            <img src="assets/devplay.png?v=20260817d" alt="" width="40" height="40" />
             <span class="farm-nav-label">DevPlay</span>
           </span>
         </button>
@@ -1369,7 +1503,7 @@
           aria-selected="false"
         >
           <span class="farm-nav-pill">
-            <img src="assets/Heart.png" alt="" width="40" height="40" />
+            <img src="assets/Heart.png?v=20260817h" alt="" width="40" height="40" />
             <span class="farm-nav-label">Heart</span>
           </span>
         </button>
@@ -1427,6 +1561,35 @@
           <span class="farm-nav-pill">
             <img src="assets/pine_monk_cookie.png" alt="" width="40" height="40" />
             <span class="farm-nav-label">Cookie</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked"
+          id="farm-tab-friend"
+          data-tab="friend"
+          role="tab"
+          aria-controls="farm-panel-friend"
+          aria-selected="false"
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/Angel_cookie.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">เพื่อน (ทดสอบ)</span>
+          </span>
+        </button>
+        <button
+          type="button"
+          class="farm-nav-item is-locked is-feature-hidden"
+          id="farm-tab-auto_redeem"
+          data-tab="auto_redeem"
+          role="tab"
+          aria-controls="farm-panel-auto_redeem"
+          aria-selected="false"
+          hidden
+        >
+          <span class="farm-nav-pill">
+            <img src="assets/gem.png" alt="" width="40" height="40" />
+            <span class="farm-nav-label">Auto Redeem (ทดสอบ)</span>
           </span>
         </button>
           </nav>
@@ -1557,7 +1720,7 @@
           <button type="button" id="change-password-btn-menu" class="farm-sidebar-account-btn btn btn-ghost btn-sm hidden">
             เปลี่ยนรหัสผ่าน
           </button>
-          <button type="button" id="logout-btn-menu" class="farm-sidebar-logout btn btn-candy-compact btn-candy-logout hidden">ออกจากระบบ</button>
+          <button type="button" id="logout-btn-menu" class="farm-sidebar-logout btn btn-ghost btn-candy-logout hidden">ออกจากระบบ</button>
         </div>
       </aside>
       <div class="farm-sidebar-scrim" id="farm-sidebar-scrim" hidden></div>
@@ -1655,7 +1818,7 @@
             </button>
           </div>
         </label>
-        <button class="btn btn-candy" type="submit" id="reset-btn">
+        <button class="btn btn-primary" type="submit" id="reset-btn">
           <img src="assets/icon_giftpoint.png" alt="" width="20" height="20" />
           บันทึกรหัสผ่านใหม่
         </button>
@@ -1707,7 +1870,7 @@
         <span>ลิงก์ซองอั่งเปา</span>
         <input id="invite-credit-voucher" type="text" autocomplete="off" spellcheck="false" placeholder="วางลิงก์ซอง TrueMoney" />
       </label>
-      <button class="btn btn-candy" type="button" id="invite-credit-redeem-btn">ยืนยันเติม Credit</button>
+      <button class="btn btn-primary" type="button" id="invite-credit-redeem-btn">ยืนยันเติม Credit</button>
       <p id="invite-credit-status" class="status muted" role="status"></p>
     </div>
   </div>
@@ -1756,7 +1919,7 @@
   <div id="vault-modal" class="vault-modal-root hidden" aria-hidden="true">
     <div class="vault-modal-backdrop" data-vault-close></div>
     <div
-      class="panel pass-modal-sheet"
+      class="panel pass-modal-sheet pass-sheet"
       id="topup"
       role="dialog"
       aria-modal="true"
@@ -1764,47 +1927,34 @@
     >
       <div class="vault-modal-head">
         <div class="vault-modal-titles">
-          <p class="pass-eyebrow">สิทธิ์ใช้งาน</p>
           <h2 class="panel-title" id="vault-modal-title">ต่ออายุ</h2>
+          <div class="pass-status" id="pass-status" aria-live="polite">
+            <p class="pass-status-label" id="pass-status-label">กำลังโหลด…</p>
+            <p class="pass-status-detail" id="pass-status-detail"></p>
+          </div>
         </div>
         <button type="button" class="vault-modal-close" id="vault-close" aria-label="ปิด" data-vault-close>×</button>
       </div>
 
-      <div class="pass-status" id="pass-status" aria-live="polite">
-        <div class="pass-status-icon" aria-hidden="true">
-          <img src="assets/reward_icon_partyrun_ticket.png" alt="" width="32" height="32" />
-        </div>
-        <div class="pass-status-copy">
-          <p class="pass-status-label" id="pass-status-label">กำลังโหลด…</p>
-          <p class="pass-status-detail" id="pass-status-detail"></p>
-        </div>
-      </div>
-
-      <section class="pass-section">
-        <h3 class="pass-section-title">แพ็กวันเช่า</h3>
+      <div class="pass-plans">
         <div
           id="topup-packages"
           class="pass-card-grid pass-card-grid-full"
           role="listbox"
           aria-label="แพ็กวันเช่า"
         ></div>
-      </section>
-
-      <section class="pass-section pass-section-feature">
-        <h3 class="pass-section-title">แพ็กเสริม</h3>
-        <p class="pass-section-hint">50 coin · 12 ชม. · เลือกได้ 1 ฟังก์ชันหลังเติมสำเร็จ</p>
         <div
           id="topup-packages-feature"
           class="pass-card-grid pass-card-grid-feature"
           role="listbox"
           aria-label="แพ็กเสริม"
         ></div>
-      </section>
+      </div>
 
       <section class="pass-checkout">
         <div class="pass-price-row">
           <div class="pass-price-copy">
-            <span class="pass-price-label">ยอดซองที่ต้องสร้าง</span>
+            <span class="pass-price-label">ยอดซอง</span>
             <span class="pass-price-value" id="topup-selected-text">200 coin · 1 วัน · ทุกฟังก์ชัน</span>
           </div>
           <button type="button" class="btn btn-ghost btn-sm pass-copy-btn" id="topup-copy-price">
@@ -1812,15 +1962,8 @@
           </button>
         </div>
 
-        <button type="button" class="pass-tutorial-link" id="wallet-tutorial-open">
-          <span class="pass-tutorial-title">วิธีสร้างซอง TrueMoney</span>
-          <span class="pass-tutorial-sub">
-            ยอด <strong id="topup-step-amount">200 coin</strong> · ดูทีละขั้นพร้อมรูป ›
-          </span>
-        </button>
-
         <label class="field pass-voucher-field">
-          <span>ลิงก์หรือโค้ดซอง TrueMoney</span>
+          <span>ลิงก์ซอง TrueMoney</span>
           <input
             id="topup-voucher"
             type="text"
@@ -1832,22 +1975,17 @@
 
         <div class="pass-actions">
           <button type="button" class="btn btn-ghost" id="topup-verify-btn">ตรวจซอง</button>
-          <button type="button" class="btn btn-candy pass-confirm" id="topup-btn">ยืนยันต่ออายุ</button>
+          <button type="button" class="btn btn-primary pass-confirm" id="topup-btn">ยืนยัน</button>
         </div>
         <p id="topup-status" class="status pass-status-msg" role="status"></p>
-        <a
-          href="https://t.me/j3xdr"
-          class="btn btn-telegram pass-admin-btn"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <img src="assets/telegram_logo.svg" alt="" width="22" height="22" />
-          <span>ต้องการวันใช้งานอื่น? ติดต่อแอดมิน Telegram</span>
-        </a>
         <p class="muted pass-footnote">
-          ยอดซองต้องตรงราคาแพ็ก · ตั้งรับได้ <strong>1 คน</strong> · สร้างจากเบอร์อื่น (ไม่ใช่เบอร์ร้าน
-          091-012-1122) · สำรอง:
-          <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram แอดมิน</a>
+          <button type="button" class="pass-help-link" id="wallet-tutorial-open">
+            วิธีสร้างซอง
+          </button>
+          · ยอด <strong id="topup-step-amount">200 coin</strong>
+          · รับได้ 1 คน · ไม่ใช้เบอร์ร้าน
+          · เติมสำเร็จแล้วจะเริ่มนับเวลาเมื่อกดใช้งานฟีเจอร์ครั้งแรก
+          · <a href="https://t.me/j3xdr" target="_blank" rel="noopener noreferrer">Telegram</a>
         </p>
       </section>
     </div>
@@ -1896,7 +2034,7 @@
           <button type="button" class="btn btn-ghost" id="wallet-tutorial-prev" aria-label="ก่อนหน้า">
             ‹ ก่อนหน้า
           </button>
-          <button type="button" class="btn btn-candy" id="wallet-tutorial-next">
+          <button type="button" class="btn btn-primary" id="wallet-tutorial-next">
             ถัดไป ›
           </button>
         </div>
@@ -1917,23 +2055,10 @@
       aria-controls="job-status-panel"
     >
       <span class="job-status-mini-icon" id="job-status-mini-icon" aria-hidden="true">
-        <img src="assets/cookie_run.gif" alt="" width="32" height="32" decoding="async" />
+        <img src="assets/cookie_run.gif" alt="" width="22" height="22" decoding="async" />
         <span class="job-status-mini-dot" id="job-status-mini-dot" aria-hidden="true"></span>
       </span>
-      <span class="job-status-mini-body">
-        <span class="job-status-mini-top">
-          <span class="job-status-mini-title" id="job-status-mini-title">งานฟาร์ม</span>
-          <span class="job-status-mini-chip" id="job-status-mini-chip" data-phase="idle">—</span>
-        </span>
-        <span class="job-status-mini-track" aria-hidden="true">
-          <span class="job-status-mini-fill" id="job-status-mini-fill" style="width:0%"></span>
-        </span>
-        <span class="job-status-mini-foot">
-          <span class="job-status-mini-pct" id="job-status-mini-pct">0%</span>
-          <span class="job-status-mini-frac" id="job-status-mini-frac">—</span>
-        </span>
-      </span>
-      <span class="job-status-mini-expand" aria-hidden="true">⌃</span>
+      <span class="job-status-mini-pct" id="job-status-mini-pct">0%</span>
     </button>
 
     <div
@@ -2118,7 +2243,7 @@
 
   <div id="toast-root" class="toast-root" aria-live="polite" aria-relevant="additions"></div>
 
-  <script src="js/config.js?v=20260730-vps1"></script>
-  <script src="js/app.js?v=20260817-4"></script>
+  <script src="js/config.js?v=20260817-ui2"></script>
+  <script src="js/app.js?v=20260819-ui29"></script>
 </body>
 </html>
