@@ -30,8 +30,8 @@
   <link rel="apple-touch-icon" href="assets/logo_180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20261001-heart300b" />
-  <link rel="stylesheet" href="css/theme-basehub.css?v=20260929-sq1" />
+  <link rel="stylesheet" href="css/styles.css?v=20261002-hc1" />
+  <link rel="stylesheet" href="css/theme-basehub.css?v=20261001-notes1" />
   <script>
     (function () {
       var PALETTE = ["#3d348b", "#7678ed", "#f7b801", "#f18701", "#f35b04"];
@@ -855,6 +855,33 @@
                 </button>
               </div>
 
+              <!-- เทียบ 3 ฟีเจอร์หัวใจ: shared by heart / heartloop / mid_heart panels (mountHeartCompare in app.js clones into .heart-compare-slot) -->
+              <template id="heart-compare-tpl">
+                <details class="hc">
+                  <summary class="hc-sum">
+                    <span class="hc-sum-title">⚖️ เทียบ 3 ฟีเจอร์หัวใจ</span>
+                    <span class="hc-sum-chips"><span>MID: ไม่ต้องล็อกอิน</span><span>ฟาร์มหัวใจ: 300 ดวงเร็ว</span><span>HeartLoop: คุ้มสุด</span></span>
+                    <span class="hc-sum-toggle" aria-hidden="true"></span>
+                  </summary>
+                  <div class="hc-grid">
+                    <article class="hc-card hc-col-mid_heart">
+                      <header class="hc-card-head"><img src="assets/mid_heart.png?v=20261001" alt="" width="36" height="36" loading="lazy" /><div><h4>ฟาร์มใจ MID</h4><p>อยากได้เร็ว ไม่อยากให้รหัส</p></div><span class="hc-here">หน้านี้</span></header>
+                      <dl class="hc-rows"><div class="hc-row"><dt>ล็อกอิน</dt><dd>ไม่ต้อง · ใส่ MID</dd></div><div class="hc-row"><dt>ได้สูงสุด</dt><dd>ตามสั่ง (กดรับเองในเกม)</dd></div><div class="hc-row"><dt>เวลา</dt><dd>~ทันทีที่กดรับ</dd></div><div class="hc-row"><dt>ราคา</dt><dd>0.05฿/ดวง</dd></div></dl>
+                      <button type="button" class="hc-go" data-hc-go="mid_heart">ใช้ฟาร์มใจ MID</button>
+                    </article>
+                    <article class="hc-card hc-col-heart">
+                      <header class="hc-card-head"><img src="assets/Heart.png?v=20260817h" alt="" width="36" height="36" loading="lazy" /><div><h4>ฟาร์มหัวใจ</h4><p>เก็บ 300 ดวงเร็วๆ จบในตัว</p></div><span class="hc-here">หน้านี้</span></header>
+                      <dl class="hc-rows"><div class="hc-row"><dt>ล็อกอิน</dt><dd>เชื่อม DevPlay</dd></div><div class="hc-row"><dt>ได้สูงสุด</dt><dd>300 ดวง/วัน</dd></div><div class="hc-row"><dt>เวลา</dt><dd>ไม่กี่นาที</dd></div><div class="hc-row"><dt>ราคา</dt><dd>0.05฿/ดวง (300 = 15฿)</dd></div></dl>
+                      <button type="button" class="hc-go" data-hc-go="heart">ใช้ฟาร์มหัวใจ</button>
+                    </article>
+                    <article class="hc-card hc-col-heartloop hc-card--best">
+                      <header class="hc-card-head"><img src="assets/heartloop.png?v=20261001" alt="" width="36" height="36" loading="lazy" /><div><h4>HeartLoop</h4><p>ได้เยอะสุด คุ้มสุด ฝากยาวไม่ต้องเฝ้า</p></div><span class="hc-here">หน้านี้</span></header>
+                      <dl class="hc-rows"><div class="hc-row"><dt>ล็อกอิน</dt><dd>ฝากอีเมล/รหัส (ไม่ต้องเชื่อม)</dd></div><div class="hc-row"><dt>ได้สูงสุด</dt><dd><b class="hc-best">3,600–7,200 ดวง</b></dd></div><div class="hc-row"><dt>เวลา</dt><dd>12–24 ชม. อัตโนมัติ</dd></div><div class="hc-row"><dt>ราคา</dt><dd>50฿/12 ชม. · 100฿/24 ชม.<br><b class="hc-best">~0.014฿/ดวง · วันเช่าฟรี 5 ไอดี/วัน</b></dd></div></dl>
+                      <button type="button" class="hc-go" data-hc-go="heartloop">ใช้ HeartLoop</button>
+                    </article>
+                  </div>
+                </details>
+              </template>
               <div class="farm-tab-panel hidden" id="farm-panel-heart" role="tabpanel" aria-labelledby="farm-tab-heart" hidden>
                 <div class="ticket-stepper">
                   <span class="ticket-stepper-label">จำนวนหัวใจที่ต้องการ</span>
@@ -885,6 +912,7 @@
                 <p class="heart-info-note muted" id="heart-info-note">
                   คลังไอดีร้านส่งหัวใจเข้าไอดีที่เชื่อมอยู่ — เพื่อนจริงไม่ถูกแตะ · ถ้าเพื่อน 250+ จะพาไปหน้าลบเพื่อนให้เลือกเอง · สูงสุดตามเพดานที่แอดมินตั้ง
                 </p>
+                <div class="heart-compare-slot" data-heart-compare="heart"></div>
                 <div class="token-rate-card" id="heart-token-rate"></div>
                 <section class="heart-storm-card" aria-label="ตั้งค่าเมื่อเกมตอบ 500">
                   <div class="heart-storm-head">
@@ -917,22 +945,80 @@
               </div>
               <div class="farm-tab-panel hidden" id="farm-panel-heartloop" role="tabpanel" aria-labelledby="farm-tab-heartloop" hidden>
                 <style>
-                  .heartloop-packs{display:flex;gap:10px;margin:12px 0}
-                  .heartloop-pack{flex:1;display:flex;flex-direction:column;gap:4px;padding:14px 10px;border:2px solid var(--line,#e3d7c6);border-radius:14px;background:var(--card,#fff);cursor:pointer;text-align:center;transition:.15s}
-                  .heartloop-pack:hover{border-color:#f0a}
-                  .heartloop-pack.is-active{border-color:#ff4da6;background:#fff0f7;box-shadow:0 2px 10px rgba(255,77,166,.18)}
+                  #farm-panel-heartloop{--hl-pink:#ff4da6;--hl-pink-strong:#ff6fb7;--hl-pink-bg:rgba(255,77,166,.12);--hl-soft-bg:rgba(255,255,255,.04)}
+                  .heartloop-packs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+                  .heartloop-pack{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:14px 10px;border:2px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);cursor:pointer;text-align:center;font:inherit;transition:border-color .15s,background .15s,box-shadow .15s}
+                  .heartloop-pack:hover{border-color:var(--hl-pink)}
+                  .heartloop-pack:focus-visible{outline:2px solid var(--hl-pink);outline-offset:2px}
+                  .heartloop-pack.is-active{border-color:var(--hl-pink);background:var(--hl-pink-bg);box-shadow:0 2px 12px rgba(255,77,166,.22)}
                   .heartloop-pack-h{font-weight:700;font-size:1.05rem}
-                  .heartloop-pack-price{font-size:1.35rem;font-weight:800;color:#ff2e93}
-                  .heartloop-pack-list{font-size:.8rem;color:#999;text-decoration:line-through}
-                  .heartloop-pack-yield{font-size:.82rem;color:#666}
-                  .heartloop-save{display:inline-block;font-size:.72rem;color:#0a0;font-weight:700}
-                  .heartloop-preview-card{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:12px;border:1px dashed var(--line,#e3d7c6);border-radius:12px}
+                  .heartloop-pack-price{font-size:1.35rem;font-weight:800;color:var(--hl-pink-strong)}
+                  .heartloop-pack-list{font-size:.8rem;color:var(--muted);text-decoration:line-through}
+                  .heartloop-pack-yield{font-size:.82rem;color:var(--muted)}
+                  .heartloop-preview-card{display:flex;flex-direction:column;align-items:stretch;gap:6px;margin:10px 0;padding:12px;border:1px dashed var(--line);border-radius:12px}
+                  .heartloop-preview-card .btn{white-space:normal;height:auto;min-height:40px;line-height:1.35}
+                  .heartloop-preview-card p{margin:0}
                   .heartloop-slots-big{font-size:1.05rem;font-weight:700}
-                  .heartloop-custom{margin:10px 0;padding:10px 12px;border-radius:12px;background:var(--muted-bg,#faf6ef)}
-                  .heartloop-custom-row{display:flex;align-items:center;gap:8px;margin-top:8px}
-                  .heartloop-custom-row input[type=number]{width:70px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--line,#ddd);font-size:1.05rem}
-                  .heartloop-clear{display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:.92rem;line-height:1.4}
-                  .heartloop-yield-hl{color:#ff2e93;font-weight:800}
+                  .heartloop-custom{margin:10px 0;padding:10px 12px;border-radius:12px;background:var(--hl-soft-bg);border:1px solid var(--line)}
+                  .heartloop-custom > label{display:flex;gap:8px;align-items:flex-start;line-height:1.4;cursor:pointer}
+                  .heartloop-custom-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
+                  .heartloop-custom-row[hidden]{display:none}
+                  .heartloop-custom-row input[type=number]{width:72px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:1.05rem}
+                  .heartloop-custom-row strong{color:var(--hl-pink-strong)}
+                  .heartloop-clear{display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:.92rem;line-height:1.4;cursor:pointer}
+                  .heartloop-clear input,.heartloop-custom > label input{flex:none;margin-top:3px}
+                  .heartloop-yield-hl{color:var(--hl-pink-strong);font-weight:800}
+                  .hl-jobs{margin:14px 0 4px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card)}
+                  .hl-jobs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+                  .hl-jobs-head h4{margin:0;font-size:1rem}
+                  .hl-jobs-count{font-size:.8rem;color:var(--muted);font-weight:600}
+                  .hl-jobs-list{display:flex;flex-direction:column;gap:8px}
+                  .hl-job{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface)}
+                  .hl-job.is-running{border-color:rgba(16,185,129,.55)}
+                  .hl-job.is-cooldown{border-color:rgba(129,140,248,.5)}
+                  .hl-job-name{font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+                  .hl-job-badge{justify-self:end;padding:2px 9px;border-radius:999px;font-size:.74rem;font-weight:800;background:#24252c;color:#d6d7de;white-space:nowrap}
+                  .hl-job.is-running .hl-job-badge{background:rgba(16,185,129,.18);color:#34d399}
+                  .hl-job.is-cooldown .hl-job-badge{background:rgba(129,140,248,.18);color:#a5b4fc}
+                  .hl-job.is-failed .hl-job-badge,.hl-job.is-cancelled .hl-job-badge{background:rgba(244,63,94,.15);color:#fda4af}
+                  .hl-job.is-succeeded .hl-job-badge{background:rgba(16,185,129,.12);color:#6ee7b7}
+                  .hl-job-bar{grid-column:1/-1;height:6px;border-radius:99px;background:#24252c;overflow:hidden}
+                  .hl-job-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#ff4da6,#ff8cc6);transition:width .4s}
+                  .hl-job-text{grid-column:1/-1;margin:0;font-size:.84rem;color:#d6d7de;line-height:1.45}
+                  .hl-job-acts{grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap}
+                  .hl-job-acts .btn{min-height:32px;padding:4px 12px;font-size:.8rem}
+                  .hl-jobs-foot{margin:8px 0 0;font-size:.78rem}
+                  .heartloop-rental{margin:10px 0;padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);line-height:1.45;font-size:.92rem}
+                  .heartloop-rental b{color:var(--hl-pink-strong)}
+                  .heartloop-account{margin:10px 0;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--card)}
+                  .heartloop-account-h{margin:0 0 8px;font-weight:700}
+                  .heartloop-account-mode{display:flex;flex-direction:column;gap:6px}
+                  .heartloop-account-mode label{display:flex;gap:8px;align-items:flex-start;line-height:1.4;cursor:pointer}
+                  .heartloop-account-mode input{flex:none;margin-top:3px}
+                  .heartloop-account-fields{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+                  .heartloop-account-fields[hidden]{display:none}
+                  .hl-acct-list{display:flex;flex-direction:column;gap:6px;counter-reset:hlacct}
+                  .hl-acct-row{display:grid;grid-template-columns:22px minmax(0,1.3fr) minmax(0,1fr) 34px;gap:6px;align-items:center;counter-increment:hlacct}
+                  .hl-acct-row::before{content:counter(hlacct);font-size:.78rem;font-weight:800;color:var(--muted);text-align:center}
+                  .hl-acct-row input{width:100%;min-width:0;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);font:inherit}
+                  .hl-acct-row.is-ok input{border-color:#10b981}
+                  .hl-acct-row.is-err input{border-color:#f43f5e}
+                  .hl-acct-del{width:34px;height:34px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--muted);font-size:1.1rem;line-height:1;cursor:pointer}
+                  .hl-acct-del:hover{color:#fff;border-color:#f43f5e}
+                  .hl-acct-msg{grid-column:2/-1;margin:-2px 0 2px;font-size:.78rem;color:#fda4af}
+                  .hl-acct-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+                  .hl-acct-tools .btn{min-height:36px}
+                  .hl-acct-count{margin-left:auto;font-size:.82rem;color:var(--muted)}
+                  .heartloop-account-fields > p{margin:0;font-size:.8rem}
+                  .hl-batch-sum{margin:2px 0 0;padding:10px 12px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:.88rem;line-height:1.5}
+                  .hl-batch-sum b{color:var(--hl-pink-strong)}
+                  .hl-batch-sum.is-short{border-color:#f43f5e}
+                  .hl-batch-sum .hl-ok{color:#34d399;font-weight:700}
+                  .hl-batch-sum .hl-short{color:#fda4af;font-weight:700}
+                  @media (max-width:520px){.hl-acct-row{grid-template-columns:18px minmax(0,1fr) 34px}.hl-acct-row input[type=password]{grid-column:2}.hl-acct-row .hl-acct-del{grid-row:1/3;grid-column:3}.hl-acct-row input[type=email]{grid-column:2}.hl-acct-row::before{grid-row:1/3}}
+                  #heartloop-btn{width:100%}
+                  #heartloop-status:empty{display:none}
+                  @media (max-width:420px){.heartloop-pack{padding:12px 6px}.heartloop-pack-h{font-size:.95rem}.heartloop-pack-price{font-size:1.2rem}}
                 </style>
                 <p class="muted farm-panel-hint-line">
                   ฝากไอดีไว้ ระบบตั้งเพื่อนถาวรจากคลัง แล้วเก็บหัวใจให้<b>ทุกชั่วโมงอัตโนมัติ</b> จนครบเวลา แล้วลบเพื่อนออกให้เอง — ไม่ต้องเฝ้า
@@ -943,29 +1029,30 @@
                   📌 ช่วง<b>พัก 60 นาที รัน Coin/XP/กล่อง บัญชีเดียวกันได้ปกติ</b> · ช่วงกำลังส่งหัวใจ (ไม่กี่นาที) ระบบจะเว้นให้ก่อนตามกฎเกม (เข้าได้ 2 จอ)
                 </p>
 
-                <style>
-                  .heart-compare{width:100%;border-collapse:collapse;margin:12px 0;font-size:.86rem;border:1px solid var(--line,#e3d7c6);border-radius:12px;overflow:hidden}
-                  .heart-compare th,.heart-compare td{padding:8px 9px;text-align:center;border-bottom:1px solid var(--line,#eee2d0);vertical-align:top}
-                  .heart-compare thead th{background:var(--muted-bg,#faf6ef);font-weight:800}
-                  .heart-compare th[scope=row]{text-align:left;font-weight:700;background:var(--muted-bg,#fcf9f3);white-space:nowrap}
-                  .heart-compare .hc-best{color:#ff2e93;font-weight:800}
-                  .heart-compare .hc-col-loop{background:#fff0f7}
-                  .heart-compare caption{caption-side:top;text-align:left;font-weight:800;margin-bottom:6px}
-                </style>
-                <table class="heart-compare">
-                  <caption>เทียบ 3 ฟีเจอร์หัวใจ — เลือกให้เหมาะกับคุณ</caption>
-                  <thead>
-                    <tr><th></th><th>ฟาร์มใจ MID</th><th>ฟาร์มหัวใจ</th><th class="hc-col-loop">HeartLoop</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><th scope="row">ล็อกอิน</th><td>ไม่ต้อง<br>(ใส่ MID)</td><td>เชื่อม DevPlay</td><td class="hc-col-loop">ฝากไอดี<br>(เชื่อม)</td></tr>
-                    <tr><th scope="row">ได้สูงสุด</th><td>ตามสั่ง<br>(ลูกค้ากดรับเอง)</td><td>300 ดวง/วัน</td><td class="hc-col-loop"><span class="hc-best">3,600–7,200 ดวง</span><br>(300×ชม.)</td></tr>
-                    <tr><th scope="row">เวลาทำงาน</th><td>กดรับในเกม<br>(~ทันที)</td><td>ไม่กี่นาที</td><td class="hc-col-loop">12–24 ชม.<br>อัตโนมัติ</td></tr>
-                    <tr><th scope="row">ราคา</th><td>0.05฿/ดวง</td><td>0.05฿/ดวง<br>(300=15฿)</td><td class="hc-col-loop">50฿/12ชม<br>100฿/24ชม</td></tr>
-                    <tr><th scope="row">คุ้มสุด/ดวง</th><td>0.05฿</td><td>0.05฿</td><td class="hc-col-loop"><span class="hc-best">~0.014฿</span><br>(ถูกสุด)</td></tr>
-                    <tr><th scope="row">เหมาะกับ</th><td>อยากได้เร็ว<br>ไม่อยากให้รหัส</td><td>เก็บ 300<br>เร็วๆ จบในตัว</td><td class="hc-col-loop">อยากได้<b>เยอะสุด คุ้มสุด</b><br>ฝากยาวไม่ต้องเฝ้า</td></tr>
-                  </tbody>
-                </table>
+                <div class="heart-compare-slot" data-heart-compare="heartloop"></div>
+
+                <div class="token-rate-card" id="heartloop-token-rate"></div>
+
+                <p class="heartloop-rental" id="heartloop-rental" hidden></p>
+
+                <div class="heartloop-account">
+                  <p class="heartloop-account-h">🎮 ไอดีที่จะฝาก</p>
+                  <div class="heartloop-account-mode" role="radiogroup" aria-label="เลือกไอดี">
+                    <label><input type="radio" name="heartloop-acct" value="devplay" id="heartloop-acct-devplay" checked /> <span>ใช้ไอดีที่เชื่อม DevPlay อยู่ <small class="muted" id="heartloop-acct-devplay-name"></small></span></label>
+                    <label><input type="radio" name="heartloop-acct" value="other" id="heartloop-acct-other" /> <span>ฝากไอดีอื่น · ได้หลายไอดีพร้อมกัน (ไม่ต้องเชื่อม DevPlay)</span></label>
+                  </div>
+                  <div class="heartloop-account-fields" id="heartloop-account-fields" hidden>
+                    <div class="hl-acct-list" id="heartloop-acct-list"></div>
+                    <div class="hl-acct-tools">
+                      <button type="button" class="btn btn-ghost btn-sm" id="heartloop-acct-add">＋ เพิ่มไอดี</button>
+                      <button type="button" class="btn btn-ghost btn-sm" id="heartloop-acct-import-btn">📄 นำเข้า .txt</button>
+                      <input type="file" id="heartloop-acct-import" accept=".txt,text/plain" hidden />
+                      <span class="hl-acct-count" id="heartloop-acct-count">1/10</span>
+                    </div>
+                    <p class="muted">ฝากได้สูงสุด 10 ไอดีต่อครั้ง · ไฟล์ .txt: บรรทัดละ 1 ไอดี <code>อีเมล[Tab]รหัสผ่าน</code></p>
+                    <p class="hl-batch-sum" id="heartloop-batch-sum" hidden></p>
+                  </div>
+                </div>
 
                 <div class="heartloop-preview-card">
                   <button type="button" class="btn btn-ghost btn-sm" id="heartloop-check">🔍 ตรวจช่องว่างเพื่อนในไอดี + ดูยอดที่จะได้</button>
@@ -989,10 +1076,11 @@
                 </div>
 
                 <div class="heartloop-custom">
-                  <label><input type="checkbox" id="heartloop-custom-toggle" /> กำหนดชั่วโมงเอง (ชม.ละ <span id="heartloop-perhour">5</span>฿ · แพ็คคุ้มกว่า)</label>
+                  <label><input type="checkbox" id="heartloop-custom-toggle" /> <span>กำหนดชั่วโมงเอง (ชม.ละ <span id="heartloop-perhour">5</span>฿ · แพ็คคุ้มกว่า)</span></label>
                   <div class="heartloop-custom-row" id="heartloop-custom-row" hidden>
                     <button type="button" class="ticket-step-btn" id="heartloop-hours-minus" aria-label="ลดชั่วโมง">−</button>
                     <input type="number" id="heartloop-hours" min="1" max="24" value="6" />
+                    <button type="button" class="ticket-step-btn" id="heartloop-hours-plus" aria-label="เพิ่มชั่วโมง">+</button>
                     <span>ชม.</span>
                     <strong id="heartloop-custom-price">= 30฿</strong>
                   </div>
@@ -1008,6 +1096,15 @@
                   </span>
                 </button>
                 <p class="muted" id="heartloop-status" role="status" style="margin-top:8px"></p>
+
+                <section class="hl-jobs" id="heartloop-jobs" hidden aria-labelledby="heartloop-jobs-h">
+                  <header class="hl-jobs-head">
+                    <h4 id="heartloop-jobs-h">📋 งาน HeartLoop ของฉัน <span class="hl-jobs-count" id="heartloop-jobs-count"></span></h4>
+                    <button type="button" class="btn btn-ghost btn-sm" id="heartloop-jobs-refresh">↻ รีเฟรช</button>
+                  </header>
+                  <div class="hl-jobs-list" id="heartloop-jobs-list"></div>
+                  <p class="muted hl-jobs-foot">อัปเดตอัตโนมัติทุก 20 วินาที · ช่วง "พักรอบ" ไอดีว่าง ใช้ฟังก์ชันอื่นได้ปกติ</p>
+                </section>
               </div>
               <div class="farm-tab-panel hidden" id="farm-panel-powder" role="tabpanel" aria-labelledby="farm-tab-powder" hidden>
                 <p class="muted farm-panel-hint-line">
@@ -1612,6 +1709,7 @@
 
               <div class="farm-tab-panel hidden" id="farm-panel-mid_heart" role="tabpanel" aria-labelledby="menu-nav-mid_heart" hidden>
                 <div class="mh-page" id="mid-heart-page" aria-live="polite"></div>
+                <div class="heart-compare-slot" data-heart-compare="mid_heart"></div>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-crgcode" role="tabpanel" aria-labelledby="menu-nav-crgcode" hidden>
@@ -5372,9 +5470,10 @@
                   <label style="font-size:.82rem">ต่อ ชม.<br /><input id="farm-dock-admin-hl-perhour" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
                   <label style="font-size:.82rem">แพ็ค 12 ชม.<br /><input id="farm-dock-admin-hl-pack12" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
                   <label style="font-size:.82rem">แพ็ค 24 ชม.<br /><input id="farm-dock-admin-hl-pack24" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
+                  <label style="font-size:.82rem">วันเช่าฟรี (ไอดี/24 ชม.)<br /><input id="farm-dock-admin-hl-rental-ids" class="farm-dock-admin-heart-max-input" type="number" min="0" max="100" step="1" style="width:80px" /></label>
                   <button type="button" id="farm-dock-admin-hl-save" class="btn btn-ghost btn-sm farm-dock-admin-heart-max-save">บันทึก</button>
                 </div>
-                <p id="farm-dock-admin-hl-msg" class="farm-dock-admin-heart-max-msg muted">ต่อ ชม. ใช้ตอนลูกค้าตั้งชั่วโมงเอง · แพ็ค 12/24 ควรถูกกว่า (ค่าเริ่มต้น 5 / 50 / 100฿)</p>
+                <p id="farm-dock-admin-hl-msg" class="farm-dock-admin-heart-max-msg muted">ต่อ ชม. ใช้ตอนลูกค้าตั้งชั่วโมงเอง · แพ็ค 12/24 ควรถูกกว่า (ค่าเริ่มต้น 5 / 50 / 100฿) · ผู้มีวันเช่าฝากฟรีได้ตามจำนวนไอดีที่ตั้ง (ค่าเริ่มต้น 5, ใส่ 0 = วันเช่าไม่ครอบคลุม) เกินจากนั้นหัก Token</p>
               </div>
                 <div class="aj-danger">
                   <div>
@@ -6143,8 +6242,8 @@
   <script src="js/ckr_wiki.js?v=20260925-mh1"></script>
   <script src="js/ckr_quest_data.js?v=20260917-quest2"></script>
   <script src="js/guide_data.js?v=20260923-guide1"></script>
-  <script src="js/app.js?v=20261001-heartloop3"></script>
-  <script src="js/live_page.js?v=20260925-mh1"></script>
+  <script src="js/app.js?v=20261002-hljobs1"></script>
+  <script src="js/live_page.js?v=20261002-hl2"></script>
   <script src="js/admin_jobs.js?v=20260924-crg1"></script>
   <script src="js/account_tools.js?v=20260929-sq1"></script>
   <script src="js/acct_report.js?v=20260925-rm1"></script>
