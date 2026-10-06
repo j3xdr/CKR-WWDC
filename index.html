@@ -31,7 +31,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="css/styles.css?v=20261002-hc1" />
-  <link rel="stylesheet" href="css/theme-basehub.css?v=20261001-notes1" />
+  <link rel="stylesheet" href="css/theme-basehub.css?v=20261006-botad3" />
   <script>
     (function () {
       var PALETTE = ["#3d348b", "#7678ed", "#f7b801", "#f18701", "#f35b04"];
@@ -96,6 +96,11 @@
           <img src="assets/token.png" alt="" width="16" height="16" />
           <strong id="topbar-token-value">0</strong>
           <span class="topbar-token-unit">Token</span>
+        </button>
+        <button type="button" class="topbar-token-pill topbar-bot-token-pill hidden" id="topbar-bot-token-pill" title="Token Bot · ร้านคีย์บอท Android" hidden>
+          <img src="https://api.crgwwdc.shop/android-updates/shop/token_bot.png" alt="" width="16" height="16" />
+          <strong id="topbar-bot-token-value">0</strong>
+          <span class="topbar-token-unit">Bot</span>
         </button>
         <button type="button" class="topbar-icon-btn topbar-mail-btn hidden" id="topbar-mailbox-btn" title="กล่องของขวัญ" aria-label="กล่องของขวัญ" hidden>
           <span class="topbar-tile topbar-tile--gold" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8"/><path d="M12 22V12"/><path d="M2 7h20v5H2z"/><path d="M12 7V3"/><path d="M8 7a4 4 0 0 1 8 0"/></svg></span>
@@ -1703,6 +1708,10 @@
                 <div class="pcp-page" id="pc-program-bottom"></div>
               </div>
 
+              <div class="farm-tab-panel hidden" id="farm-panel-bot_ad" role="tabpanel" aria-labelledby="menu-nav-bot_ad" hidden>
+                <div class="pcp-page" id="bot-ad-page" aria-live="polite"></div>
+              </div>
+
               <div class="farm-tab-panel hidden" id="farm-panel-report_multi" role="tabpanel" aria-labelledby="menu-nav-report_multi" hidden>
                 <div class="rm-page" id="report-multi-page" aria-live="polite"></div>
               </div>
@@ -2898,6 +2907,10 @@
                 <img loading="lazy" src="assets/pc_program.svg" alt="" width="20" height="20" />
                 <span class="farm-nav-label">โปรแกรม PC</span>
               </button>
+              <button type="button" class="farm-sidebar-link" id="menu-nav-bot_ad" data-tab="bot_ad" aria-controls="farm-panel-bot_ad">
+                <img loading="lazy" src="assets/bot_ad.svg" alt="" width="20" height="20" />
+                <span class="farm-nav-label">Bot-Ad</span>
+              </button>
               <button type="button" class="farm-sidebar-link" id="menu-nav-mid_heart" data-tab="mid_heart" aria-controls="farm-panel-mid_heart">
                 <img loading="lazy" src="assets/mid_heart.png?v=20261001" alt="" width="20" height="20" />
                 <span class="farm-nav-label">ฟาร์มใจ MID</span>
@@ -3644,6 +3657,10 @@
       <section class="cko-step hidden" data-cko-step="pack">
         <div id="topup-token-section" class="topup-token-flow">
           <p class="cko-step-hint panel-hint">เลือกยอดแล้วกดถัดไปเพื่อสแกน QR</p>
+          <div class="bad-topup-bonus">
+            <img src="https://api.crgwwdc.shop/android-updates/shop/token_bot.png" alt="" width="42" height="42" />
+            <p>🎁 แถม Token Bot เท่ากับจำนวนที่เติม (เติม 300 ได้ Token Bot 300) ใช้ซื้อคีย์บอท Android ที่เมนู Bot-Ad · โค้ดและแอดมินปรับยอดไม่แถม</p>
+          </div>
           <div id="topup-token-discount" class="token-promo-card hidden" hidden aria-live="polite"></div>
           <div class="token-pack-section cko-surface-card">
             <div class="token-pack-header">
@@ -6242,13 +6259,14 @@
   <script src="js/ckr_wiki.js?v=20260925-mh1"></script>
   <script src="js/ckr_quest_data.js?v=20260917-quest2"></script>
   <script src="js/guide_data.js?v=20260923-guide1"></script>
-  <script src="js/app.js?v=20261002-hljobs1"></script>
+  <script src="js/app.js?v=20261006-botad3"></script>
   <script src="js/live_page.js?v=20261002-hl2"></script>
   <script src="js/admin_jobs.js?v=20260924-crg1"></script>
   <script src="js/account_tools.js?v=20260929-sq1"></script>
   <script src="js/acct_report.js?v=20260925-rm1"></script>
   <script src="js/crgcode.js?v=20260924-crg7"></script>
   <script src="js/pc_program.js?v=20260927-nav1"></script>
+  <script src="js/bot_ad.js?v=20261006-botad3"></script>
   <script src="js/report_multi.js?v=20260927-gi1"></script>
   <script src="js/mid_heart.js?v=20261001-mh7"></script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ckrTurnstileReady&render=explicit" async defer></script>

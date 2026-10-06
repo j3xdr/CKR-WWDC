@@ -1,0 +1,41 @@
+# SPA feature paths. Proxy to / (not /index.html) — Pages 308s /index.html to /.
+# Do not add /* here; existing css/, js/, assets/ must stay static.
+/heart / 200
+/upgrade / 200
+/friend / 200
+/partyrun / 200
+/powder / 200
+/giftdraw / 200
+/coin / 200
+/xp / 200
+/box / 200
+/combo / 200
+/unlock-l / 200
+/ice-tower / 200
+/invite / 200
+/guide / 200
+/pricing / 200
+/idshop / 200
+/orders / 200
+/afterplay / 200
+/idshop/orders / 200
+/unlock_l / 200
+/ice_tower / 200
+# These images are not in the Pages upload. Serve them from the VPS only.
+/assets/quest_auto.png https://api.crgwwdc.shop/api/public/assets/quest_auto.png 302
+/assets/treasure_evo.png https://api.crgwwdc.shop/api/public/assets/treasure_evo.png 302
+/assets/icons/materials/* https://api.crgwwdc.shop/api/public/assets/icons/materials/:splat 302
+/assets/icons/artifacts/* https://api.crgwwdc.shop/api/public/assets/icons/artifacts/:splat 302
+/assets/icons/items/* https://api.crgwwdc.shop/api/public/assets/icons/items/:splat 302
+/assets/icons/episodes/* https://api.crgwwdc.shop/api/public/assets/icons/episodes/:splat 302
+/assets/icons/grade_frames/* https://api.crgwwdc.shop/api/public/assets/icons/grade_frames/:splat 302
+/assets/backgrounds/* https://api.crgwwdc.shop/api/public/assets/backgrounds/:splat 302
+/assets_web/lv-free/* https://api.crgwwdc.shop/api/public/assets/lv-free/:splat 302
+/assets_web/bg/* https://api.crgwwdc.shop/api/public/assets/bg/:splat 302
+/admincenter / 200
+/break / 200
+/crgcode / 200
+/mid-heart / 200
+/report-multi / 200
+/pc-program / 200
+/bot-ad / 200

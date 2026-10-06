@@ -1068,6 +1068,12 @@
       blurb: "ซื้อโปรแกรม PC · สแกนจ่าย ได้ Key ทันที",
       icon: "pc_program.svg",
     },
+    bot_ad: {
+      title: "Bot-Ad",
+      hint: "ร้านคีย์บอท Android",
+      blurb: "ซื้อคีย์บอท Android ด้วย Token Bot",
+      icon: "bot_ad.svg",
+    },
     report_multi: {
       title: "รายงานไอดี (หลายบัญชี)",
       hint: "นำเข้า อีเมล[แท็บ]รหัส สูงสุด 50 บัญชี แล้วโหลดรูป/ข้อความเป็น .zip",
@@ -1196,6 +1202,7 @@
     mid_heart: "ฟาร์มใจ MID",
     report_multi: "รายงานไอดี (หลายบัญชี)",
     pc_program: "โปรแกรม PC",
+    bot_ad: "Bot-Ad",
     jelly_upgrade: "อัปเกรด Jelly",
     cookie_unlock: "ปลดล็อก Cookie",
     pet_unlock: "ปลดล็อก Pet",
@@ -1247,6 +1254,7 @@
     "mid_heart",
     "report_multi",
     "pc_program",
+    "bot_ad",
     "idshop",
     "idshop_orders",
     "invite",
@@ -1293,7 +1301,7 @@
       "ice_tower",
     ],
     shop: ["idshop", "idshop_orders"],
-    menu: ["pc_program", "report_multi", "crgcode", "history", "live_nav", "guide_nav", "pricing_nav"],
+    menu: ["pc_program", "bot_ad", "report_multi", "crgcode", "history", "live_nav", "guide_nav", "pricing_nav"],
     account: ["guide", "pricing", "affiliate", "mailbox"],
   };
   const FARM_NAV_GROUP_LABELS = {
@@ -1379,6 +1387,7 @@
     mid_heart: "menu-nav-mid_heart",
     report_multi: "menu-nav-report_multi",
     pc_program: "menu-nav-pc_program",
+    bot_ad: "menu-nav-bot_ad",
     partyrun: "farm-tab-partyrun",
     afterplay_coin: "menu-nav-afterplay-coin",
     afterplay_xp: "menu-nav-afterplay-xp",
@@ -1671,6 +1680,7 @@
     "/mid-heart": { tab: "mid_heart" },
     "/report-multi": { tab: "report_multi" },
     "/pc-program": { tab: "pc_program" },
+    "/bot-ad": { tab: "bot_ad" },
     "/crgcode": { tab: "crgcode" },
     "/partyrun": { tab: "partyrun" },
     "/powder": { tab: "powder" },
@@ -1728,6 +1738,7 @@
     mid_heart: "/mid-heart",
     report_multi: "/report-multi",
     pc_program: "/pc-program",
+    bot_ad: "/bot-ad",
     crgcode: "/crgcode",
     partyrun: "/partyrun",
     powder: "/powder",
@@ -1799,6 +1810,8 @@
     "report-multi": { tab: "report_multi" },
     pc_program: { tab: "pc_program" },
     "pc-program": { tab: "pc_program" },
+    bot_ad: { tab: "bot_ad" },
+    "bot-ad": { tab: "bot_ad" },
     crgcode: { tab: "crgcode" },
     evo: { tab: "treasure_evo" },
     treasure_evo: { tab: "treasure_evo" },
@@ -1917,7 +1930,7 @@
         switchFarmTab("crgcode", { silent: true, replaceRoute: replace, force: true });
         return;
       }
-      if (tab === "mid_heart" || tab === "report_multi" || tab === "pc_program") {
+      if (tab === "mid_heart" || tab === "report_multi" || tab === "pc_program" || tab === "bot_ad") {
         switchFarmTab(tab, { silent: true, replaceRoute: replace });
         return;
       }
@@ -2156,6 +2169,7 @@
     mid_heart: "ฟาร์มใจ MID",
     report_multi: "รายงานไอดี (หลายบัญชี)",
     pc_program: "โปรแกรม PC",
+    bot_ad: "Bot-Ad",
     jelly_upgrade: "อัปเกรด Jelly",
     cookie_unlock: "ปลดล็อก Cookie",
     pet_unlock: "ปลดล็อก Pet",
@@ -3472,7 +3486,18 @@
         push(k);
       });
     }
-    DEFAULT_FARM_FEATURE_ORDER.forEach(push);
+    DEFAULT_FARM_FEATURE_ORDER.forEach((key) => {
+      if (seen.has(key)) return;
+      if (key === "bot_ad") {
+        const at = out.indexOf("pc_program");
+        if (at >= 0) {
+          out.splice(at + 1, 0, "bot_ad");
+          seen.add("bot_ad");
+          return;
+        }
+      }
+      push(key);
+    });
     return out;
   }
 
@@ -3512,7 +3537,7 @@
   function featureGroupForKey(key) {
     const k = String(key || "");
     if (FARM_NAV_PINNED_RISK_SET.has(k)) return "risk";
-    if (k === "report_multi" || k === "crgcode" || k === "pc_program") return "menu"; // no DevPlay needed — lives in เมนู
+    if (k === "report_multi" || k === "crgcode" || k === "pc_program" || k === "bot_ad") return "menu"; // no DevPlay needed — lives in เมนู
     if (FARM_NAV_PINNED_ACCOUNT_SET.has(k)) return "account";
     const g = farmFeatureGroups[k];
     if (FARM_NAV_MOVABLE_GROUPS.has(g)) return g;
@@ -3532,7 +3557,15 @@
     const set = new Set(keys);
     const ordered = farmFeatureOrder.filter((k) => set.has(k));
     keys.forEach((k) => {
-      if (!ordered.includes(k)) ordered.push(k);
+      if (ordered.includes(k)) return;
+      if (k === "bot_ad") {
+        const at = ordered.indexOf("pc_program");
+        if (at >= 0) {
+          ordered.splice(at + 1, 0, k);
+          return;
+        }
+      }
+      ordered.push(k);
     });
     return ordered;
   }
@@ -4262,6 +4295,7 @@
     if (!isFeatureLocked("mid_heart")) shopTabs.push(fromMeta("mid_heart"));
     if (!isFeatureLocked("report_multi")) shopTabs.push(fromMeta("report_multi"));
     if (!isFeatureLocked("pc_program")) shopTabs.push(fromMeta("pc_program"));
+    if (!isFeatureLocked("bot_ad")) shopTabs.push(fromMeta("bot_ad"));
     if (!isDevPlayConnected()) return shopTabs;
     const baseItems = [
       { tab: "jelly_upgrade", blurb: "อัปเกรดด้วยเหรียญในไอดี" },
@@ -4339,7 +4373,7 @@
 
   function featureDockGroupKey(item) {
     if (!item) return "farm";
-    if (item.tab === "idshop" || item.tab === "invite" || item.tab === "mid_heart" || item.tab === "report_multi" || item.tab === "pc_program") return "shop";
+    if (item.tab === "idshop" || item.tab === "invite" || item.tab === "mid_heart" || item.tab === "report_multi" || item.tab === "pc_program" || item.tab === "bot_ad") return "shop";
     if (item.family) return "risk";
     const tab = String(item.tab || "");
     for (const group of FEATURE_DOCK_GROUP_ORDER) {
@@ -5978,6 +6012,43 @@
     topbarTokenRaf = requestAnimationFrame(step);
   }
 
+  let botTokenShown = null;
+  let botTokenFetchedAt = 0;
+  let botTokenFlight = false;
+
+  function paintBotTokenPill(value) {
+    const pill = $("topbar-bot-token-pill");
+    const numEl = $("topbar-bot-token-value");
+    if (!pill) return;
+    const n = Number(value);
+    const show = !!accessToken && Number.isFinite(n);
+    pill.classList.toggle("hidden", !show);
+    pill.hidden = !show;
+    if (show) {
+      botTokenShown = n;
+      if (numEl) numEl.textContent = formatTokenAmount(n);
+    }
+  }
+
+  function refreshBotTokenPill(force) {
+    if (!accessToken) {
+      paintBotTokenPill(null);
+      return;
+    }
+    if (!force && Date.now() - botTokenFetchedAt < 20000) {
+      if (botTokenShown != null) paintBotTokenPill(botTokenShown);
+      return;
+    }
+    if (botTokenFlight) return;
+    botTokenFlight = true;
+    botTokenFetchedAt = Date.now();
+    api("/api/android/v1/shop", { _skipAuthSync: true }).then((data) => {
+      if (data && data.ok && data.bot_token_balance != null) paintBotTokenPill(data.bot_token_balance);
+    }).catch(() => {}).finally(() => {
+      botTokenFlight = false;
+    });
+  }
+
   function paintTokenBalance() {
     const n = formatTokenAmount(tokenBalance());
     if ($("menu-token-value")) $("menu-token-value").textContent = n;
@@ -5986,6 +6057,7 @@
       const show = !!accessToken;
       $("topbar-token-pill").classList.toggle("hidden", !show);
     }
+    refreshBotTokenPill(false);
     if ($("profile-modal-token-value")) $("profile-modal-token-value").innerHTML = topbarTokenHtml(tokenBalance());
     if (accessToken) {
       if ($("idshop-credit-label")) $("idshop-credit-label").textContent = n;
@@ -16046,6 +16118,7 @@
     mid_heart: "ฟาร์มใจ MID",
     report_multi: "รายงานไอดี (หลายบัญชี)",
     pc_program: "โปรแกรม PC",
+    bot_ad: "Bot-Ad",
     invite: "เชิญเพื่อน",
     invite_friend: "เชิญเพื่อน",
     upgrade: "ตีบวกสมบัติ",
@@ -20326,6 +20399,7 @@
       "mid_heart",
       "report_multi",
       "pc_program",
+      "bot_ad",
     ];
     if (tab === "dunk" || tab === "reroll" || tab === "account" || tab === "dstool") {
       tab = "devplay";
@@ -20352,7 +20426,7 @@
     }
     // Invite Friend + ID shop: no DevPlay / rental required
     // CRG Code is a reference page (per-user access) — no DevPlay needed.
-    if (next !== "devplay" && next !== "crgcode" && next !== "mid_heart" && next !== "report_multi" && next !== "pc_program" && !isLoginFreeFarmTab(next) && !isDevPlayConnected()) {
+    if (next !== "devplay" && next !== "crgcode" && next !== "mid_heart" && next !== "report_multi" && next !== "pc_program" && next !== "bot_ad" && !isLoginFreeFarmTab(next) && !isDevPlayConnected()) {
       if (devplayConnecting) return;
       if (!opts.silent) showDevPlayRequiredModal();
       next = "devplay";
@@ -20374,7 +20448,7 @@
         panel.classList.toggle("is-entering", active);
       }
     });
-    ["invite", "unlock_l", "ice_tower", "idshop", "idshop_orders", "mid_heart", "report_multi", "crgcode", "pc_program"].forEach((t) => {
+    ["invite", "unlock_l", "ice_tower", "idshop", "idshop_orders", "mid_heart", "report_multi", "crgcode", "pc_program", "bot_ad"].forEach((t) => {
       $("menu-nav-" + t)?.classList.toggle("is-active", farmTab === t);
     });
     $("sidebar-guide-btn")?.classList.toggle("is-active", farmTab === "guide");
@@ -20492,6 +20566,7 @@
     else window.CKRReportMulti?.onHide?.();
     if (farmTab === "pc_program") window.CKRPcProgram?.onShow?.();
     else window.CKRPcProgram?.onHide?.();
+    if (farmTab === "bot_ad") window.CKRBotAd?.onShow?.();
     if (farmTab === "live") window.CKRLivePage?.onShow?.();
     else window.CKRLivePage?.onHide?.();
     paintIdshopHeadWallet();
@@ -38373,7 +38448,7 @@
       closeNavDrawer();
       return;
     }
-    if (tab === "mid_heart" || tab === "report_multi" || tab === "pc_program") {
+    if (tab === "mid_heart" || tab === "report_multi" || tab === "pc_program" || tab === "bot_ad") {
       // Works without DevPlay (MID / pasted accounts do the work).
       switchFarmTab(tab);
       if (window.matchMedia("(max-width: 860px)").matches) setFarmSidebarOpen(false);
@@ -38484,6 +38559,8 @@
   $("menu-nav-mid_heart")?.addEventListener("click", () => onFarmTabClick("mid_heart"));
   $("menu-nav-report_multi")?.addEventListener("click", () => onFarmTabClick("report_multi"));
   $("menu-nav-pc_program")?.addEventListener("click", () => onFarmTabClick("pc_program"));
+  $("menu-nav-bot_ad")?.addEventListener("click", () => onFarmTabClick("bot_ad"));
+  $("topbar-bot-token-pill")?.addEventListener("click", () => onFarmTabClick("bot_ad"));
   $("farm-tab-invite")?.addEventListener("click", () => onFarmTabClick("invite"));
   $("farm-tab-jelly_upgrade")?.addEventListener("click", () => onFarmTabClick("jelly_upgrade"));
   $("farm-tab-cookie_unlock")?.addEventListener("click", () => onFarmTabClick("cookie_unlock"));
@@ -43337,6 +43414,10 @@
     isDevPlayConnected,
     devplaySessionId: () => (devplaySession && devplaySession.id) || "",
     loggedIn: () => !!accessToken,
+    setBotTokenBalance: (n) => {
+      botTokenFetchedAt = Date.now();
+      paintBotTokenPill(n);
+    },
     hasProfile: () => hasResolvedWebsiteProfile(),
     showErrorModal,
     showJobConfirmModal,
