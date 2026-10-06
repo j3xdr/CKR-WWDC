@@ -30,8 +30,8 @@
   <link rel="apple-touch-icon" href="assets/logo_180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20261006-bottour" />
-  <link rel="stylesheet" href="css/theme-basehub.css?v=20261006-bottour" />
+  <link rel="stylesheet" href="css/styles.css?v=20261006-badhero" />
+  <link rel="stylesheet" href="css/theme-basehub.css?v=20261006-badhero" />
   <script>
     (function () {
       var PALETTE = ["#3d348b", "#7678ed", "#f7b801", "#f18701", "#f35b04"];
@@ -5867,6 +5867,13 @@
             <strong id="profile-modal-token-value">0</strong>
             <span>Token</span>
           </div>
+          <div class="pf-wallet-token pf-wallet-bot" id="profile-modal-bot-row" hidden>
+            <img src="assets/token_bot.png" alt="" width="22" height="22" />
+            <strong id="profile-modal-bot-token-value">0</strong>
+            <span>Token Bot</span>
+          </div>
+          <p class="pf-wallet-bot-note" id="profile-modal-bot-note" hidden>ใช้ซื้อคีย์บอท Android ที่เมนู Bot-Ad · เติม Token แล้วได้แถมเท่ากัน</p>
+          <button type="button" class="btn-text pf-wallet-bot-go" id="profile-modal-bot-open" hidden>ไปร้าน Bot-Ad</button>
           <div class="pf-wallet-pack">
             <span class="user-profile-rental-badge is-permanent" id="profile-modal-rental-badge">—</span>
             <span class="pf-wallet-exp" id="profile-modal-rental-expiry">—</span>
@@ -6276,18 +6283,19 @@
   <script src="js/gift_item_labels.js?v=20260911-giftdraw-coin"></script>
   <script src="js/ckr_icon_index.js?v=20260917-db1"></script>
   <script src="js/ckr_images.js?v=20260922-img1"></script>
+  <script src="js/profile_portrait.js?v=20261006-profile"></script>
   <script src="js/ckr_wiki_data.js?v=20260917-wiki1"></script>
   <script src="js/ckr_wiki.js?v=20260925-mh1"></script>
   <script src="js/ckr_quest_data.js?v=20260917-quest2"></script>
   <script src="js/guide_data.js?v=20260923-guide1"></script>
-  <script src="js/app.js?v=20261006-bottour"></script>
+  <script src="js/app.js?v=20261006-profile"></script>
   <script src="js/live_page.js?v=20261002-fix3"></script>
   <script src="js/admin_jobs.js?v=20260924-crg1"></script>
   <script src="js/account_tools.js?v=20260929-sq1"></script>
   <script src="js/acct_report.js?v=20260925-rm1"></script>
   <script src="js/crgcode.js?v=20261002-audit1"></script>
-  <script src="js/pc_program.js?v=20261002-audit1"></script>
-  <script src="js/bot_ad.js?v=20261006-bottour"></script>
+  <script src="js/pc_program.js?v=20261006-badhero"></script>
+  <script src="js/bot_ad.js?v=20261006-center"></script>
   <script src="js/report_multi.js?v=20260927-gi1"></script>
   <script src="js/mid_heart.js?v=20261002-intake1"></script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ckrTurnstileReady&render=explicit" async defer></script>

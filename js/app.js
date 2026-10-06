@@ -4167,14 +4167,27 @@
     return raw + sep + "v=" + DEVPLAY_AVATAR_CACHE_TAG;
   }
 
+  function devPlayProfileKeyFromPayload(data) {
+    if (!data) return null;
+    const key = String(data.profile_image_key || data.profileImageKey || "").trim();
+    if (key && key !== "0") return key;
+    const seq = data.picture_stuff_seq != null ? data.picture_stuff_seq : data.pictureStuffSeq;
+    const seqText = seq == null ? "" : String(seq).trim();
+    if (seqText && seqText !== "0") return seqText;
+    return null;
+  }
+
   function profilePortraitFromKey(key) {
     const raw = String(key || "").trim();
-    if (!raw) return "";
+    if (!raw || raw === "0") return "";
     const override = DEVPLAY_AVATAR_URL_OVERRIDES[raw] || DEVPLAY_AVATAR_URL_OVERRIDES[raw.toLowerCase()];
     if (override) return String(override);
+    if (typeof ckrProfilePortraitUrl === "function") {
+      const mapped = ckrProfilePortraitUrl(raw);
+      if (mapped) return mapped;
+    }
     const low = raw.toLowerCase();
-    // Map profile thumbnail keys → local cookie/pet icons (Pages assets).
-    // Event keys (crc_event_profile_thumbnail_NNN) have no local map yet — Design URL list TBD.
+    // Thumbnail filename or picture stuff seq → local profile art.
     const cookie = low.match(/(?:^|_)(ch\d{2,3})(?:_|$|\.)/i);
     if (cookie) {
       const tag = cookie[1].toLowerCase();
@@ -4199,7 +4212,9 @@
   function resolveDevPlayAvatarUrl(session) {
     if (!session) return bustDevPlayAvatarUrl(DEVPLAY_AVATAR_FALLBACK);
     // Prefer the ID's chosen profile picture, not the cookie currently equipped.
-    const profileUrl = profilePortraitFromKey(session.profileImageKey);
+    const profileUrl =
+      profilePortraitFromKey(session.profileImageKey) ||
+      profilePortraitFromKey(session.pictureStuffSeq);
     if (profileUrl) return bustDevPlayAvatarUrl(profileUrl);
     const cookieUrl = devPlayCookiePortraitUrl(session.cookieName);
     if (cookieUrl) return bustDevPlayAvatarUrl(cookieUrl);
@@ -6035,6 +6050,17 @@
       botTokenShown = n;
       if (numEl) numEl.textContent = formatTokenAmount(n);
     }
+    const botRow = $("profile-modal-bot-row");
+    const botNote = $("profile-modal-bot-note");
+    const botGo = $("profile-modal-bot-open");
+    const botVal = $("profile-modal-bot-token-value");
+    if (botRow) {
+      botRow.hidden = !show;
+      botRow.classList.toggle("hidden", !show);
+    }
+    if (botNote) botNote.hidden = !show;
+    if (botGo) botGo.hidden = !show;
+    if (show && botVal) botVal.textContent = formatTokenAmount(n);
   }
 
   function refreshBotTokenPill(force) {
@@ -19474,6 +19500,94 @@
     } catch (_) {}
   }
 
+  let devplayPortraitRefreshFlight = null;
+
+  function vaultPortraitNeedsRefresh(entry, ch01Stale) {
+    const key = String(entry?.profileImageKey || "").trim();
+    if (!key || key === "0") return true;
+    if (!ch01Stale) return false;
+    // Saved default GingerBrave thumbnail — re-read the ID's real picture once.
+    return key === "3000001" || /(?:^|_)ch01(?:_|\.|$)/i.test(key);
+  }
+
+  async function refreshDevPlayVaultPortraits() {
+    if (devplayPortraitRefreshFlight) return devplayPortraitRefreshFlight;
+    if (!profile?.id || !accessToken || !devplayVaultEntries.length) return;
+    let tried = "";
+    try {
+      tried = sessionStorage.getItem("ckr-vault-portrait-try") || "";
+    } catch (_) {}
+    if (tried === "1") return;
+    try {
+      const failAt = Number(sessionStorage.getItem("ckr-vault-portrait-fail") || 0);
+      if (failAt && Date.now() - failAt < 10 * 60 * 1000) return;
+    } catch (_) {}
+    let ch01Stale = true;
+    try {
+      const at = Number(localStorage.getItem("ckr-vault-ch01-at") || 0);
+      ch01Stale = !at || Date.now() - at > 12 * 60 * 60 * 1000;
+    } catch (_) {}
+    const emails = devplayVaultEntries
+      .filter((entry) => vaultPortraitNeedsRefresh(entry, ch01Stale))
+      .map((entry) => String(entry?.email || "").trim())
+      .filter(Boolean)
+      .slice(0, 5);
+    if (!emails.length) return;
+    try {
+      sessionStorage.setItem("ckr-vault-portrait-try", "1");
+    } catch (_) {}
+    devplayPortraitRefreshFlight = (async () => {
+      try {
+        const data = await api("/api/devplay/vault/portraits", {
+          method: "POST",
+          body: { emails },
+          timeoutMs: 90000,
+        });
+        if (Number(data?.retry_after) > 0) {
+          try {
+            sessionStorage.removeItem("ckr-vault-portrait-try");
+          } catch (_) {}
+          return;
+        }
+        const rows = Array.isArray(data?.entries) ? data.entries : [];
+        if (!rows.length) {
+          try {
+            sessionStorage.removeItem("ckr-vault-portrait-try");
+            sessionStorage.setItem("ckr-vault-portrait-fail", String(Date.now()));
+          } catch (_) {}
+          return;
+        }
+        const byEmail = new Map(
+          rows.map((row) => [String(row.email || "").trim().toLowerCase(), row])
+        );
+        devplayVaultEntries = devplayVaultEntries.map((entry) => {
+          const hit = byEmail.get(String(entry?.email || "").trim().toLowerCase());
+          if (!hit || !hit.profileImageKey) return entry;
+          return Object.assign({}, entry, {
+            profileImageKey: hit.profileImageKey,
+            cookieName: hit.cookieName || entry.cookieName,
+            nickname: hit.nickname || entry.nickname,
+            pictureStuffSeq: hit.pictureStuffSeq != null ? hit.pictureStuffSeq : entry.pictureStuffSeq,
+          });
+        });
+        paintDevPlayAccountPicker();
+        persistLocalDevPlayVault(devplayVaultEntries).catch(() => {});
+        try {
+          localStorage.setItem("ckr-vault-ch01-at", String(Date.now()));
+          sessionStorage.removeItem("ckr-vault-portrait-fail");
+        } catch (_) {}
+      } catch (_) {
+        try {
+          sessionStorage.removeItem("ckr-vault-portrait-try");
+          sessionStorage.setItem("ckr-vault-portrait-fail", String(Date.now()));
+        } catch (__) {}
+      } finally {
+        devplayPortraitRefreshFlight = null;
+      }
+    })();
+    return devplayPortraitRefreshFlight;
+  }
+
   async function loadDevPlayVault() {
     if (!profile?.id || !accessToken) {
       devplayVaultEntries = [];
@@ -19510,6 +19624,7 @@
     } finally {
       devplayVaultLoading = false;
       paintDevPlayAccountPicker();
+      refreshDevPlayVaultPortraits().catch(() => {});
     }
   }
 
@@ -19590,6 +19705,7 @@
     return resolveDevPlayAvatarUrl({
       cookieName: entry?.cookieName,
       profileImageKey: entry?.profileImageKey,
+      pictureStuffSeq: entry?.pictureStuffSeq,
     });
   }
 
@@ -20582,7 +20698,7 @@
       giftBoxes: data.gift_boxes,
       key: data.key,
       pictureStuffSeq: data.picture_stuff_seq,
-      profileImageKey: data.profile_image_key || data.profileImageKey || null,
+      profileImageKey: devPlayProfileKeyFromPayload(data),
       cookieStuffSeq: data.cookie_stuff_seq,
       cookieName: data.cookie_name || data.cookieName || null,
       expiresAt: Date.now() + ttlMs,
@@ -20797,7 +20913,7 @@
       await upsertDevPlayVaultEntry(creds, {
         nickname: data.nickname,
         cookieName: data.cookie_name,
-        profileImageKey: data.profile_image_key,
+        profileImageKey: devPlayProfileKeyFromPayload(data),
         mid: data.mid || data.member_id || null,
       });
       paintInviteDevPlayHelpers();
@@ -37483,6 +37599,10 @@
   $("profile-modal-topup-trigger")?.addEventListener("click", () => {
     closeUserProfileModal();
     openVaultModal({ kind: "token" });
+  });
+  $("profile-modal-bot-open")?.addEventListener("click", () => {
+    closeUserProfileModal();
+    onFarmTabClick("bot_ad");
   });
   $("profile-tg-test-btn")?.addEventListener("click", () => {
     testProfileTelegram().catch(() => {});

@@ -45,18 +45,9 @@ button:focus-visible{outline:2px solid var(--vio);outline-offset:2px}
 
 /* ---------- scene ---------- */
 .scene{max-width:1080px;margin:0 auto;position:relative;perspective:1600px}
-.game{position:relative;border-radius:22px;overflow:hidden;border:1px solid #ffffff14;aspect-ratio:16/9;max-height:620px;width:100%;
-  background:linear-gradient(180deg,#3b2b6e 0%,#5a3c7a 38%,#c9744f 72%,#6b3a22 100%)}
-.game:before{content:"";position:absolute;inset:auto 0 0;height:22%;background:repeating-linear-gradient(90deg,#8a5a2e 0 60px,#7a4e27 60px 120px);border-top:6px solid #b07a3c}
-.game:after{content:"";position:absolute;inset:0;background:radial-gradient(500px 220px at 30% 25%,#ffffff22,transparent 70%);pointer-events:none}
-.gdot{position:absolute;right:2.5%;top:5%;z-index:6;flex-direction:row-reverse;display:flex;align-items:center;gap:10px}
-.gdot .ring{width:62px;height:62px;border-radius:18px;padding:5px;background:#190545;box-shadow:0 0 0 3px var(--dc,var(--grn)),0 0 22px var(--dc,var(--grn))}
-.gdot .ring div{width:100%;height:100%;border-radius:13px;background:radial-gradient(circle at 50% 40%,#ffd27a,#c9742a 60%,#7a3410);display:grid;place-items:center;font-family:var(--display);font-weight:700;font-size:13px;color:#3a1600}
-.gpill{display:flex;align-items:center;gap:8px;background:#241058f2;border:1px solid #ffffff22;border-radius:14px;padding:7px 12px;white-space:nowrap}
-.gpill i{width:9px;height:9px;border-radius:50%;background:var(--dc,var(--grn))}
-.gpill b{display:block;font-size:12.5px}.gpill span{font-size:11px;color:#c9b8ff}
-
-.fit{position:absolute;left:3%;top:55%;transform-origin:left center;z-index:4}
+.game{position:relative;border-radius:22px;overflow:hidden;border:1px solid #ffffff14;aspect-ratio:16/9;max-height:620px;width:100%;pointer-events:none;
+  background:radial-gradient(circle at 50% 46%,#fff6c4 0%,#ffd35a 18%,#e39a22 42%,#6e3410 68%,#140806 100%)}
+.fit{position:absolute;left:50%;top:50%;transform-origin:center center;z-index:4}
 .panel{width:640px;border-radius:24px;padding:14px;background:linear-gradient(135deg,var(--p-hi),var(--p-mid),var(--p-lo));border:1px solid #b9a6ff33;
   box-shadow:0 30px 60px -20px #000c,0 0 0 1px #00000040;transform:rotateX(5deg) rotateY(9deg);transition:transform .5s cubic-bezier(.2,.8,.2,1)}
 .scene:hover .panel{transform:rotateX(2deg) rotateY(3deg)}
@@ -132,7 +123,8 @@ button:focus-visible{outline:2px solid var(--vio);outline-offset:2px}
 
 /* highlight + tooltip */
 [data-tip]{position:relative}
-.hl{outline:2px solid var(--yel);outline-offset:2px;box-shadow:0 0 0 6px #ffe47d33,0 0 24px #ffe47d55 !important;border-radius:12px;animation:hp 1.4s ease-in-out infinite}
+.hl{position:relative;z-index:4}
+.hl::after{content:"";position:absolute;inset:1px;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 0 2px var(--yel);animation:hp 1.4s ease-in-out infinite}
 .tip{position:fixed;z-index:50;max-width:300px;padding:11px 13px;border-radius:14px;background:#1d1446f5;border:1px solid #ae94ff55;box-shadow:0 16px 40px -10px #000;
   pointer-events:none;opacity:0;transform:translateY(4px);transition:opacity .12s,transform .12s}
 .tip.show{opacity:1;transform:none}
@@ -156,7 +148,7 @@ button:focus-visible{outline:2px solid var(--vio);outline-offset:2px}
 
 @keyframes sp{to{transform:rotate(360deg)}}
 @keyframes br{0%,100%{opacity:.5;transform:scale(.92)}50%{opacity:1;transform:scale(1.04)}}
-@keyframes hp{0%,100%{box-shadow:0 0 0 4px #ffe47d22,0 0 16px #ffe47d44}50%{box-shadow:0 0 0 8px #ffe47d33,0 0 28px #ffe47d77}}
+@keyframes hp{0%,100%{opacity:.55}50%{opacity:1}}
 @media (prefers-reduced-motion:reduce){.orb .arc,.glow,.hl{animation:none}.panel{transition:none}}
 @media (max-width:640px){.bar .t{font-size:13.5px}.dots{display:none}.auto span{display:none}}
 body.embed{padding:6px 4px 12px;background:transparent}
@@ -201,9 +193,8 @@ body.embed{padding:6px 4px 12px;background:transparent}
 </div>
 
 <div class="scene" id="scene">
-  <div class="game" id="game">
-    <div class="gdot" data-tip="dot"><div class="gpill" id="gpill"><i></i><div><b id="gpT">พร้อมใช้งาน</b><span id="gpS">แตะโลโก้ แล้วกด เริ่มฟาร์ม</span></div></div><div class="ring"><div>WWDC</div></div></div>
-    <div class="fit" id="fit">
+  <div class="game" id="game"></div>
+  <div class="fit" id="fit">
       <div class="panel" id="panel">
         <div class="top">
           <span class="brand" data-tip="brand">crgwwdc.shop</span>
@@ -239,7 +230,6 @@ body.embed{padding:6px 4px 12px;background:transparent}
         </div>
         <div class="conf" id="conf" hidden><div><div class="bx"><svg width="22" height="22"><use href="#close"/></svg></div><h3>ออกจาก WWDC BOT?</h3><p id="confP">แผงลอยจะปิด ต้องเปิดแอปใหม่เพื่อใช้งานอีกครั้ง</p><div class="b"><button class="c1" id="confNo">ยกเลิก</button><button class="c2" id="confYes">ออก</button></div></div></div>
       </div>
-    </div>
   </div>
 </div>
 
@@ -380,8 +370,8 @@ function render(keepScroll){var pg=$("page"),y=keepScroll?pg.scrollTop:0;
 /* window height follows the tab's content, between ~16:10 and 4:3 of the 640px width (like 0.0.7) */
 function fitHeight(){var pg=$("page");pg.style.height="auto";var need=pg.scrollHeight;var min=Math.round(640/1.62)-108,max=Math.round(640/(4/3))-108;
  pg.style.setProperty("--ph",Math.max(min,Math.min(max,need))+"px");pg.style.height="";scale();}
-function scale(){var g=$("game"),f=$("fit"),p=$("panel");var gw=g.clientWidth,gh=g.clientHeight;var k=Math.min((gw*0.78)/640,(gh*0.92)/p.offsetHeight,1.15);
- f.style.transform="translateY(-50%) scale("+k.toFixed(3)+")";}
+function scale(){var g=$("game"),f=$("fit"),p=$("panel");var gw=g.clientWidth,gh=g.clientHeight;var k=Math.min((gw*0.9)/640,(gh*0.9)/p.offsetHeight,1.15);
+ f.style.transform="translate(-50%,-50%) scale("+k.toFixed(3)+")";}
 
 /* engine-like status */
 function paintState(){var st=S.state,C={ready:["var(--grn)","พร้อมใช้งาน"],prep:["var(--yel)","กำลังเตรียม"],farm:["var(--vio)","กำลังฟาร์ม · รอบ "+Math.max(1,S.round)],job:["var(--org)","งานเสริมกำลังทำ"]};
@@ -398,7 +388,7 @@ function paintState(){var st=S.state,C={ready:["var(--grn)","พร้อมใ�
  else{K(0,"รอบ",FMT.loops(S.loops));K(1,"ออกด่าน",["ครบ "+S.box+" กล่อง","ครบ "+S.secs+" วิ","เล่นจนจบ"][S.exit]);K(2,"ระหว่างวิ่ง",S.jq?"กำหนด "+S.jqCount+" ครั้ง":S.afk?"ไม่กระโดด":"สุ่มกระโดด");}
  var nb=S.pb.filter(Boolean).length+(S.mb?Object.keys(S.mbSel).filter(function(k){return S.mbSel[k]}).length:0)+(S.up?1:0);K(3,"บูสต์",nb?nb+" อย่าง":"ไม่ใช้");
  $("foot").textContent=st==="farm"?"สถานะ INGAME · เห็นปุ่ม Pause":st==="job"?"กำลังทำงานเสริม":"พร้อมแล้ว — กด ▶ ในแผงเพื่อเริ่ม";
- var dc=c[0];$("game").style.setProperty("--dc",dc);$("gpT").textContent=st==="farm"?"รอบ "+Math.max(1,S.round)+" · "+tm:c[1];$("gpS").textContent=st==="farm"?"วิ่งด่าน · เก็บเหรียญ":st==="job"?"กำลังทำงานเสริม":"แตะโลโก้ แล้วกด เริ่มฟาร์ม";}
+ var dc=c[0];$("scene").style.setProperty("--dc",dc);}
 function K(i,k,v){$("k"+i).textContent=k;$("v"+i).textContent=v}
 
 /* ------------------------------------------------------------------ interactions */
@@ -441,8 +431,7 @@ var STEPS=[
  {t:"วิ่งผลัดไม้2",tab:1,sel:'[data-tip="rl"]',p:"ให้บอทกดวิ่งผลัดไม้2 ต่อชีวิต ตั้งเวลารอ ซื้อทุกรอบ และเลือกว่าจะออกด่านหลังใช้เมื่อไหร่ เมนูย่อยมีพื้นสีเข้มกว่าเมนูหลักให้แยกง่าย"},
  {t:"งานครั้งเดียว",tab:2,sel:'[data-tip="jGift"]',p:"เปิดของขวัญ รับ/ส่งหัวใจ แอดเพื่อน รับภารกิจ ลบเพื่อน กดปุ่มเขียวในแถวเพื่อเริ่ม กลายเป็นปุ่มแดงไว้กดหยุด"},
  {t:"งานสมบัติ",tab:2,sel:'[data-tip="trJob"]',p:"สุ่มสมบัติแล้วบดของไม่ใช้ หรือไล่อัพเกรดจน +9 ใช้แต่เหรียญ ไม่แตะเพชรและตั๋ว"},
- {t:"เทมเพลต",tab:3,sel:'[data-tip="tpl"]',p:"บันทึกการตั้งค่าทั้งหมดขึ้นเซิร์ฟเวอร์ ค้นหาเทมเพลตด้วยเลข # หรือชื่อ แล้วหยิบของคนอื่นมาใช้ได้ทันที"},
- {t:"จุดลอยบนจอเกม",tab:0,sel:".gdot",p:"ย่อแผงแล้วเหลือจุดลอยเล็ก ๆ ขอบเรืองแสงตามสถานะ พร้อมป้ายบอกรอบและเวลา บอททำงานต่อโดยไม่บังจอเกม"}
+ {t:"เทมเพลต",tab:3,sel:'[data-tip="tpl"]',p:"บันทึกการตั้งค่าทั้งหมดขึ้นเซิร์ฟเวอร์ ค้นหาเทมเพลตด้วยเลข # หรือชื่อ แล้วหยิบของคนอื่นมาใช้ได้ทันที"}
 ];
 var step=0,auto=null;
 function go(i){step=(i+STEPS.length)%STEPS.length;var s=STEPS[step];

@@ -114,16 +114,23 @@
     var box = document.getElementById("bad-modal");
     if (box) box.hidden = true;
   }
+  function hero(side) {
+    return '<section class="pcp-hero bad-hero"><div class="pcp-hero-text"><div class="pcp-head">' +
+      '<img src="' + IMG + '" alt="" width="46" height="46" /><div><h2>Bot-Ad</h2>' +
+      "<p>ร้านคีย์บอท Android · ใช้ Token Bot ไม่ใช้ DevPlay</p></div></div>" +
+      '<ul class="pcp-hero-points"><li>ได้คีย์ทันทีหลังยืนยัน</li><li>ต่ออายุและย้ายเครื่องได้</li><li>แถมเมื่อเติม Token</li></ul></div>' +
+      side + "</section>";
+  }
   function render() {
     var el = root();
     if (!el) return;
     var shop = st.shop;
     var logged = typeof T().loggedIn === "function" && T().loggedIn();
     if (!logged || !shop || shop.reason === "login_required") {
-      el.innerHTML =
-        '<div class="pcp-card bad-head"><img src="' + IMG + '" alt="" width="42" height="42" />' +
-        "<div><b>Bot-Ad</b><p class=\"bad-note\">ร้านคีย์บอท Android · ใช้ Token Bot ไม่ใช้ DevPlay</p></div></div>" +
-        '<div class="pcp-card"><button type="button" class="btn btn-candy" data-bad="login">เข้าสู่ระบบ</button></div>';
+      el.innerHTML = hero(
+        '<div class="bad-hero-side"><button type="button" class="btn btn-candy" data-bad="login">เข้าสู่ระบบ</button>' +
+        "<small>เข้าแล้วถึงจะเห็นคีย์และยอด Token Bot</small></div>"
+      );
       return;
     }
     var bal = Number(shop.bot_token_balance) || 0;
@@ -137,9 +144,11 @@
         '<p class="bad-note">คัดลอกแล้วไปกรอกในแอป WWDC BOT</p>' +
         '<button type="button" class="btn btn-candy" data-bad="copy">คัดลอกคีย์</button></div>';
     }
-    html += '<div class="pcp-card bad-head"><img src="' + IMG + '" alt="" width="42" height="42" />' +
-      "<div><b>Bot-Ad</b><p class=\"bad-note\">ร้านคีย์บอท Android</p></div>" +
-      '<div class="bad-bal"><b>' + num(bal) + "</b><span>Token Bot</span></div></div>";
+    html += hero(
+      '<div class="bad-hero-side"><img src="' + IMG + '" alt="" width="56" height="56" />' +
+      "<b>" + num(bal) + "</b><span>Token Bot</span>" +
+      "<small>ใช้ซื้อ ต่ออายุ และเพิ่มจอในหน้านี้</small></div>"
+    );
     html += '<div class="pcp-card bad-note">Token Bot ได้เป็นของแถมฟรีเมื่อเติม Token ปกติ (เติม 300 ได้ Token Bot 300) ใช้ซื้อและต่ออายุคีย์บอทได้ที่หน้านี้เท่านั้น</div>';
     html += '<div class="pcp-card" id="bad-packs"><b>เลือกแพ็ก</b><div class="bad-packs">';
     packs.forEach(function (p) {
@@ -314,7 +323,7 @@
     var frame = document.getElementById("bot-tour-frame");
     if (!wrap || !frame) return;
     wrap.hidden = false;
-    if (!frame.getAttribute("src")) frame.setAttribute("src", "/bot-tour?v=1");
+    if (!frame.getAttribute("src")) frame.setAttribute("src", "/bot-tour?v=3");
   }
 
   function onShow() {
