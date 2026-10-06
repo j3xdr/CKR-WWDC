@@ -1,6 +1,6 @@
 /* Bot-Ad — Android bot key shop. Frontend only. */
 (function () {
-  var IMG = "https://api.crgwwdc.shop/android-updates/shop/token_bot.png";
+  var IMG = "assets/token_bot.png";
   var REASONS = {
     insufficient_bot_tokens: "Token Bot ไม่พอ",
     has_keys_use_renew: "มีคีย์อยู่แล้ว ใช้ต่ออายุแทนการออกคีย์ใหม่",
@@ -141,13 +141,16 @@
       "<div><b>Bot-Ad</b><p class=\"bad-note\">ร้านคีย์บอท Android</p></div>" +
       '<div class="bad-bal"><b>' + num(bal) + "</b><span>Token Bot</span></div></div>";
     html += '<div class="pcp-card bad-note">Token Bot ได้เป็นของแถมฟรีเมื่อเติม Token ปกติ (เติม 300 ได้ Token Bot 300) ใช้ซื้อและต่ออายุคีย์บอทได้ที่หน้านี้เท่านั้น</div>';
-    html += '<div class="pcp-card"><b>เลือกแพ็ก</b><div class="bad-packs">';
+    html += '<div class="pcp-card" id="bad-packs"><b>เลือกแพ็ก</b><div class="bad-packs">';
     packs.forEach(function (p) {
-      var pic = p.image_url ? esc(p.image_url) : "assets/bot_ad.svg";
+      var days = p.days ? esc(p.days) + " วัน" : "";
+      var cover = p.image_url
+        ? '<img src="' + esc(p.image_url) + '" alt="" />'
+        : "<span>" + (days || "แพ็ก") + "</span>";
       html += '<button type="button" class="bad-pack' + (p.id === st.packId ? " is-on" : "") + '" data-bad="pack" data-id="' + esc(p.id) + '">' +
-        '<img src="' + pic + '" alt="" width="36" height="36" />' +
+        '<span class="bad-cover">' + cover + "</span>" +
         "<b>" + esc(p.label || p.name || p.id) + "</b>" +
-        "<span>" + (p.days ? esc(p.days) + " วัน · " : "") + num(p.price) + " Token Bot</span></button>";
+        '<span class="bad-pack-meta">' + (days ? days + " · " : "") + num(p.price) + " Token Bot</span></button>";
     });
     html += "</div>";
     if (!shop.has_keys) {
@@ -306,10 +309,31 @@
     if (logged && !st.shop && !st.busy) load();
   }, 1500);
 
+  function showTour() {
+    var wrap = document.getElementById("bot-tour-wrap");
+    var frame = document.getElementById("bot-tour-frame");
+    if (!wrap || !frame) return;
+    wrap.hidden = false;
+    if (!frame.getAttribute("src")) frame.setAttribute("src", "/bot-tour?v=1");
+  }
+
   function onShow() {
     if (!st.timer) st.timer = setInterval(tick, 1000);
+    showTour();
     load();
   }
+
+  window.addEventListener("message", function (ev) {
+    if (ev.origin !== location.origin || !ev.data) return;
+    var frame = document.getElementById("bot-tour-frame");
+    if (ev.data.type === "bot-tour-height" && frame && Number(ev.data.h) > 200) {
+      frame.style.height = Math.ceil(Number(ev.data.h)) + "px";
+    }
+    if (ev.data.type === "bot-tour-buy") {
+      var packs = document.getElementById("bad-packs") || root();
+      if (packs) packs.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  });
 
   window.CKRBotAd = { onShow: onShow };
 

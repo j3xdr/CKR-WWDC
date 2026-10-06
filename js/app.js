@@ -1064,7 +1064,7 @@
     },
     pc_program: {
       title: "โปรแกรม PC",
-      hint: "ซื้อ License โปรแกรม CRG CmiYC · Key ออกอัตโนมัติ",
+      hint: "ซื้อ License โปรแกรม CRGWWDC.SHOP · Key ออกอัตโนมัติ",
       blurb: "ซื้อโปรแกรม PC · สแกนจ่าย ได้ Key ทันที",
       icon: "pc_program.svg",
     },
@@ -1656,14 +1656,6 @@
   let ticketCount = 1;
   let ticketMax = 1;
   let farmTab = "devplay";
-  // ฟังก์ชันที่รองรับ/ทดสอบบนเกมเวอร์ชัน 26.9.02 แล้ว (แสดง badge ต่อจาก panel-title)
-  const VER_2692_FEATURES = new Set([
-    "heart", "heart_free", "mid_heart", "partyrun", "afterplay_fast",
-    "invite", "powder", "friend", "unlock_l", "upgrade", "jelly_upgrade",
-    "cookie_unlock", "pet_unlock", "lv_free_power", "lv_free_cookie",
-    "quest_claim", "treasure_evo", "giftdraw", "daily_reward", "boost_buy",
-    "treasure_ticket", "ingredient_extract", "treasure_break",
-  ]);
   const FARM_ROUTE_BY_PATH = {
     "/": { tab: "devplay" },
     "/heart": { tab: "heart" },
@@ -1992,7 +1984,7 @@
   const POWDER_YIELD_ESTIMATE = 8;
   const POWDER_BREAK_FALLBACK = 15;
   // Fallback until /api/health or powder/plan loads; admin can raise via app_settings.
-  const POWDER_MAX_FALLBACK = 5000;
+  const POWDER_MAX_FALLBACK = 50000;
   let powderMax = POWDER_MAX_FALLBACK;
   const POWDER_ESTIMATE_DISCLAIMER =
     "ผลลัพธ์จริงอาจได้ผงน้อยกว่าหรือมากกว่าที่แสดง เพราะแต่ละกล่องสุ่มสมบัติเกรด B (15 ผง) หรือ C (5 ผง) — ค่าที่แสดงคือค่าเฉลี่ยประมาณ " +
@@ -2213,6 +2205,7 @@
         "เมื่อสร้างสำเร็จ กด 「แชร์ลิงก์」 หรือคัดลอกลิงก์ แล้วนำไปวางในช่องต่ออายุ",
     },
   ];
+  let walletTutorialStep = 0;
   let lastGate = null;
   let featureLocks = {
     partyrun: false,
@@ -2390,6 +2383,7 @@
     voucher_already_used: "ซองนี้ถูกใช้เติมไปแล้ว",
     slip_already_used: "สลิปนี้ถูกใช้เติมไปแล้ว",
     slip_seen_not_credited: "สลิปนี้เคยส่งแล้ว แต่ระบบยังไม่เติมเงิน — ส่งรูปจากแอปธนาคารอีกครั้ง หรือติดต่อแอดมิน",
+    slip_service_unavailable: "ระบบตรวจสลิปขัดข้องชั่วคราว — เงินที่โอนแล้วไม่หาย กรุณาเก็บสลิปไว้แล้วส่งใหม่ภายหลัง หรือติดต่อแอดมิน",
     slip_amount_mismatch: "ยอดในสลิปไม่ตรงกับแพ็กที่เลือก",
     slip_receiver_mismatch: "สลิปโอนมาถูกยอด แต่บัญชีผู้รับไม่ตรงกับร้าน — ลองใหม่หรือติดต่อแอดมิน",
     slip_topup_disabled: "ช่องทางโอนเงินปิดชั่วคราว — ลองใหม่ภายหลัง",
@@ -2461,11 +2455,9 @@
     quest_list_failed: "ดึงรายการเควสจากไอดีไม่สำเร็จ",
     nothing_quest_selected: "เลือกเควสที่รับได้ก่อน",
     nothing_evo_selected: "เลือกสมบัติที่จะ Evo ก่อน",
-    treasure_not_found: "ไม่พบสมบัติในคลังสำหรับสูตรนี้",
     evo_failed: "EVO สมบัติไม่สำเร็จ",
     evo_missed: "EVO ไม่ผ่านครบจำนวนครั้งที่กำหนด",
     craft_failed: "Craft วัตถุดิบไม่สำเร็จ",
-    incomplete_powder: "ฟาร์มผงไม่ครบสำหรับ Craft",
     powder_price_unknown: "วัตถุดิบนี้ยังไม่มีราคา Craft จากผง",
     recipe_not_found: "ไม่พบสูตร Evo",
     scan_failed: "สแกนสมบัติไม่สำเร็จ",
@@ -2668,6 +2660,17 @@
       return HUNT_REASON_TH.proxy_drop;
     }
     return thError(r) || r;
+  }
+
+  // EVO / Craft jobs share these codes with ฟาร์มผง & ตีบวก — use the Craft wording only there.
+  const ERR_TH_EVO = {
+    incomplete_powder: "ฟาร์มผงไม่ครบสำหรับ Craft",
+    treasure_not_found: "ไม่พบสมบัติในคลังสำหรับสูตรนี้",
+  };
+
+  function evoErrorText(raw, fallback) {
+    const code = String(raw || "").split(";")[0].trim();
+    return ERR_TH_EVO[code] || null;
   }
 
   function thError(raw) {
@@ -3885,7 +3888,7 @@
     });
   }
 
-  const FEATURE_ICON_VER = "20260921a3";
+  const FEATURE_ICON_VER = "20261002a";
 
   function featureIconSrc(icon) {
     const raw = String(icon || "").trim();
@@ -5562,6 +5565,10 @@
     paintTokenBalance();
     renderTokenPacks();
     paintTokenPreview();
+    // Badges / hints (free mode, heart free quota) are baked at build time —
+    // rebuild the pricing page whenever fresh rates arrive.
+    const pricingRoot = $("pricing-page");
+    if (pricingRoot) pricingRoot.dataset.built = "";
     if (farmTab === "pricing") renderPricingPage();
   }
 
@@ -9792,6 +9799,255 @@
     });
   }
 
+  // ---- /orders: redesigned list + ID-shop perk (free ชุดพลังฟรี) ----
+  let idshopOrdersQuery = "";
+
+  function idshopOrderDate(iso) {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+    } catch (_) {
+      return String(iso);
+    }
+  }
+
+  function renderIdshopOrders() {
+    const root = $("idshop-orders-list");
+    if (!root) return;
+    const rows = idshopOrderRows || [];
+    const q = idshopOrdersQuery.trim().toLowerCase();
+    const shown = rows
+      .map((row, idx) => ({ row, idx }))
+      .filter(({ row }) => !q || (idshopCode(row) + " " + (row.email || "")).toLowerCase().includes(q));
+    const spent = rows.reduce((n, r) => n + (Number(r.price_baht) || 0), 0);
+    const perks = rows.filter((r) => r.perk_lv_free_power).length;
+    const head =
+      '<div class="io-summary">' +
+      '<div class="io-tile"><b>' + formatNumTh(rows.length) + "</b><small>ไอดีที่ซื้อ</small></div>" +
+      '<div class="io-tile"><b>฿' + formatNumTh(spent) + "</b><small>ยอดรวม</small></div>" +
+      '<div class="io-tile is-perk"><b>' + formatNumTh(perks) + "</b><small>ใช้ชุดพลังฟรีได้</small></div>" +
+      "</div>" +
+      '<label class="io-search"><input type="search" id="idshop-orders-q" placeholder="ค้นหารหัสสินค้า หรืออีเมล" value="' +
+      escapeHtml(idshopOrdersQuery) +
+      '" /></label>';
+    const cards = shown.length
+      ? shown
+          .map(({ row, idx }) => {
+            const snap = row.snapshot || {};
+            const saved =
+              row.list_price_baht && Number(row.list_price_baht) > Number(row.price_baht)
+                ? '<span class="io-was">฿' + escapeHtml(formatNumTh(row.list_price_baht)) + "</span>"
+                : "";
+            return (
+              '<article class="idshop-order io-card' + (row.perk_lv_free_power ? " has-perk" : "") + '">' +
+              '<header class="io-head"><div><p class="io-code">' + escapeHtml(idshopCode(row)) + "</p>" +
+              '<p class="io-date">' + escapeHtml(idshopOrderDate(row.created_at)) +
+              (row.coupon_code ? " · คูปอง " + escapeHtml(row.coupon_code) : "") + "</p></div>" +
+              '<p class="io-price">' + saved + "฿" + escapeHtml(formatNumTh(row.price_baht || 0)) + "</p></header>" +
+              (row.perk_lv_free_power ? '<p class="io-perk">🎁 ไอดีนี้ใช้ <b>ชุดพลังฟรี</b> ได้ฟรี (เฉพาะไอดีนี้)</p>' : "") +
+              idshopFaces(snap) +
+              '<div class="io-creds">' +
+              '<div class="io-cred"><span>อีเมล</span><code>' + escapeHtml(row.email || "—") + "</code>" +
+              '<button type="button" class="btn btn-ghost btn-sm" data-copy="' + escapeHtml(row.email || "") + '">คัดลอก</button></div>' +
+              '<div class="io-cred"><span>รหัสผ่าน</span><code class="io-pass" data-io-pass="' + idx + '">••••••••</code>' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-io-show="' + idx + '">แสดง</button>' +
+              '<button type="button" class="btn btn-ghost btn-sm" data-copy="' + escapeHtml(row.password || "") + '">คัดลอก</button></div>' +
+              "</div>" +
+              '<div class="io-actions">' +
+              (row.perk_lv_free_power
+                ? '<button type="button" class="btn btn-candy btn-sm" data-io-perk="' + idx + '">⚡ ใช้ชุดพลังฟรี</button>'
+                : "") +
+              (row.email && row.password
+                ? '<button type="button" class="btn btn-ghost btn-sm idshop-order-devplay" data-idshop-order-devplay="' + idx + '">' +
+                  '<img src="assets/devplay.png" alt="" width="16" height="16" onerror="this.remove()" /> เชื่อม DevPlay ด้วยไอดีนี้</button>'
+                : "") +
+              "</div></article>"
+            );
+          })
+          .join("")
+      : '<p class="muted">ไม่พบออเดอร์ที่ตรงกับคำค้น</p>';
+    root.innerHTML = head + '<div class="io-list">' + cards + "</div>";
+    const qInput = $("idshop-orders-q");
+    if (qInput) {
+      qInput.addEventListener("input", () => {
+        idshopOrdersQuery = qInput.value;
+        const pos = qInput.selectionStart;
+        renderIdshopOrders();
+        const again = $("idshop-orders-q");
+        if (again) {
+          again.focus();
+          try {
+            again.setSelectionRange(pos, pos);
+          } catch (_) {}
+        }
+      });
+    }
+  }
+
+  // Popup: pick ชุดพลัง levels for the bought ID and start the free job.
+  const ORDER_LVFP_NAMES = { A1: "HP", A2: "Jelly", A3: "Bonus" };
+  let orderPerk = null; // { idx, order, scan, targets, selected, password, busy }
+
+  function orderPerkBodyHtml() {
+    const st = orderPerk;
+    if (!st) return "";
+    const code = escapeHtml(idshopCode(st.order));
+    if (st.loading) {
+      return '<div class="op-modal"><p class="op-lead">ไอดี <b>' + code + "</b></p><p class=\"muted\">⏳ กำลังเข้าไอดีและอ่านเลเวลชุดพลัง… (ไม่เกิน 1 นาที)</p></div>";
+    }
+    if (st.error) {
+      return (
+        '<div class="op-modal"><p class="op-lead">ไอดี <b>' + code + "</b></p>" +
+        '<p class="op-err">' + escapeHtml(st.error) + "</p>" +
+        (st.needPassword
+          ? '<label class="op-pass">รหัสผ่านใหม่ของไอดีนี้<input type="password" id="op-password" autocomplete="off" placeholder="ถ้าเปลี่ยนรหัสหลังซื้อ ใส่รหัสใหม่" /></label>'
+          : "") +
+        "</div>"
+      );
+    }
+    const rows = (st.scan?.rows || []).filter((r) => r && r.type);
+    const items = rows
+      .map((r) => {
+        const cur = Number(r.current) || 1;
+        const max = Number(r.max) || cur;
+        const can = r.upgradeable !== false && max > cur;
+        const want = Math.max(cur, Math.min(max, Number(st.targets[r.type]) || max));
+        const on = can && st.selected.has(r.type);
+        const opts = [];
+        for (let lv = cur + 1; lv <= max; lv += 1) opts.push('<option value="' + lv + '"' + (lv === want ? " selected" : "") + ">Lv." + lv + "</option>");
+        return (
+          '<label class="op-row' + (on ? " is-on" : "") + (can ? "" : " is-max") + '">' +
+          '<input type="checkbox" data-op-type="' + escapeHtml(r.type) + '"' + (on ? " checked" : "") + (can ? "" : " disabled") + " />" +
+          '<img src="' + escapeHtml(lvfpImageUrl(r.type, cur)) + '" alt="" width="40" height="40" />' +
+          '<span class="op-name"><b>' + escapeHtml(ORDER_LVFP_NAMES[r.type] || r.type) + "</b><small>ตอนนี้ Lv." + cur + " · สูงสุด Lv." + max + "</small></span>" +
+          (can
+            ? '<select data-op-target="' + escapeHtml(r.type) + '"' + (on ? "" : " disabled") + ">" + opts.join("") + "</select>"
+            : '<span class="op-max">สูงสุดแล้ว</span>') +
+          "</label>"
+        );
+      })
+      .join("");
+    const any = rows.some((r) => st.selected.has(r.type) && Number(r.max) > Number(r.current));
+    return (
+      '<div class="op-modal"><p class="op-lead">ไอดี <b>' + code + "</b> · <span class=\"op-free\">ฟรี ไม่หัก Token</span></p>" +
+      (items || '<p class="muted">ไม่พบชุดพลังในไอดีนี้</p>') +
+      (any ? "" : '<p class="muted">เลือกอย่างน้อย 1 ชุดที่ยังอัปได้</p>') +
+      '<p class="op-note">ใช้ได้เฉพาะไอดีที่ซื้อนี้เท่านั้น · ระบบจะอัปเฉพาะขั้นที่ร้านในเกมตั้งราคา 0 เหรียญ · ดูความคืบหน้าที่แท็บ Live</p>' +
+      "</div>"
+    );
+  }
+
+  function paintOrderPerkModal() {
+    if (!orderPerk) return;
+    modalBody.innerHTML = orderPerkBodyHtml();
+    clearModalActions();
+    const st = orderPerk;
+    if (st.error && st.needPassword) {
+      modalActions.appendChild(
+        makeBtn("ลองใหม่ด้วยรหัสนี้", "btn-candy", () => {
+          st.password = ($("op-password")?.value || "").trim();
+          scanOrderPerk();
+        })
+      );
+    } else if (!st.loading && !st.error) {
+      const ready = (st.scan?.rows || []).some((r) => st.selected.has(r.type) && Number(r.max) > Number(r.current));
+      const go = makeBtn(st.busy ? "กำลังเริ่ม…" : "⚡ เริ่มอัปชุดพลัง (ฟรี)", "btn-candy", () => startOrderPerk());
+      go.disabled = !ready || !!st.busy;
+      modalActions.appendChild(go);
+    }
+    modalActions.appendChild(makeBtn("ปิด", "btn-ghost", () => {
+      orderPerk = null;
+      forceCloseModal();
+    }));
+  }
+
+  async function scanOrderPerk() {
+    const st = orderPerk;
+    if (!st) return;
+    st.loading = true;
+    st.error = "";
+    paintOrderPerkModal();
+    try {
+      const data = await api("/api/idshop/orders/" + encodeURIComponent(st.order.id) + "/lv-free-power/scan", {
+        method: "POST",
+        body: { password: st.password || null },
+        timeoutMs: 90000,
+      });
+      if (orderPerk !== st) return;
+      st.scan = data;
+      st.targets = {};
+      st.selected = new Set();
+      (data.rows || []).forEach((r) => {
+        const cur = Number(r.current) || 1;
+        const max = Number(r.max) || cur;
+        st.targets[r.type] = max;
+        if (r.upgradeable !== false && max > cur) st.selected.add(r.type);
+      });
+    } catch (e) {
+      if (orderPerk !== st) return;
+      const d = e?.data?.detail || {};
+      st.error = d.message || thError(e.message) || "อ่านเลเวลไม่สำเร็จ";
+      st.needPassword = d.code === "order_login_failed";
+    } finally {
+      if (orderPerk === st) {
+        st.loading = false;
+        paintOrderPerkModal();
+      }
+    }
+  }
+
+  async function startOrderPerk() {
+    const st = orderPerk;
+    if (!st || st.busy) return;
+    const targets = { A1: 0, A2: 0, A3: 0 };
+    (st.scan?.rows || []).forEach((r) => {
+      if (st.selected.has(r.type)) targets[r.type] = Number(st.targets[r.type]) || Number(r.max) || 0;
+    });
+    st.busy = true;
+    paintOrderPerkModal();
+    try {
+      await api("/api/idshop/orders/" + encodeURIComponent(st.order.id) + "/lv-free-power/run", {
+        method: "POST",
+        body: { targets, password: st.password || null },
+        timeoutMs: 90000,
+      });
+      orderPerk = null;
+      forceCloseModal();
+      showToast("เริ่มอัปชุดพลังฟรีแล้ว — ดูความคืบหน้าที่แท็บ Live", "ok");
+    } catch (e) {
+      if (orderPerk !== st) return;
+      const d = e?.data?.detail || {};
+      st.busy = false;
+      st.error = d.message || thError(typeof d === "string" ? d : e.message) || "เริ่มงานไม่สำเร็จ";
+      st.needPassword = d.code === "order_login_failed";
+      paintOrderPerkModal();
+    }
+  }
+
+  function openOrderPerk(idx) {
+    const order = (idshopOrderRows || [])[Number(idx)];
+    if (!order || !order.perk_lv_free_power) return;
+    orderPerk = { idx, order, scan: null, targets: {}, selected: new Set(), password: "", loading: true, busy: false, error: "" };
+    clearModalActions();
+    openModal({ mode: "empty", title: "ชุดพลังฟรี · ไอดีที่ซื้อ", bodyHtml: orderPerkBodyHtml(), icon: "assets/upgrade01_30_shop.png", locked: false });
+    paintOrderPerkModal();
+    scanOrderPerk();
+  }
+
+  modalBody?.addEventListener("change", (ev) => {
+    if (!orderPerk) return;
+    const cb = ev.target.closest("[data-op-type]");
+    if (cb) {
+      const t = cb.getAttribute("data-op-type");
+      if (cb.checked) orderPerk.selected.add(t);
+      else orderPerk.selected.delete(t);
+      paintOrderPerkModal();
+      return;
+    }
+    const sel = ev.target.closest("[data-op-target]");
+    if (sel) orderPerk.targets[sel.getAttribute("data-op-target")] = Number(sel.value) || 0;
+  });
+
   async function loadIdshopOrders() {
     await ensureIdshopPreviewSession();
     if (!accessToken && !idshopPreviewToken) {
@@ -9817,42 +10073,7 @@
         return;
       }
       idshopOrderRows = rows;
-      root.innerHTML = rows
-        .map((row, idx) => {
-          const snap = row.snapshot || {};
-          return (
-            '<article class="idshop-order"><div class="idshop-card-top"><p class="idshop-nick">' +
-            escapeHtml(idshopCode(row)) +
-            '</p><p class="idshop-price">฿' +
-            escapeHtml(formatNumTh(row.price_baht || 0)) +
-            "</p></div>" +
-            (row.coupon_code
-              ? '<p class="muted">คูปอง ' +
-                escapeHtml(row.coupon_code) +
-                (row.list_price_baht && Number(row.list_price_baht) !== Number(row.price_baht)
-                  ? " · จาก ฿" + formatNumTh(row.list_price_baht)
-                  : "") +
-                "</p>"
-              : "") +
-            idshopFaces(snap) +
-            '<div class="idshop-secret"><label class="idshop-secret-row"><input readonly value="' +
-            escapeHtml(row.email || "") +
-            '" /><button type="button" class="btn btn-ghost btn-sm" data-copy="' +
-            escapeHtml(row.email || "") +
-            '">คัดลอก</button></label>' +
-            '<label class="idshop-secret-row"><input readonly value="' +
-            escapeHtml(row.password || "") +
-            '" /><button type="button" class="btn btn-ghost btn-sm" data-copy="' +
-            escapeHtml(row.password || "") +
-            '">คัดลอก</button></label>' +
-            (row.email && row.password
-              ? '<button type="button" class="btn btn-candy btn-sm idshop-order-devplay" data-idshop-order-devplay="' + idx + '">' +
-                '<img src="assets/devplay.png" alt="" width="16" height="16" onerror="this.remove()" /> เชื่อม DevPlay ด้วยไอดีนี้</button>'
-              : "") +
-            "</div></article>"
-          );
-        })
-        .join("");
+      renderIdshopOrders();
     } catch (e) {
       setStatus($("idshop-orders-status"), thError(e.message) || "โหลดประวัติไม่สำเร็จ", "err");
     }
@@ -14541,8 +14762,8 @@
         method: "POST",
         body: {
           devplay_session_id: sid,
-          target_floor: Number($("ice-tower-target-floor")?.value) || 100,
-          default_stars: Number($("ice-tower-default-stars")?.value) || 3,
+          target_floor: Math.max(1, Math.min(100, Math.floor(Number($("ice-tower-target-floor")?.value)) || 100)),
+          default_stars: Math.max(1, Math.min(3, Math.floor(Number($("ice-tower-default-stars")?.value)) || 3)),
           selected_floors: q.selected,
         },
         timeoutMs: 60000,
@@ -15493,6 +15714,64 @@
     modalActions.appendChild(makeBtn("ตกลง", "btn-candy", () => forceCloseModal()));
   }
 
+  // ---- Shared 24h new-friend cap (ฟาร์มหัวใจ / HeartLoop / ฟาร์มใจ MID) ----
+  function friendIntakeDetail(e) {
+    const d = e?.data?.detail || e?.detail;
+    if (d && typeof d === "object" && /^game_intake_(full|short)$/.test(String(d.code || ""))) return d;
+    return null;
+  }
+
+  function friendIntakeBodyHtml(d) {
+    const st = d.intake || {};
+    const cap = Number(st.cap || 300);
+    const hrs = Number(st.window_hours || 24);
+    const used = Number(st.used || 0);
+    const inflight = Number(st.inflight || 0);
+    const remaining = Number(st.remaining || 0);
+    const pct = Math.max(0, Math.min(100, Math.round(((used + inflight) / cap) * 100)));
+    const rows = (st.by_kind || [])
+      .map((k) => "<li>" + escapeHtml(k.label) + " <b>" + formatNumTh(k.units) + "</b> คน</li>")
+      .concat(
+        (st.inflight_jobs || []).map(
+          (j) => "<li>" + escapeHtml(j.label) + " (กำลังทำงานอยู่) <b>" + formatNumTh(j.units) + "</b> คน</li>"
+        )
+      )
+      .join("");
+    return (
+      '<div class="fi-modal">' +
+      '<p class="fi-lead">เกมให้ <b>1 ไอดี</b> รับเพื่อนใหม่ได้ประมาณ <b>' + formatNumTh(cap) + " คน ต่อ" + escapeHtml(st.window_label || " " + hrs + " ชม.") +
+      "</b> — นับรวมทุกฟังก์ชันหัวใจ (ฟาร์มหัวใจ · HeartLoop · ฟาร์มใจ MID) ถ้าเกินเกมจะไม่ให้รับเพื่อน งานจะล้มเอง</p>" +
+      '<div class="fi-meter" role="img" aria-label="ใช้ไป ' + (used + inflight) + " จาก " + cap + '"><i style="width:' + pct + '%"></i></div>' +
+      '<p class="fi-nums">ใช้ไป <b>' + formatNumTh(used + inflight) + "</b> / " + formatNumTh(cap) +
+      " · เหลือ <b>" + formatNumTh(remaining) + "</b>" + (d.requested ? " · ต้องการ " + formatNumTh(d.requested) : "") + "</p>" +
+      (rows ? '<ul class="fi-list">' + rows + "</ul>" : "") +
+      (d.reset_th ? '<p class="fi-reset">⏰ ใช้ได้อีกครั้งประมาณ <b>' + escapeHtml(d.reset_th) + "</b></p>" : "") +
+      '<p class="fi-safe">✅ ระบบยังไม่ได้เริ่มงาน ไม่หัก Token และไม่เปลือง Proxy</p>' +
+      "</div>"
+    );
+  }
+
+  function showFriendIntakeModal(d, opts = {}) {
+    const remaining = Number(d?.intake?.remaining || 0);
+    clearModalActions();
+    openModal({
+      mode: "empty",
+      title: remaining > 0 ? "ไอดีนี้รับเพื่อนใหม่ได้อีกไม่พอ" : "ไอดีนี้รับเพื่อนใหม่ครบโควต้าแล้ว",
+      bodyHtml: friendIntakeBodyHtml(d),
+      icon: "assets/Heart.png?v=20260817h",
+      locked: false,
+    });
+    if (remaining > 0 && typeof opts.onUseRemaining === "function") {
+      modalActions.appendChild(
+        makeBtn("ใช้ที่เหลือ " + formatNumTh(remaining) + " คน", "btn-candy", () => {
+          forceCloseModal();
+          opts.onUseRemaining(remaining);
+        })
+      );
+    }
+    modalActions.appendChild(makeBtn("เข้าใจแล้ว", remaining > 0 ? "btn-ghost" : "btn-candy", () => forceCloseModal()));
+  }
+
   function showErrorModal(message, title) {
     clearModalActions();
     openModal({
@@ -16087,6 +16366,9 @@
       treasure_ticket: "treasure_ticket",
       ingredient_extract: "ingredient_extract",
       treasure_break: "treasure_break",
+      heartloop_timed: "heartloop",
+      heartloop: "heartloop",
+      mid_heart: "mid_heart",
     };
     return map[kind] || kind;
   }
@@ -17195,16 +17477,18 @@
         const hi = Array.isArray(pr) && pr.length >= 2 ? pr[1] : null;
         powderMsg.textContent = hi
           ? "ค่าปัจจุบันใช้เป็นเพดานผู้ใช้ · แอดมินปรับได้ 1–" + formatNumTh(hi)
-          : "ค่าเริ่มต้น 5,000 — แอดมินปรับเพิ่ม/ลดได้";
+          : "ค่าเริ่มต้น 50,000 — แอดมินปรับเพิ่ม/ลดได้";
       }
       const hlp = data.heartloop_pricing;
       if (hlp && typeof hlp === "object") {
         const ph = $("farm-dock-admin-hl-perhour");
         const p12 = $("farm-dock-admin-hl-pack12");
         const p24 = $("farm-dock-admin-hl-pack24");
-        if (ph && Number.isFinite(Number(hlp.per_hour))) ph.value = String(hlp.per_hour);
+        if (ph && Number.isFinite(Number(hlp.pack_6h))) ph.value = String(hlp.pack_6h);
         if (p12 && Number.isFinite(Number(hlp.pack_12h))) p12.value = String(hlp.pack_12h);
         if (p24 && Number.isFinite(Number(hlp.pack_24h))) p24.value = String(hlp.pack_24h);
+        const rids = $("farm-dock-admin-hl-rental-ids");
+        if (rids && Number.isFinite(Number(hlp.rental_daily_ids))) rids.value = String(hlp.rental_daily_ids);
       }
     } catch (e) {
       const err = thError(e.message) || "โหลดการตั้งค่าไม่สำเร็จ";
@@ -17302,6 +17586,8 @@
     const per = Math.floor(Number(ph.value) || 0);
     const pack12 = Math.floor(Number(p12?.value) || 0);
     const pack24 = Math.floor(Number(p24?.value) || 0);
+    const ridsRaw = $("farm-dock-admin-hl-rental-ids")?.value;
+    const rentalIds = Math.max(0, Math.min(100, Math.floor(Number(ridsRaw === "" || ridsRaw == null ? 5 : ridsRaw) || 0)));
     if (per < 1 || pack12 < 1 || pack24 < 1) {
       if (msg) msg.textContent = "ใส่ราคาที่ถูกต้องทั้ง 3 ช่อง";
       return;
@@ -17311,18 +17597,22 @@
       await withAdminSave(btn, async () => {
         const data = await api("/api/admin/settings", {
           method: "POST",
-          body: { heartloop_pricing: { per_hour: per, pack_12h: pack12, pack_24h: pack24 } },
+          body: {
+            heartloop_pricing: { pack_6h: per, pack_12h: pack12, pack_24h: pack24, rental_daily_ids: rentalIds },
+          },
         });
         const saved = data.heartloop_pricing || {};
         if (msg)
           msg.textContent =
-            "บันทึกแล้ว — ต่อ ชม. " +
-            (saved.per_hour ?? per) +
+            "บันทึกแล้ว — 6ชม. " +
+            (saved.pack_6h ?? per) +
             "฿ · 12ชม. " +
             (saved.pack_12h ?? pack12) +
             "฿ · 24ชม. " +
             (saved.pack_24h ?? pack24) +
-            "฿";
+            "฿ · วันเช่าฟรี " +
+            (saved.rental_daily_ids ?? rentalIds) +
+            " ไอดี/24 ชม.";
       }, "บันทึกราคา HeartLoop แล้ว");
     } catch (e) {
       if (msg) msg.textContent = thError(e.message) || "บันทึกไม่สำเร็จ";
@@ -18161,29 +18451,340 @@
   }
 
   // ---- HeartLoop (timed permanent-friend harvest) -----------------------
-  let heartloopPricing = { per_hour: 5, pack_12h: 50, pack_24h: 100 };
+  let heartloopPricing = { per_hour: 5, pack_6h: 25, pack_12h: 50, pack_24h: 100 };
   let heartloopFreeSlots = null;
-  let heartloopCustom = false;
+  // Rental coverage from /api/farm/heartloop/quota: N IDs / 24h free, then tokens.
+  let heartloopRental = null;
+  let heartloopIdCounted = null; // email whose re-deposit stays free (from preview)
+
+  function heartloopUseOtherId() {
+    return !!$("heartloop-acct-other")?.checked;
+  }
+
+  // ---- multi-ID deposit (up to 10 per submit) ----
+  const HEARTLOOP_BATCH_MAX = 10;
+  let heartloopQuote = null; // /api/farm/heartloop/quote result for the current list
+  let heartloopQuoteKey = "";
+  let heartloopQuoteTimer = null;
+
+  function heartloopAcctRows() {
+    return Array.from(document.querySelectorAll("#heartloop-acct-list .hl-acct-row"));
+  }
+
+  function heartloopRowValues(row) {
+    return {
+      email: (row.querySelector(".hl-email")?.value || "").trim(),
+      password: row.querySelector(".hl-pass")?.value || "",
+    };
+  }
+
+  // Rows with both fields filled, in list order.
+  function heartloopAccounts() {
+    return heartloopAcctRows()
+      .map((row) => ({ ...heartloopRowValues(row), row }))
+      .filter((a) => a.email && a.password);
+  }
+
+  function heartloopSetRowState(row, state, msg) {
+    row.classList.toggle("is-ok", state === "ok");
+    row.classList.toggle("is-err", state === "err");
+    let note = row.nextElementSibling?.classList.contains("hl-acct-msg") ? row.nextElementSibling : null;
+    if (!msg) {
+      note?.remove();
+      return;
+    }
+    if (!note) {
+      note = document.createElement("p");
+      note.className = "hl-acct-msg";
+      row.after(note);
+    }
+    note.textContent = msg;
+  }
+
+  function heartloopAddRow(email = "", password = "") {
+    const list = $("heartloop-acct-list");
+    if (!list || heartloopAcctRows().length >= HEARTLOOP_BATCH_MAX) return null;
+    const row = document.createElement("div");
+    row.className = "hl-acct-row";
+    row.innerHTML =
+      '<input type="email" class="hl-email" autocomplete="off" placeholder="อีเมลไอดีเกม" aria-label="อีเมลไอดีเกม" />' +
+      '<input type="password" class="hl-pass" autocomplete="new-password" placeholder="รหัสผ่าน" aria-label="รหัสผ่าน" />' +
+      '<button type="button" class="hl-acct-del" aria-label="ลบแถวนี้" title="ลบแถวนี้">×</button>';
+    row.querySelector(".hl-email").value = email;
+    row.querySelector(".hl-pass").value = password;
+    row.querySelectorAll("input").forEach((inp) =>
+      inp.addEventListener("input", () => {
+        heartloopSetRowState(row, null);
+        heartloopAcctChanged();
+      })
+    );
+    row.querySelector(".hl-acct-del").addEventListener("click", () => {
+      if (heartloopAcctRows().length <= 1) {
+        row.querySelectorAll("input").forEach((inp) => (inp.value = ""));
+      } else {
+        heartloopSetRowState(row, null);
+        row.remove();
+      }
+      heartloopAcctChanged();
+    });
+    list.appendChild(row);
+    return row;
+  }
+
+  function heartloopAcctChanged() {
+    const n = heartloopAcctRows().length;
+    const cnt = $("heartloop-acct-count");
+    if (cnt) cnt.textContent = n + "/" + HEARTLOOP_BATCH_MAX;
+    const add = $("heartloop-acct-add");
+    if (add) add.disabled = n >= HEARTLOOP_BATCH_MAX;
+    heartloopFreeSlots = null;
+    heartloopScheduleQuote();
+    paintHeartLoop();
+  }
+
+  // .txt: one ID per line, "email<TAB>password" (also accepts , ; | : or spaces).
+  function heartloopImportText(text) {
+    const seen = new Set(heartloopAccounts().map((a) => a.email.toLowerCase()));
+    let added = 0;
+    let dup = 0;
+    let bad = 0;
+    let over = 0;
+    String(text || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const raw = line.replace(/^\uFEFF/, "").trim();
+        if (!raw || raw.startsWith("#")) return;
+        let email;
+        let password;
+        const tab = raw.indexOf("\t");
+        if (tab > 0) {
+          email = raw.slice(0, tab).trim();
+          password = raw.slice(tab + 1).trim();
+        } else {
+          const m = raw.match(/^(\S+@\S+?)[\s,;|:]+(.+)$/);
+          if (m) {
+            email = m[1];
+            password = m[2].trim();
+          }
+        }
+        if (!email || !password || !email.includes("@")) {
+          bad += 1;
+          return;
+        }
+        if (seen.has(email.toLowerCase())) {
+          dup += 1;
+          return;
+        }
+        const empty = heartloopAcctRows().find((r) => {
+          const v = heartloopRowValues(r);
+          return !v.email && !v.password;
+        });
+        const row = empty || heartloopAddRow();
+        if (!row) {
+          over += 1;
+          return;
+        }
+        row.querySelector(".hl-email").value = email;
+        row.querySelector(".hl-pass").value = password;
+        seen.add(email.toLowerCase());
+        added += 1;
+      });
+    heartloopAcctChanged();
+    const parts = ["นำเข้า " + added + " ไอดี"];
+    if (dup) parts.push("ซ้ำ " + dup);
+    if (over) parts.push("เกิน " + HEARTLOOP_BATCH_MAX + " ไอดี " + over);
+    if (bad) parts.push("รูปแบบไม่ถูก " + bad + " บรรทัด");
+    const st = $("heartloop-status");
+    if (st) setStatus(st, parts.join(" · "), added ? "ok" : "err");
+  }
+
+  function heartloopQuoteKeyFor(accts, hours) {
+    return hours + "|" + accts.map((a) => a.email.toLowerCase()).join(",");
+  }
+
+  async function heartloopFetchQuote() {
+    const accts = heartloopAccounts();
+    const hours = heartloopSelectedHours();
+    const key = heartloopQuoteKeyFor(accts, hours);
+    if (!heartloopUseOtherId() || !accts.length || !accessToken) {
+      heartloopQuote = null;
+      heartloopQuoteKey = "";
+      paintHeartLoop();
+      return null;
+    }
+    try {
+      await ensureApiReady();
+      const res = await api("/api/farm/heartloop/quote", {
+        method: "POST",
+        body: { emails: accts.map((a) => a.email), hours },
+        timeoutMs: 20000,
+      });
+      // Ignore answers for a list the user has since changed.
+      if (key === heartloopQuoteKeyFor(heartloopAccounts(), heartloopSelectedHours())) {
+        heartloopQuote = res;
+        heartloopQuoteKey = key;
+        if (res?.rental) heartloopRental = { ...heartloopRental, ...res.rental };
+        paintHeartLoop();
+      }
+      return res;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function heartloopScheduleQuote() {
+    clearTimeout(heartloopQuoteTimer);
+    heartloopQuoteTimer = setTimeout(heartloopFetchQuote, 450);
+  }
+
+  // Current quote if it matches the list on screen, else a local estimate.
+  function heartloopBatchTotals() {
+    const accts = heartloopAccounts();
+    const hours = heartloopSelectedHours();
+    const price = heartloopPriceFor(hours);
+    if (heartloopQuote && heartloopQuoteKey === heartloopQuoteKeyFor(accts, hours)) {
+      return {
+        n: accts.length,
+        free: Number(heartloopQuote.free_count || 0),
+        paid: Number(heartloopQuote.paid_count || 0),
+        total: Number(heartloopQuote.total_tokens || 0),
+        balance: Number(heartloopQuote.balance),
+        enough: !!heartloopQuote.enough,
+        dup: Number(heartloopQuote.duplicates || 0),
+        price,
+        exact: true,
+      };
+    }
+    return { n: accts.length, free: 0, paid: accts.length, total: accts.length * price, price, exact: false };
+  }
+
+  function paintHeartLoopBatch() {
+    const el = $("heartloop-batch-sum");
+    if (!el) return;
+    if (!heartloopUseOtherId() || !heartloopAccounts().length) {
+      el.hidden = true;
+      return;
+    }
+    const t = heartloopBatchTotals();
+    if (!t.exact && accessToken) heartloopScheduleQuote();
+    el.hidden = false;
+    el.classList.toggle("is-short", t.exact && !t.enough);
+    let html = "<b>" + t.n + " ไอดี</b> × " + heartloopSelectedHours() + " ชม.";
+    if (t.exact) {
+      if (t.free) html += " · ฟรี " + t.free + " (วันเช่า)";
+      if (t.paid) html += " · จ่าย " + t.paid + " × " + t.price;
+      html += " = <b>" + t.total.toLocaleString() + " Token</b>";
+      if (t.dup) html += '<br><span class="hl-short">⚠️ มีไอดีซ้ำ ' + t.dup + " รายการ — ลบออกก่อน</span>";
+      html +=
+        "<br>Token คงเหลือ " +
+        formatTokenAmount(t.balance) +
+        " → " +
+        (t.enough
+          ? '<span class="hl-ok">✅ พอ</span>'
+          : '<span class="hl-short">❌ ไม่พอ ขาด ' + formatTokenAmount(Math.max(0, t.total - t.balance)) + " Token</span>");
+    } else {
+      html +=
+        " ≈ <b>" +
+        t.total.toLocaleString() +
+        ' Token</b> <span class="muted">(' +
+        (accessToken ? "กำลังคำนวณสิทธิ์วันเช่า…" : "เข้าสู่ระบบเพื่อดูสิทธิ์วันเช่าและ Token คงเหลือ") +
+        ")</span>";
+    }
+    el.innerHTML = html;
+  }
+
+  function heartloopCreds() {
+    if (heartloopUseOtherId()) {
+      const first = heartloopAccounts()[0] || (heartloopAcctRows()[0] ? heartloopRowValues(heartloopAcctRows()[0]) : {});
+      return { email: first.email || "", password: first.password || "", other: true };
+    }
+    return { ...getDevPlayCreds(), other: false };
+  }
+
+  // Returns creds or null after telling the user what is missing.
+  function heartloopRequireCreds() {
+    const c = heartloopCreds();
+    if (c.other) {
+      if (!c.email || !c.password) {
+        const st = $("heartloop-status");
+        if (st) setStatus(st, "กรอกอีเมลและรหัสผ่านไอดีที่จะฝากก่อน", "err");
+        heartloopAcctRows()[0]?.querySelector(c.email ? ".hl-pass" : ".hl-email")?.focus();
+        return null;
+      }
+      return c;
+    }
+    if (!isDevPlayConnected() && !hasDevPlayCreds()) {
+      showDevPlayRequiredModal();
+      return null;
+    }
+    return c;
+  }
+
+  function heartloopRentalCovers() {
+    const r = heartloopRental;
+    if (!r) return false;
+    if (r.unlimited) return true;
+    if (!r.has_rental || !(Number(r.limit) > 0)) return false;
+    if (Number(r.remaining) > 0) return true;
+    const email = (heartloopCreds().email || "").toLowerCase();
+    return !!email && email === heartloopIdCounted;
+  }
+
+  function paintHeartLoopRental() {
+    const el = $("heartloop-rental");
+    if (!el) return;
+    const r = heartloopRental;
+    if (!r) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    if (r.unlimited) {
+      el.innerHTML = "✨ บัญชีนี้ฝาก HeartLoop <b>ฟรีไม่จำกัด</b>";
+    } else if (r.has_rental && Number(r.limit) > 0) {
+      const reset = r.resets_at
+        ? " · รีเซ็ต " + new Date(r.resets_at).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" })
+        : "";
+      el.innerHTML =
+        "🎫 วันเช่า: ฝากฟรี <b>" + Number(r.used || 0) + "/" + Number(r.limit) + "</b> ไอดี ใน 24 ชม." +
+        (Number(r.remaining) > 0
+          ? " (เหลือ " + Number(r.remaining) + ")"
+          : " — <b>ครบแล้ว</b> ไอดีถัดไปหัก Token (ไอดีเดิมที่ฝากไปแล้วฝากซ้ำฟรี)") +
+        reset;
+    } else {
+      el.innerHTML =
+        "💡 มีวันเช่าจะฝากฟรีได้ <b>" + Number(r.limit || 0) + " ไอดี/24 ชม.</b> · ตอนนี้หัก Token ตามแพ็ค";
+    }
+  }
+
+  async function heartloopLoadQuota() {
+    if (!accessToken) return;
+    try {
+      await ensureApiReady();
+      const res = await api("/api/farm/heartloop/quota", { method: "GET", timeoutMs: 15000 });
+      if (res?.pricing) heartloopPricing = res.pricing;
+      if (res?.rental) heartloopRental = res.rental;
+      paintHeartLoop();
+    } catch (_) {
+      /* not signed in / offline — card falls back to token pricing */
+    }
+  }
 
   function heartloopPriceFor(hours) {
     const h = Math.max(1, Math.min(24, parseInt(hours, 10) || 12));
+    if (h === 6) return heartloopPricing.pack_6h ?? 25;
     if (h === 12) return heartloopPricing.pack_12h;
     if (h === 24) return heartloopPricing.pack_24h;
     return h * heartloopPricing.per_hour;
   }
 
   function heartloopSelectedHours() {
-    if (heartloopCustom) {
-      return Math.max(1, Math.min(24, parseInt($("heartloop-hours")?.value, 10) || 6));
-    }
     const active = document.querySelector("#heartloop-packs .heartloop-pack.is-active");
     return parseInt(active?.getAttribute("data-hours"), 10) || 12;
   }
 
   function paintHeartLoop() {
-    const perEl = $("heartloop-perhour");
-    if (perEl) perEl.textContent = String(heartloopPricing.per_hour);
-    ["12", "24"].forEach((h) => {
+    ["6", "12", "24"].forEach((h) => {
       const priceEl = document.querySelector('[data-pack-price="' + h + '"]');
       const listEl = document.querySelector('[data-pack-list="' + h + '"]');
       const yieldEl = document.querySelector('[data-pack-yield="' + h + '"]');
@@ -18210,20 +18811,65 @@
         }
       }
     });
-    const customRow = $("heartloop-custom-row");
-    if (customRow) customRow.hidden = !heartloopCustom;
-    const customPrice = $("heartloop-custom-price");
-    if (customPrice && heartloopCustom) {
+    const rateEl = $("heartloop-token-rate");
+    if (rateEl) {
       const h = heartloopSelectedHours();
-      let txt = "= " + heartloopPriceFor(h) + "฿";
-      if (heartloopFreeSlots != null) txt += " · ~" + (heartloopFreeSlots * h).toLocaleString() + " หัวใจ";
-      customPrice.textContent = txt;
+      const yieldOf = (hrs) =>
+        heartloopFreeSlots != null
+          ? "~" + (heartloopFreeSlots * hrs).toLocaleString() + " หัวใจ"
+          : "สูงสุด " + (300 * hrs).toLocaleString() + " หัวใจ";
+      rateEl.innerHTML = formatLvFreeRateCardHtml({
+        tiles: [
+          { label: "แพ็ค 6 ชม.", rate: heartloopPriceFor(6), sub: yieldOf(6) },
+          { label: "แพ็ค 12 ชม.", rate: heartloopPricing.pack_12h, sub: yieldOf(12) },
+          { label: "แพ็ค 24 ชม.", rate: heartloopPricing.pack_24h, sub: yieldOf(24) },
+        ],
+        currentCost: heartloopUseOtherId()
+          ? heartloopBatchTotals().total
+          : heartloopRentalCovers()
+            ? 0
+            : heartloopPriceFor(h),
+        currentLabel: heartloopUseOtherId()
+          ? heartloopBatchTotals().n + " ไอดี × " + h + " ชม."
+          : "แพ็ค " + h + " ชม.",
+        currentNote: heartloopUseOtherId()
+          ? heartloopBatchTotals().n
+            ? "วันเช่าครอบคลุมทุกไอดีในรายการ · ไม่หัก Token"
+            : "กรอกไอดีเพื่อดูยอดรวม"
+          : heartloopRentalCovers()
+            ? "วันเช่าครอบคลุมไอดีนี้ · ไม่หัก Token"
+            : "",
+        heroSub: "Token / แพ็ค 12 ชม.",
+        freeWithRental: true,
+        note:
+          "มีวันเช่าฝากฟรี " +
+          Number(heartloopPricing.rental_daily_ids ?? 5) +
+          " ไอดี/24 ชม. · เกินจากนั้นหัก Token ตอนเริ่มงาน · เพื่อน 1 คน = 1 หัวใจ/ชม.",
+      });
     }
+    paintHeartLoopRental();
+    paintHeartLoopBatch();
+    const dpName = $("heartloop-acct-devplay-name");
+    if (dpName) {
+      const e = isDevPlayConnected() || hasDevPlayCreds() ? getDevPlayCreds().email : "";
+      dpName.textContent = e ? "(" + e + ")" : "(ยังไม่ได้เชื่อม)";
+    }
+    const fields = $("heartloop-account-fields");
+    if (fields) fields.hidden = !heartloopUseOtherId();
     const sub = $("heartloop-btn-sub");
     if (sub) {
       const h = heartloopSelectedHours();
       const price = heartloopPriceFor(h);
-      sub.textContent = (heartloopCustom ? h + " ชม." : "แพ็ค " + h + " ชม.") + " · " + price + "฿";
+      if (heartloopUseOtherId()) {
+        const t = heartloopBatchTotals();
+        sub.textContent =
+          (t.n || 0) + " ไอดี · " + h + " ชม. · " + (t.n && t.total === 0 && t.exact ? "ฟรี (วันเช่า)" : t.total + " Token");
+      } else {
+        sub.textContent =
+          "แพ็ค " + h + " ชม." +
+          " · " +
+          (heartloopRentalCovers() ? "ฟรี (วันเช่า)" : price + "฿");
+      }
     }
   }
 
@@ -18231,10 +18877,8 @@
     const btn = $("heartloop-check");
     const slots = $("heartloop-slots");
     const sub = $("heartloop-slots-sub");
-    if (!isDevPlayConnected() && !hasDevPlayCreds()) {
-      showDevPlayRequiredModal();
-      return;
-    }
+    const creds = heartloopRequireCreds();
+    if (!creds) return;
     if (btn) {
       btn.disabled = true;
       btn.textContent = "⏳ กำลังตรวจ…";
@@ -18244,14 +18888,18 @@
       const res = await api("/api/farm/heartloop/preview", {
         method: "POST",
         body: {
-          email: getDevPlayCreds().email,
-          password: getDevPlayCreds().password,
-          devplay_session_id: devplaySession?.id,
+          email: creds.email,
+          password: creds.password,
+          devplay_session_id: creds.other ? undefined : devplaySession?.id,
         },
         timeoutMs: 60000,
       });
       heartloopFreeSlots = Number(res.free_slots || 0);
       if (res.pricing) heartloopPricing = res.pricing;
+      if (res.rental) {
+        heartloopRental = res.rental;
+        heartloopIdCounted = res.rental.id_already_counted ? creds.email.toLowerCase() : null;
+      }
       if (slots) {
         slots.hidden = false;
         slots.innerHTML =
@@ -18285,14 +18933,156 @@
     }
   }
 
-  async function heartloopRun() {
+  async function heartloopRunBatch() {
     const status = $("heartloop-status");
-    if (!isDevPlayConnected() && !hasDevPlayCreds()) {
-      showDevPlayRequiredModal();
+    const half = heartloopAcctRows().filter((r) => {
+      const v = heartloopRowValues(r);
+      return !!v.email !== !!v.password;
+    });
+    half.forEach((r) => heartloopSetRowState(r, "err", "กรอกให้ครบทั้งอีเมลและรหัสผ่าน"));
+    const accts = heartloopAccounts();
+    if (half.length) {
+      if (status) setStatus(status, "มีแถวที่กรอกไม่ครบ " + half.length + " แถว", "err");
+      return;
+    }
+    if (!accts.length) {
+      if (status) setStatus(status, "กรอกอีเมลและรหัสผ่านไอดีที่จะฝากก่อน", "err");
+      heartloopAcctRows()[0]?.querySelector(".hl-email")?.focus();
+      return;
+    }
+    const seen = new Map();
+    let dupes = 0;
+    accts.forEach((a) => {
+      const k = a.email.toLowerCase();
+      if (seen.has(k)) {
+        dupes += 1;
+        heartloopSetRowState(a.row, "err", "ไอดีซ้ำกับแถวที่ " + (heartloopAcctRows().indexOf(seen.get(k)) + 1));
+      } else seen.set(k, a.row);
+    });
+    if (dupes) {
+      if (status) setStatus(status, "มีไอดีซ้ำ " + dupes + " รายการ — ลบออกก่อน", "err");
+      return;
+    }
+    if (!accessToken) {
+      openAuthModal("login");
+      return;
+    }
+    if (status) setStatus(status, "กำลังคำนวณ Token รวม…", "muted");
+    await heartloopLoadQuota();
+    const quote = await heartloopFetchQuote();
+    if (!quote) {
+      if (status) setStatus(status, "คำนวณ Token ไม่สำเร็จ ลองใหม่อีกครั้ง", "err");
       return;
     }
     const hours = heartloopSelectedHours();
+    const total = Number(quote.total_tokens || 0);
+    if (!quote.enough) {
+      if (status)
+        setStatus(
+          status,
+          "Token ไม่พอ: ต้องใช้ " +
+            formatTokenAmount(total) +
+            " Token มี " +
+            formatTokenAmount(quote.balance) +
+            " — เติม Token หรือลดจำนวนไอดี",
+          "err"
+        );
+      return;
+    }
+    const clear = !!$("heartloop-clear")?.checked;
+    const lines = accts.map((a, i) => {
+      const it = (quote.items || [])[i] || {};
+      return i + 1 + ". " + a.email + " — " + (it.free ? "ฟรี (วันเช่า)" : (it.cost || 0) + " Token");
+    });
+    const ok = await showJobConfirmModal({
+      title: "ฝาก HeartLoop " + accts.length + " ไอดี?",
+      body:
+        "ระยะเวลา " +
+        hours +
+        " ชั่วโมง/ไอดี · รวม " +
+        (total ? formatTokenAmount(total) + " Token" : "ฟรี (ใช้สิทธิ์วันเช่า)") +
+        " · คงเหลือหลังหัก " +
+        formatTokenAmount(Number(quote.balance) - total) +
+        " Token\n\n" +
+        lines.join("\n") +
+        (clear ? "\n\n⚠️ จะลบเพื่อนทั้งหมดในทุกไอดีก่อนเริ่ม (รวมเพื่อนจริง)" : "") +
+        "\n\nระบบจะเก็บหัวใจให้ทุกชั่วโมงจนครบ แล้วลบเพื่อนคลังออกให้เอง",
+      confirmLabel: "ฝากเลย",
+    });
+    if (!ok) return;
+    const btn = $("heartloop-btn");
+    if (btn) btn.disabled = true;
+    if (status) setStatus(status, "กำลังฝาก " + accts.length + " ไอดี…", "muted");
+    try {
+      await ensureApiReady();
+      const res = await api("/api/farm/heartloop/run_batch", {
+        method: "POST",
+        body: {
+          accounts: accts.map((a) => ({ email: a.email, password: a.password })),
+          hours,
+          clear_friends: clear,
+        },
+        timeoutMs: 120000,
+      });
+      if (res?.heartloop_rental) heartloopRental = res.heartloop_rental;
+      const results = Array.isArray(res?.results) ? res.results : [];
+      accts.forEach((a, i) => {
+        const r = results[i];
+        if (r?.ok) {
+          heartloopSetRowState(a.row, null);
+          a.row.remove();
+        } else {
+          heartloopSetRowState(a.row, "err", "ไม่สำเร็จ: " + (r?.message || r?.code || "ไม่ทราบสาเหตุ"));
+        }
+      });
+      if (!heartloopAcctRows().length) heartloopAddRow();
+      const okN = Number(res?.accepted || 0);
+      const failN = Number(res?.failed || 0);
+      const intakeFails = results.filter((r) => r && /^game_intake_/.test(String(r.code || "")));
+      if (intakeFails.length) {
+        showErrorModal(
+          intakeFails.length +
+            " ไอดีรับเพื่อนใหม่ครบโควต้าแล้ว (เกมจำกัดรับเพื่อนใหม่ ~300 คน / วัน ต่อไอดี รวมทุกฟังก์ชันหัวใจ · รีเซ็ตตี 3)\n" +
+            "ระบบไม่ได้เริ่มงานและไม่หัก Token สำหรับไอดีเหล่านี้ — ดูเวลาที่ใช้ได้อีกครั้งที่แถวสีแดง",
+          "บางไอดีรับเพื่อนไม่ได้แล้ว"
+        );
+      }
+      if (status)
+        setStatus(
+          status,
+          (okN ? "✅ ฝากแล้ว " + okN + " ไอดี" + (res.total_charged ? " · หัก " + formatTokenAmount(res.total_charged) + " Token" : " · ฟรี") : "") +
+            (failN ? (okN ? " · " : "") + "❌ ไม่สำเร็จ " + failN + " ไอดี (ดูที่แถวสีแดง)" : "") +
+            (okN ? " · ดูความคืบหน้าที่แท็บ Live" : ""),
+          failN && !okN ? "err" : "ok"
+        );
+      heartloopQuote = null;
+      heartloopAcctChanged();
+      heartloopLoadQuota();
+      setTimeout(loadHeartLoopJobs, 800);
+      refreshProfileAccess().catch(() => {});
+    } catch (e) {
+      const d = e?.data?.detail || {};
+      const code = d.code || d || e?.message || "";
+      let msg = "ฝากไม่สำเร็จ";
+      if (/insufficient_tokens/i.test(String(code)))
+        msg = "Token ไม่พอ: ต้องใช้ " + formatTokenAmount(d.needed || total) + " มี " + formatTokenAmount(d.have ?? quote.balance);
+      else if (/duplicate_ids/i.test(String(code))) msg = "มีไอดีซ้ำในรายการ";
+      else if (code) msg = "ฝากไม่สำเร็จ: " + (d.message || code);
+      if (status) setStatus(status, msg, "err");
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function heartloopRun() {
+    if (heartloopUseOtherId()) return heartloopRunBatch();
+    const status = $("heartloop-status");
+    const creds = heartloopRequireCreds();
+    if (!creds) return;
+    await heartloopLoadQuota();
+    const hours = heartloopSelectedHours();
     const price = heartloopPriceFor(hours);
+    const free = heartloopRentalCovers();
     const clear = !!$("heartloop-clear")?.checked;
     const estLine =
       heartloopFreeSlots != null
@@ -18303,9 +19093,10 @@
       body:
         "ระยะเวลา " +
         hours +
-        " ชั่วโมง · ราคา " +
-        price +
-        " Token" +
+        " ชั่วโมง · " +
+        (free ? "ฟรี (ใช้สิทธิ์วันเช่า)" : "ราคา " + price + " Token") +
+        "\nไอดี: " +
+        creds.email +
         (clear ? "\n⚠️ จะลบเพื่อนทั้งหมดในไอดีก่อนเริ่ม (รวมเพื่อนจริง)" : "") +
         estLine +
         "\n\nระบบจะเก็บหัวใจให้ทุกชั่วโมงจนครบ แล้วลบเพื่อนคลังออกให้เอง",
@@ -18320,28 +19111,181 @@
       const res = await api("/api/farm/heartloop/run", {
         method: "POST",
         body: {
-          email: getDevPlayCreds().email,
-          password: getDevPlayCreds().password,
-          devplay_session_id: devplaySession?.id,
+          email: creds.email,
+          password: creds.password,
+          devplay_session_id: creds.other ? undefined : devplaySession?.id,
           hours: hours,
           clear_friends: clear,
         },
         timeoutMs: 60000,
       });
+      if (res?.heartloop_rental) heartloopRental = res.heartloop_rental;
       if (status)
-        setStatus(status, "✅ เริ่มงานแล้ว! ดูความคืบหน้าได้ที่แท็บ Live", "ok");
-      if (res?.job_id || res?.ok) {
-        setTimeout(() => switchFarmTab("live"), 900);
-      }
+        setStatus(status, "✅ เริ่มงานแล้ว! ดูความคืบหน้าได้ด้านล่าง หรือแท็บ Live", "ok");
+      heartloopLoadQuota();
+      setTimeout(loadHeartLoopJobs, 800);
     } catch (e) {
+      const intake = friendIntakeDetail(e);
+      if (intake) {
+        showFriendIntakeModal(intake);
+        if (status) setStatus(status, intake.message, "err");
+        return;
+      }
       const code = e?.data?.detail?.code || e?.data?.detail || e?.message || "";
       let msg = "เริ่มงานไม่สำเร็จ";
       if (/insufficient_tokens/i.test(String(code))) msg = "Token ไม่พอ — เติมเงินก่อนนะ";
+      else if (e?.data?.detail?.message) msg = e.data.detail.message;
       else if (/login_failed/i.test(String(code))) msg = "ล็อกอินไอดีไม่สำเร็จ ตรวจอีเมล/รหัส";
       else if (code) msg = "เริ่มงานไม่สำเร็จ: " + code;
       if (status) setStatus(status, msg, "err");
     } finally {
       if (btn) btn.disabled = false;
+    }
+  }
+
+  // ---- "งาน HeartLoop ของฉัน": live status of every deposited ID ----
+  const HL_JOB_PHASE = {
+    login: "กำลังล็อกอินไอดี",
+    start: "กำลังเริ่ม",
+    establish: "กำลังตั้งเพื่อนถาวร",
+    harvest: "กำลังเก็บหัวใจ",
+    cooldown: "พักรอบ",
+    teardown: "กำลังลบเพื่อนคลังออก",
+  };
+  const HL_JOB_STATE = {
+    running: "กำลังทำ",
+    cooldown: "พักรอบ",
+    queued: "รอคิว",
+    holding: "กำลังเตรียม",
+    cancelling: "กำลังยกเลิก",
+    succeeded: "สำเร็จ",
+    failed: "ล้มเหลว",
+    cancelled: "ยกเลิก",
+  };
+  let heartloopJobsTimer = null;
+  let heartloopJobsBusy = false;
+
+  function heartloopFmtWait(sec) {
+    const n = Math.max(0, Math.round(Number(sec) || 0));
+    if (n < 60) return "ไม่ถึง 1 นาที";
+    if (n < 3600) return Math.ceil(n / 60) + " นาที";
+    return Math.floor(n / 3600) + " ชม. " + Math.round((n % 3600) / 60) + " นาที";
+  }
+
+  function heartloopJobText(job) {
+    const p = job.progress || {};
+    const bits = [];
+    const open = ["running", "cooldown", "queued", "holding", "cancelling"].includes(job.state);
+    if (open) {
+      if (p.phase === "establish" && p.roster_target) {
+        bits.push(HL_JOB_PHASE.establish + " " + Number(p.roster || 0) + "/" + Number(p.roster_target));
+      } else if (job.state === "cooldown") {
+        bits.push("พักรอบ · รอบถัดไปใน " + heartloopFmtWait(job.resume_in_sec));
+      } else if (job.state === "queued") {
+        bits.push("รอ Worker รับงาน");
+      } else if (HL_JOB_PHASE[p.phase]) {
+        bits.push(HL_JOB_PHASE[p.phase]);
+      }
+    }
+    if (p.total) bits.push("รอบ " + Number(p.current || 0) + "/" + Number(p.total));
+    const got = Number(job.collected || p.collected || 0);
+    if (got || !open) bits.push("เก็บแล้ว " + got.toLocaleString() + " ❤️");
+    if (job.state === "failed" && job.error) {
+      const err = String(job.error).split(";")[0];
+      bits.push(
+        err === "receiver_accept_blocked" || err === "establish_failed"
+          ? "ไอดีรับเพื่อนไม่ได้ (เกมจำกัดต่อวัน) · ไม่หัก Token"
+          : "สาเหตุ: " + err
+      );
+    }
+    return bits.join(" · ");
+  }
+
+  function renderHeartLoopJobs(items) {
+    const box = $("heartloop-jobs");
+    const list = $("heartloop-jobs-list");
+    if (!box || !list) return;
+    if (!items.length) {
+      box.hidden = true;
+      list.innerHTML = "";
+      return;
+    }
+    box.hidden = false;
+    const openN = items.filter((j) => ["running", "cooldown", "queued", "holding", "cancelling"].includes(j.state)).length;
+    const cnt = $("heartloop-jobs-count");
+    if (cnt) cnt.textContent = openN ? "· ทำงานอยู่ " + openN + " ไอดี" : "· 24 ชม. ล่าสุด";
+    list.innerHTML = items
+      .map((j) => {
+        const p = j.progress || {};
+        const total = Number(p.total || j.hours || 0);
+        const pct = total ? Math.max(0, Math.min(100, Math.round((Number(p.current || 0) / total) * 100))) : 0;
+        const open = ["running", "cooldown", "queued", "holding"].includes(j.state);
+        return (
+          '<article class="hl-job is-' + escapeHtml(j.state) + '">' +
+          '<span class="hl-job-name">' + escapeHtml(j.label || "ไอดี") +
+          ' <small class="muted">· ' + (j.hours || total || "?") + " ชม." + (j.rental_free ? " · วันเช่า" : "") + "</small></span>" +
+          '<span class="hl-job-badge">' + escapeHtml(HL_JOB_STATE[j.state] || j.state) + "</span>" +
+          '<span class="hl-job-bar" aria-hidden="true"><i style="width:' + pct + '%"></i></span>' +
+          '<p class="hl-job-text">' + escapeHtml(heartloopJobText(j)) + "</p>" +
+          '<div class="hl-job-acts">' +
+          '<button type="button" class="btn btn-ghost btn-sm" data-hl-log="' + escapeHtml(j.job_id) + '">📄 Log</button>' +
+          (open
+            ? '<button type="button" class="btn btn-ghost btn-sm" data-hl-cancel="' + escapeHtml(j.job_id) + '">ยกเลิก</button>'
+            : "") +
+          "</div></article>"
+        );
+      })
+      .join("");
+  }
+
+  async function loadHeartLoopJobs() {
+    if (!accessToken || heartloopJobsBusy) return;
+    heartloopJobsBusy = true;
+    try {
+      await ensureApiReady();
+      const res = await api("/api/farm/heartloop/jobs", { method: "GET", timeoutMs: 15000 });
+      renderHeartLoopJobs(Array.isArray(res?.items) ? res.items : []);
+    } catch (_) {
+      /* keep the last list on a transient error */
+    } finally {
+      heartloopJobsBusy = false;
+    }
+  }
+
+  function startHeartLoopJobsPoll() {
+    if (heartloopJobsTimer) return;
+    heartloopJobsTimer = setInterval(() => {
+      if (farmTab !== "heartloop" || document.hidden) return;
+      loadHeartLoopJobs();
+    }, 20000);
+  }
+
+  async function heartloopJobAction(ev) {
+    const logId = ev.target.closest("[data-hl-log]")?.getAttribute("data-hl-log");
+    const cancelId = ev.target.closest("[data-hl-cancel]")?.getAttribute("data-hl-cancel");
+    if (logId) {
+      try {
+        const job = await api("/api/farm/job/" + encodeURIComponent(logId));
+        openCreditLogModal(Array.isArray(job?.logs) ? job.logs : [], "Log HeartLoop · #" + logId.slice(0, 8));
+      } catch (e) {
+        openCreditLogModal(["โหลด Log ไม่สำเร็จ: " + (e?.message || "")], "Log HeartLoop");
+      }
+      return;
+    }
+    if (cancelId) {
+      const ok = await showJobConfirmModal({
+        title: "ยกเลิก HeartLoop ไอดีนี้?",
+        body: "ระบบจะหยุดเก็บหัวใจและลบเพื่อนคลังออกจากไอดีให้\nToken ส่วนที่ยังไม่ได้ใช้จะคืนตามกฎของระบบ",
+        confirmLabel: "ยกเลิกงาน",
+      });
+      if (!ok) return;
+      try {
+        await api("/api/farm/job/" + encodeURIComponent(cancelId) + "/cancel", { method: "POST", body: {} });
+      } catch (e) {
+        const st = $("heartloop-status");
+        if (st) setStatus(st, "ยกเลิกไม่สำเร็จ: " + (e?.message || ""), "err");
+      }
+      loadHeartLoopJobs();
     }
   }
 
@@ -18352,41 +19296,48 @@
         b.addEventListener("click", () => {
           packs.querySelectorAll(".heartloop-pack").forEach((x) => x.classList.remove("is-active"));
           b.classList.add("is-active");
-          heartloopCustom = false;
-          const toggle = $("heartloop-custom-toggle");
-          if (toggle) toggle.checked = false;
           paintHeartLoop();
         });
       });
     }
-    const toggle = $("heartloop-custom-toggle");
-    if (toggle) {
-      toggle.addEventListener("change", () => {
-        heartloopCustom = toggle.checked;
-        if (heartloopCustom) {
-          packs?.querySelectorAll(".heartloop-pack").forEach((x) => x.classList.remove("is-active"));
-        } else {
-          const first = packs?.querySelector('.heartloop-pack[data-hours="12"]');
-          first?.classList.add("is-active");
-        }
-        paintHeartLoop();
-      });
-    }
-    const hoursInput = $("heartloop-hours");
-    if (hoursInput) hoursInput.addEventListener("input", paintHeartLoop);
-    $("heartloop-hours-minus")?.addEventListener("click", () => {
-      if (!hoursInput) return;
-      hoursInput.value = String(Math.max(1, (parseInt(hoursInput.value, 10) || 6) - 1));
-      paintHeartLoop();
-    });
-    $("heartloop-hours-plus")?.addEventListener("click", () => {
-      if (!hoursInput) return;
-      hoursInput.value = String(Math.min(24, (parseInt(hoursInput.value, 10) || 6) + 1));
-      paintHeartLoop();
-    });
     $("heartloop-check")?.addEventListener("click", heartloopCheckSlots);
     $("heartloop-btn")?.addEventListener("click", heartloopRun);
+    document.querySelectorAll('input[name="heartloop-acct"]').forEach((r) =>
+      r.addEventListener("change", () => {
+        heartloopFreeSlots = null;
+        paintHeartLoop();
+      })
+    );
+    if (!heartloopAcctRows().length) heartloopAddRow();
+    $("heartloop-acct-add")?.addEventListener("click", () => {
+      const row = heartloopAddRow();
+      if (row) {
+        row.querySelector(".hl-email")?.focus();
+        heartloopAcctChanged();
+      }
+    });
+    const importInput = $("heartloop-acct-import");
+    $("heartloop-acct-import-btn")?.addEventListener("click", () => importInput?.click());
+    importInput?.addEventListener("change", async () => {
+      const file = importInput.files?.[0];
+      importInput.value = "";
+      if (!file) return;
+      if (file.size > 64 * 1024) {
+        const st = $("heartloop-status");
+        if (st) setStatus(st, "ไฟล์ใหญ่เกินไป (สูงสุด 64KB)", "err");
+        return;
+      }
+      heartloopImportText(await file.text());
+    });
+    $("farm-tab-heartloop")?.addEventListener("click", () => {
+      heartloopLoadQuota();
+      loadHeartLoopJobs();
+    });
+    $("heartloop-jobs-refresh")?.addEventListener("click", loadHeartLoopJobs);
+    $("heartloop-jobs-list")?.addEventListener("click", heartloopJobAction);
+    startHeartLoopJobsPoll();
     paintHeartLoop();
+    heartloopLoadQuota();
   }
 
   function getDevPlayAccountDisplayName() {
@@ -19356,12 +20307,10 @@
     const pageEl = $("app-page-title");
     if (titleEl && title != null) {
       titleEl.textContent = title;
-      if (VER_2692_FEATURES.has(farmTab)) {
-        const badge = document.createElement("span");
-        badge.className = "ver-badge-2692";
-        badge.textContent = "รองรับ ver 26.9.02";
-        titleEl.appendChild(badge);
-      }
+      const badge = document.createElement("span");
+      badge.className = "ver-badge-2692";
+      badge.textContent = "ver 26.9.02";
+      titleEl.appendChild(badge);
     }
     if (hintEl && hint != null) hintEl.textContent = hint;
     if (pageEl && title != null) {
@@ -20070,7 +21019,7 @@
       lead: "ไม่มีวันเช่าของฟังก์ชันนั้น จะหัก Token เฉพาะหน่วยที่ทำสำเร็จ",
       kind: "token",
       items: [
-        { key: "heart", title: "ฟาร์มหัวใจ", icon: "Heart.png?v=20260817h", unit: "ดวง", sample: 1000, step: 100, hint: "เช่นเรทปัจจุบัน 15 Token = 1,000 ดวง ถ้าแอดมินปรับเรท ตัวเลขนี้เปลี่ยนตาม" },
+        { key: "heart", title: "ฟาร์มหัวใจ", icon: "Heart.png?v=20260817h", unit: "ดวง", sample: 1000, step: 100, get hint() { const m = tokenMode("heart"); return "คิดต่อดวงที่ได้จริง" + (m.mode === "conditional" && m.free_limit ? " · ฟรี " + formatNumTh(m.free_limit) + " ดวงแรก ต่อไอดีเกม ต่อ " + m.window_hours + " ชม." : "") + " · มีวันเช่าใช้ฟรี"; } },
         { key: "giftdraw", title: "เปิดกล่องขวัญ", icon: "icon_giftpoint.png", unit: "กล่อง", sample: 100, step: 1, hint: "คิดต่อกล่องที่เปิดได้" },
         { key: "powder", title: "ฟาร์มผง", icon: "magic_powder.png", unit: "รอบ", sample: 100, step: 1, hint: "คิดต่อรอบที่ย่อยได้" },
         { key: "friend_add", title: "เพิ่มเพื่อน", icon: "Angel_cookie_sm.png", unit: "คน", sample: 50, step: 1, hint: "คิดต่อคนที่เพิ่มสำเร็จ" },
@@ -20101,10 +21050,30 @@
         { key: "treasure_ticket", title: "เปิดตั๋วสมบัติ", icon: "treasure_ticket_supreme.png?v=20260924-tools1", unit: "รอบ", sample: 1, step: 1, hint: "เปิดกี่ใบก็ได้ในรอบเดียว · ไม่หักถ้าเปิดไม่ได้เลย" },
         { key: "ingredient_extract", title: "สกัดวัตถุดิบ", icon: "Powder.png?v=20260924-tools1", unit: "ชนิด", sample: 10, step: 1, hint: "สกัดทั้งกองต่อชนิด ไม่ว่ากองนั้นมีกี่ชิ้น" },
         { key: "daily_reward_multi", title: "รับรางวัลรายวัน หลายบัญชี", icon: "gi/gift.png", unit: "ครั้ง", sample: 1, step: 1, hint: "คิดต่อครั้งที่รัน ไม่ว่าจะกี่บัญชี (สูงสุด 50)" },
-        { key: "mid_heart", title: "ฟาร์มใจ MID", icon: "Heart.png", unit: "ดวง", sample: 100, step: 10, hint: "คิดต่อหัวใจที่ส่งสำเร็จ · ผู้เช่าใช้ฟรี" },
+        { key: "mid_heart", title: "ฟาร์มใจ MID", icon: "mid_heart.png?v=20261001", unit: "ดวง", sample: 100, step: 10, hint: "คิดต่อหัวใจที่ส่งสำเร็จ · มีวันเช่าใช้ฟรี" },
         { key: "report_multi", title: "รายงานไอดี หลายบัญชี", icon: "report_multi.svg", unit: "ครั้ง", sample: 1, step: 1, hint: "ใช้ฟรี · สูงสุด 50 บัญชีต่อครั้ง" },
         { key: "treasure_break", title: "ย่อยสมบัติ", icon: "treasure_crown_chest.png?v=20260924-crg2", unit: "ชิ้น", sample: 50, step: 1, hint: "คิดต่อสมบัติที่ย่อยสำเร็จ 1 ชิ้น" },
         { key: "treasure_evo", title: "EVO สมบัติ", icon: "treasure_evo.png?v=20260921a3", unit: "หน่วย", sample: 1, step: 1, hint: "1 หน่วย = ผงที่ขาด 1,000 แล้วคูณเรท" },
+      ],
+    },
+    {
+      id: "package",
+      title: "แพ็กเกจรายชั่วโมง",
+      lead: "จ่ายเป็นแพ็ก หัก Token ตอนเริ่ม · หยุดก่อนครบคืน Token ตามรอบที่เหลือ",
+      kind: "package",
+      items: [
+        {
+          title: "HeartLoop",
+          icon: "heartloop.png?v=20261001",
+          get hint() {
+            const p = heartloopPricing || {};
+            return (
+              "6 ชม. " + formatNumTh(p.pack_6h ?? 25) + " · 12 ชม. " + formatNumTh(p.pack_12h ?? 50) + " · 24 ชม. " +
+              formatNumTh(p.pack_24h ?? 100) + " Token ต่อไอดี · มีวันเช่าฝากฟรี " + formatNumTh(p.rental_daily_ids ?? 5) +
+              " ไอดี/วัน · ได้สูงสุดประมาณ 300 หัวใจ/ชม."
+            );
+          },
+        },
       ],
     },
     {
@@ -20128,13 +21097,24 @@
         { title: "อัปเกรด Jelly", icon: "pet81_jelly.png", hint: "ใช้ฟรี" },
         { title: "ปลดล็อก Cookie", icon: "Brave-cookie.png", hint: "ใช้ฟรี" },
         { title: "ปลดล็อก Pet", icon: "King_Choco_Drop.png", hint: "ใช้ฟรี" },
-        { title: "หัวใจฟรี 100", icon: "Heart.png?v=20260817h", hint: "โควต้าทดลอง 100 ดวงต่อไอดีเกม ต่อ 24 ชั่วโมง ไม่เข้าคิวล่วงหน้า" },
+        {
+          get title() {
+            const m = tokenMode("heart");
+            return "หัวใจฟรี " + formatNumTh(m.free_limit || 100) + " ดวง";
+          },
+          icon: "Heart.png?v=20260817h",
+          get hint() {
+            const m = tokenMode("heart");
+            return "ฟรี " + formatNumTh(m.free_limit || 100) + " ดวงแรกต่อไอดีเกม ต่อ " + (m.window_hours || 24) + " ชม. (อยู่ในหน้าฟาร์มหัวใจ) · เกินจากนั้นคิดตามเรท Token";
+          },
+        },
       ],
     },
   ];
 
   function priceRateOf(item) {
     if (!item || !item.key) return 0;
+    if (item.key !== "invite_link" && tokenMode(item.key).mode === "free") return 0;
     if (item.key === "invite_link") return inviteLinkCost();
     return tokenRate(item.key);
   }
@@ -20153,6 +21133,7 @@
   function priceHeadline(item) {
     const rate = priceRateOf(item);
     const sample = Math.max(1, Number(item.sample) || 1);
+    if (item.key && tokenMode(item.key).mode === "free") return "ใช้ฟรีตอนนี้ (แอดมินเปิดฟรี)";
     if (!(rate > 0)) return "ไม่หัก Token";
     return (
       formatTokenAmount(tokensFromQty(rate, sample)) +
@@ -20309,7 +21290,13 @@
           const titles = infoEl("div", null);
           titles.appendChild(infoEl("h3", "price-card-title", item.title));
           const badge =
-            group.kind === "rental" ? "ผู้เช่ารายวันเท่านั้น" : group.kind === "free" ? "ใช้ฟรี" : "จ่าย Token";
+            group.kind === "rental"
+              ? "ผู้เช่ารายวันเท่านั้น"
+              : group.kind === "free" || (item.key && tokenMode(item.key).mode === "free")
+                ? "ใช้ฟรี"
+                : group.kind === "package"
+                  ? "จ่าย Token (แพ็ก)"
+                  : "จ่าย Token";
           titles.appendChild(infoEl("span", "price-badge", badge));
           top.appendChild(titles);
           card.appendChild(top);
@@ -20426,7 +21413,8 @@
     }
     // Invite Friend + ID shop: no DevPlay / rental required
     // CRG Code is a reference page (per-user access) — no DevPlay needed.
-    if (next !== "devplay" && next !== "crgcode" && next !== "mid_heart" && next !== "report_multi" && next !== "pc_program" && next !== "bot_ad" && !isLoginFreeFarmTab(next) && !isDevPlayConnected()) {
+    // HeartLoop: deposit any ID by email/password — DevPlay optional.
+    if (next !== "devplay" && next !== "crgcode" && next !== "mid_heart" && next !== "report_multi" && next !== "pc_program" && next !== "bot_ad" && next !== "heartloop" && !isLoginFreeFarmTab(next) && !isDevPlayConnected()) {
       if (devplayConnecting) return;
       if (!opts.silent) showDevPlayRequiredModal();
       next = "devplay";
@@ -20587,7 +21575,6 @@
       powder_qty: Math.max(1, Number($("powder-qty")?.value) || POWDER_BREAK_FALLBACK),
       powder_yield_estimate: POWDER_YIELD_ESTIMATE,
       do_break: $("powder-do-break")?.checked !== false,
-      upgrade_to_9: !!$("powder-upgrade-9")?.checked && $("powder-do-break")?.checked !== false,
     };
   }
 
@@ -20735,98 +21722,6 @@
   }
 
 
-  function paintPowderUp9Compare(plan) {
-    const box = $("powder-up9-compare");
-    const note = $("powder-up9-compare-note");
-    const cb = $("powder-upgrade-9");
-    const doBreak = $("powder-do-break")?.checked !== false;
-    if (cb) {
-      cb.disabled = !doBreak;
-      if (!doBreak && cb.checked) cb.checked = false;
-    }
-    const on = !!(cb && cb.checked && doBreak);
-    if (!box) return;
-    if (!on) {
-      box.hidden = true;
-      box.classList.add("hidden");
-      if (note) note.textContent = "";
-      return;
-    }
-    box.hidden = false;
-    box.classList.remove("hidden");
-    const setTxt = (id, v) => {
-      const el = $(id);
-      if (el) el.textContent = v;
-    };
-    const dash = "—";
-    const incomplete = "ประมาณการไม่ครบ";
-    const compare = plan && plan.compare;
-    const rec = compare && compare.recycle_now;
-    const up = compare && compare.upgrade_9;
-    if (rec && rec.complete && rec.coin_cost != null && rec.powder_gain != null) {
-      setTxt("powder-up9-recycle-coin", formatNumTh(rec.coin_cost));
-      setTxt("powder-up9-recycle-powder", formatPowderApprox(rec.powder_gain));
-    } else if (plan && plan.coin_cost != null && plan.powder_gain != null) {
-      setTxt("powder-up9-recycle-coin", formatNumTh(plan.coin_cost));
-      setTxt("powder-up9-recycle-powder", formatPowderApprox(plan.powder_gain));
-    } else {
-      setTxt("powder-up9-recycle-coin", incomplete);
-      setTxt("powder-up9-recycle-powder", incomplete);
-    }
-    const rangeCoin = up && Array.isArray(up.coin_upgrade_expected_range) && up.coin_upgrade_expected_range.length === 2;
-    const rangePowder = up && Array.isArray(up.powder_gain_range) && up.powder_gain_range.length === 2;
-    const boxCost = up && up.coin_cost_box != null ? Number(up.coin_cost_box) : Number(plan?.coin_cost);
-    if (up && up.complete && up.coin_cost != null && up.powder_gain != null) {
-      setTxt("powder-up9-upgrade-coin", formatNumTh(up.coin_cost));
-      setTxt("powder-up9-upgrade-powder", formatPowderApprox(up.powder_gain));
-      box.classList.remove("is-incomplete");
-    } else {
-      setTxt("powder-up9-upgrade-coin", incomplete);
-      setTxt("powder-up9-upgrade-powder", incomplete);
-      box.classList.add("is-incomplete");
-    }
-    const bits = [];
-    bits.push("ใช้ทรัพยากรตี · เป็นประมาณการ ไม่ใช่ยอดหักจริง");
-    if (up && up.complete && up.coin_cost != null && up.powder_gain != null) {
-      bits.push("ตี +9 ผสมจากค่าเฉลี่ยย่อยเลย (C/B)");
-      if (rangeCoin && rangePowder && Number.isFinite(boxCost)) {
-        const lo = boxCost + Number(up.coin_upgrade_expected_range[0]);
-        const hi = boxCost + Number(up.coin_upgrade_expected_range[1]);
-        bits.push(
-          "ช่วงตาราง C–B: เหรียญ " +
-            formatNumTh(lo) +
-            "–" +
-            formatNumTh(hi) +
-            " · ผง " +
-            formatPowderApprox(up.powder_gain_range[0]) +
-            "–" +
-            formatPowderApprox(up.powder_gain_range[1])
-        );
-      }
-    } else if (up && up.complete === false) {
-      bits.push("ประมาณการไม่ครบ");
-      if (rangeCoin && rangePowder && Number.isFinite(boxCost)) {
-        const lo = boxCost + Number(up.coin_upgrade_expected_range[0]);
-        const hi = boxCost + Number(up.coin_upgrade_expected_range[1]);
-        bits.push(
-          "ตารางเกม C–B: เหรียญ " +
-            formatNumTh(lo) +
-            "–" +
-            formatNumTh(hi) +
-            " · ผง " +
-            formatPowderApprox(up.powder_gain_range[0]) +
-            "–" +
-            formatPowderApprox(up.powder_gain_range[1]) +
-            " (ไม่มีอัตราสุ่มกล่องในโปรเจกต์)"
-        );
-      }
-    }
-    if (plan && plan.upgrade9_enough_currency === false) {
-      bits.push("เหรียญไม่พอสำหรับตี +9 — ยังไม่ใส่คิว");
-    }
-    if (note) note.textContent = bits.join(" · ");
-  }
-
   function paintPowderPlan(plan) {
     powderPlan = plan;
     powderEstimate = plan;
@@ -20854,7 +21749,6 @@
       setTxt("powder-stat-coin-after", "—");
       if (noteEl) noteEl.textContent = "";
       if (hintEl) hintEl.textContent = "เชื่อม DevPlay เพื่อดูแผน";
-      paintPowderUp9Compare(null);
       paintPowderGoalControls();
       paintFeatureTokenRates();
       return;
@@ -20883,7 +21777,6 @@
     setTxt("powder-stat-coin", formatNumTh(coinCost));
     setTxt("powder-stat-powder", formatPowderApprox(powderGain));
     setTxt("powder-stat-coin-after", formatNumTh(coinAfter));
-    paintPowderUp9Compare(plan);
 
     if (targetEl) {
       targetEl.classList.toggle("is-warn", !!plan.capped || jobCapped);
@@ -21004,6 +21897,30 @@
     }
     if ($("powder-target-powder")) $("powder-target-powder").disabled = !canEdit;
     if ($("powder-target-coin")) $("powder-target-coin").disabled = !canEdit;
+    const capNote = $("powder-goal-cap-note");
+    if (capNote) {
+      capNote.textContent =
+        "ระบบจะคำนวณงบเหรียญให้ (ประมาณ 8 ผง/กล่อง) · เพดาน " +
+        formatNumTh(powderMax) +
+        " ผง/รอบ";
+    }
+    document.querySelectorAll(".powder-target-shortcut").forEach((btn) => {
+      const n = Number(btn.dataset.powderTarget) || 0;
+      btn.disabled = !canEdit || n > powderMax;
+      btn.classList.toggle("is-active", n > 0 && n === powderVal);
+      btn.setAttribute("aria-pressed", n > 0 && n === powderVal ? "true" : "false");
+    });
+  }
+
+  function setPowderTargetShortcut(amount) {
+    powderEditLock = "powder";
+    const el = $("powder-target-powder");
+    if (!el || el.disabled) return;
+    const next = clampPowderTarget(amount);
+    el.value = formatPowderInputValue(next);
+    paintPowderGoalControls();
+    flushPowderRefreshTimer();
+    refreshPowderEstimate().catch(() => {});
   }
 
   function flushPowderRefreshTimer() {
@@ -22803,7 +23720,7 @@
       evoScan = data;
       pruneEvoSelected();
     } catch (e) {
-      const msg = thError(e.message);
+      const msg = evoErrorText(e?.data?.detail?.code || e?.data?.detail || e.message) || thError(e.message);
       if ($("evo-cost-line")) {
         $("evo-cost-line").textContent = msg || "สแกนสมบัติไม่สำเร็จ";
       }
@@ -22892,7 +23809,10 @@
           onError: (data) => {
             const result = data.result || data;
             refreshEvoScan().catch(() => {});
-            setFarmStatus(farmErrorMessage(result, "EVO สมบัติไม่สำเร็จ"), "err");
+            setFarmStatus(
+              evoErrorText(result?.error || result?.detail) || farmErrorMessage(result, "EVO สมบัติไม่สำเร็จ"),
+              "err"
+            );
             loadFarmHistory().catch(() => {});
           },
         },
@@ -25258,10 +26178,8 @@
       });
       paintUpgradeEstimate();
     } else if (isPowder) {
-      const up9On = !!$("powder-upgrade-9")?.checked && $("powder-do-break")?.checked !== false;
-      const up9Short = up9On && powderPlan?.upgrade9_enough_currency === false;
       const powderBlocked =
-        !connected || powderEstimateLoading || !powderPlan?.can_run || up9Short;
+        !connected || powderEstimateLoading || !powderPlan?.can_run;
       const rounds = Number(powderPlan?.rounds) || powderRounds || 0;
       const gain = Number(powderPlan?.powder_gain) || rounds * powderYieldPerRound();
       let pwSub =
@@ -25273,7 +26191,6 @@
         pwSub = rem ? "เหลือ " + rem : "เติม Token หรือเช่าวัน";
       } else if (!connected) pwSub = "เชื่อม DevPlay ก่อน";
       else if (powderEstimateLoading) pwSub = "กำลังคำนวณ…";
-      else if (up9Short) pwSub = "เหรียญไม่พอสำหรับตี +9";
       else if (!powderPlan?.can_run) pwSub = "เหรียญไม่พอ";
       else if (powderPlan?.capped) {
         pwSub = "จำกัดเหรียญ · " + formatNumTh(rounds) + " กล่อง";
@@ -26390,7 +27307,7 @@
     if (mode === "powder") {
       const rounds = Number(res.rounds ?? res.bought ?? 0) || 0;
       const tgt = Number(res.target ?? res.requested ?? 0) || 0;
-      const base =
+      let base =
         "ผง +" +
         escapeHtml(formatNumTh(res.powder_gained || res.total_powder || 0)) +
         " · " +
@@ -27848,7 +28765,10 @@
         openAuthModal("login");
         return;
       }
-      $(idOf("-slip-file"))?.click();
+      const input = $(idOf("-slip-file"));
+      if (!input) return;
+      input.value = "";
+      input.click();
     });
 
     $(idOf("-slip-file"))?.addEventListener("change", async (e) => {
@@ -29280,23 +30200,7 @@
 
   function pipelineStepsFor(mode) {
     const steps = (modeConfig(mode).steps || []).map((s) => ({ ...s }));
-    if (mode === "powder" && powderJobWantsUpgrade9()) {
-      const extractAt = steps.findIndex((s) => s.id === "extract");
-      if (extractAt >= 0 && !steps.some((s) => s.id === "upgrade")) {
-        steps.splice(extractAt, 0, { id: "upgrade", label: "ตีบวกถึง +9" });
-      }
-    }
     return steps;
-  }
-
-  function powderJobWantsUpgrade9() {
-    const params =
-      liveJob?.params ||
-      statusContext?.params ||
-      (typeof liveJob === "object" && liveJob?.result?.upgrade_to_9 ? { upgrade_to_9: true } : null);
-    if (params && params.upgrade_to_9 === true) return true;
-    if (params && params.upgrade_to_9 === false) return false;
-    return !!$("powder-upgrade-9")?.checked;
   }
 
   const LOG_PANEL_MAX = 280;
@@ -29396,8 +30300,6 @@
         }
         if (/SendLife|AcceptLife|sending life/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 1);
       } else if (mode === "powder") {
-        // Real backend: "[i/count] BUY …" then optional upgrade then "  BREAK OK powder+P".
-        const up9 = powderJobWantsUpgrade9();
         let m = s.match(/\[(\d+)\/(\d+)\]\s+(?:BUY|ซื้อ)\b/i);
         if (m) {
           out.current = Number(m[1]);
@@ -29410,18 +30312,14 @@
           out.phase = "buy";
           out.stepIdx = 1;
         }
-        if (/powder:\s*upgrade/i.test(s)) {
-          out.phase = "upgrade";
-          out.stepIdx = Math.max(out.stepIdx, up9 ? 2 : 1);
-        }
         m = s.match(/\[(\d+)\]\s+\+\d+\s+powder\s+gained=(\d+)\/(\d+)/i);
         if (m) {
           out.current = Number(m[1]);
           out.total = Number(m[3]);
           out.phase = "extract";
-          out.stepIdx = up9 ? 3 : 2;
+          out.stepIdx = 2;
         }
-        if (/ย่อย\s+\d+\s+ชิ้น|BREAK\s+OK|powder\+/i.test(s)) out.stepIdx = Math.max(out.stepIdx, up9 ? 3 : 2);
+        if (/ย่อย\s+\d+\s+ชิ้น|BREAK\s+OK|powder\+/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 2);
         if (/powder:\s*login|loading/i.test(s)) out.stepIdx = Math.max(out.stepIdx, 0);
       } else if (mode === "upgrade") {
         let line = s;
@@ -29845,11 +30743,7 @@
     if (mode === "jelly_upgrade") return "อัปเกรด Jelly";
     if (mode === "cookie_unlock") return "ปลดล็อก Cookie";
     if (mode === "pet_unlock") return "ปลดล็อก Pet";
-    if (mode === "powder") {
-      const p = extras.row?.params || extras.row?.result || {};
-      if (p.upgrade_to_9) return "ฟาร์มผง · ตี +9 ก่อนย่อย";
-      return "ฟาร์มผง";
-    }
+    if (mode === "powder") return "ฟาร์มผง";
     if (mode === "upgrade") return "ตีบวกสมบัติ";
     if (mode === "afterplay_fast") {
       const fam =
@@ -31042,7 +31936,8 @@
       if (showQueue) {
         queueSection?.classList.remove("hidden");
         leaveQBtn?.classList.toggle("hidden", !leaveVisible);
-        const myPos = lastGate?.me?.position || (queueRows.find((r) => r.is_me)?.position) || "1";
+        const queueRows = Array.isArray(lastGate?.queue_items) ? lastGate.queue_items : [];
+        const myPos =lastGate?.me?.position || (queueRows.find((r) => r.is_me)?.position) || "1";
         const wait = queueWaitText(lastGate);
         const rankEl = $("job-queue-rank-text");
         const etaBadge = $("job-queue-eta-badge");
@@ -33889,7 +34784,22 @@
       ) ||
       e.status === 401;
 
-    if (/account_banned/i.test(raw)) {
+    const intakeDetail = friendIntakeDetail(e);
+    if (intakeDetail) {
+      clearPendingFarmJobs();
+      forceCloseRunStatusPopup();
+      showFriendIntakeModal(intakeDetail, {
+        onUseRemaining:
+          mode === "heart"
+            ? (n) => {
+                heartTarget = clampHeartTarget(n);
+                paintHeartStepper();
+                updateFarmAvailability();
+              }
+            : null,
+      });
+      setFarmStatus(intakeDetail.message || "ไอดีนี้รับเพื่อนใหม่ครบโควต้าแล้ว", "err");
+    } else if (/account_banned/i.test(raw)) {
       clearPendingFarmJobs();
       forceCloseRunStatusPopup();
       showErrorModal(ERR_TH.account_banned, "บัญชีถูกระงับ");
@@ -34075,11 +34985,6 @@
     const price = Math.max(0, Number($("powder-price")?.value) || 5000);
     const powderQty = Math.max(1, Number($("powder-qty")?.value) || POWDER_BREAK_FALLBACK);
     const doBreak = !!$("powder-do-break")?.checked;
-    const upgradeTo9 = !!$("powder-upgrade-9")?.checked && doBreak;
-    if (upgradeTo9 && powderPlan?.upgrade9_enough_currency === false) {
-      showErrorModal("เหรียญไม่พอสำหรับตี +9 (ประมาณการ)", "เหรียญไม่พอ");
-      return;
-    }
     const estGain =
       Number(powderPlan?.powder_gain) || rounds * powderYieldPerRound();
     setFarmStatus(
@@ -34098,7 +35003,6 @@
       price,
       powder_qty: powderQty,
       do_break: doBreak,
-      upgrade_to_9: upgradeTo9,
     };
 
     if (
@@ -36889,6 +37793,24 @@
     if (detail) openIdshopDetail(detail.getAttribute("data-idshop-detail"));
   });
   $("idshop-orders-list")?.addEventListener("click", (ev) => {
+    const perkBtn = ev.target.closest("[data-io-perk]");
+    if (perkBtn) {
+      ev.preventDefault();
+      openOrderPerk(perkBtn.getAttribute("data-io-perk"));
+      return;
+    }
+    const showBtn = ev.target.closest("[data-io-show]");
+    if (showBtn) {
+      const i = showBtn.getAttribute("data-io-show");
+      const code = $("idshop-orders-list")?.querySelector('[data-io-pass="' + i + '"]');
+      const row = (idshopOrderRows || [])[Number(i)];
+      if (code && row) {
+        const hidden = code.textContent === "••••••••";
+        code.textContent = hidden ? row.password || "—" : "••••••••";
+        showBtn.textContent = hidden ? "ซ่อน" : "แสดง";
+      }
+      return;
+    }
     const dpBtn = ev.target.closest("[data-idshop-order-devplay]");
     if (dpBtn) {
       ev.preventDefault();
@@ -36977,6 +37899,45 @@
     if (!btn || btn.disabled) return;
     goIdshopAdminPage(btn.getAttribute("data-admin-idshop-page"));
   });
+  $("admin-idshop-export-btn")?.addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
+    const status = $("admin-idshop-export-status")?.value || "listed";
+    const headers = {};
+    if (accessToken) headers.Authorization = "Bearer " + accessToken;
+    if (sessionToken) headers["X-Session-Token"] = sessionToken;
+    btn.disabled = true;
+    try {
+      await ensureFreshWebsiteSession();
+      if (accessToken) headers.Authorization = "Bearer " + accessToken;
+      const res = await fetch(API + "/api/admin/idshop/export-unsold.txt?status=" + encodeURIComponent(status), { headers });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      // Header may be hidden cross-origin — fall back to counting the lines.
+      const headerCount = res.headers.get("X-Export-Count");
+      const count = headerCount != null ? Number(headerCount) || 0 : text.split("\n").filter((l) => l.trim()).length;
+      if (!count) {
+        showToast("ไม่มีไอดีที่ยังไม่ขาย", "info");
+        return;
+      }
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = cd.match(/filename="([^"]+)"/);
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = m ? m[1] : "idshop_unsold.txt";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showToast("ดึงไอดีที่ยังไม่ขาย " + formatNumTh(count) + " ไอดี", "ok");
+    } catch (e) {
+      showToast("ดึงไฟล์ไม่สำเร็จ: " + (e?.message || e), "err");
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   $("admin-idshop-select-all")?.addEventListener("change", (ev) => {
     const on = !!ev.target.checked;
     document.querySelectorAll("#admin-idshop-list [data-idshop-select]").forEach((box) => {
@@ -37410,6 +38371,31 @@
   });
   $("friend-start-btn")?.addEventListener("click", () => startFriendJob());
   $("friend-cancel-btn")?.addEventListener("click", () => cancelFriendJob());
+
+  // "เทียบ 3 ฟีเจอร์หัวใจ": clone #heart-compare-tpl into each panel's slot,
+  // highlight that panel's own column and wire the per-column shortcut buttons.
+  function mountHeartCompare() {
+    const tpl = $("heart-compare-tpl");
+    if (!tpl || !tpl.content) return;
+    document.querySelectorAll(".heart-compare-slot[data-heart-compare]").forEach((slot) => {
+      if (slot.dataset.mounted) return;
+      slot.dataset.mounted = "1";
+      const here = slot.getAttribute("data-heart-compare");
+      slot.appendChild(tpl.content.cloneNode(true));
+      slot.querySelectorAll(".hc-col-" + here).forEach((cell) => cell.classList.add("hc-col-current"));
+      slot.querySelectorAll("[data-hc-go]").forEach((btn) => {
+        const key = btn.getAttribute("data-hc-go");
+        if (key === here) {
+          btn.disabled = true;
+          btn.textContent = "อยู่หน้านี้";
+          btn.setAttribute("aria-current", "page");
+          return;
+        }
+        btn.addEventListener("click", () => onFarmTabClick(key));
+      });
+    });
+  }
+  mountHeartCompare();
   $("friend-select-all")?.addEventListener("change", (ev) => {
     toggleFriendSelectAll(!!ev.target.checked);
   });
@@ -37490,7 +38476,7 @@
       closeProfileTgGuide();
       return;
     }
-    if (!$("wallet-tutorial")?.classList.contains("hidden")) {
+    if ($("wallet-tutorial") && !$("wallet-tutorial").classList.contains("hidden")) {
       closeWalletTutorial();
       return;
     }
@@ -37800,10 +38786,47 @@
       showErrorModal("กรุณาเข้าสู่ระบบก่อน", "ต้องเข้าสู่ระบบ");
       return;
     }
-    $("slip-file")?.click();
+    const input = $("slip-file");
+    if (!input) return;
+    input.value = "";
+    input.click();
   };
   $("slip-paid-btn")?.addEventListener("click", triggerSlipPicker);
   $("slip-dropzone-click")?.addEventListener("click", triggerSlipPicker);
+  const slipZone = $("cko-slip-dropzone");
+  if (slipZone && !slipZone.dataset.slipDrop) {
+    slipZone.dataset.slipDrop = "1";
+    const markDrag = (e) => {
+      const types = e.dataTransfer && e.dataTransfer.types;
+      if (!types || ![...types].includes("Files")) return;
+      e.preventDefault();
+      slipZone.classList.add("is-dragover");
+    };
+    slipZone.addEventListener("dragenter", markDrag);
+    slipZone.addEventListener("dragover", markDrag);
+    slipZone.addEventListener("dragleave", (e) => {
+      if (!slipZone.contains(e.relatedTarget)) slipZone.classList.remove("is-dragover");
+    });
+    slipZone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      slipZone.classList.remove("is-dragover");
+      const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      const input = $("slip-file");
+      if (!file || !input || slipBusy || topupBusy) return;
+      if (!accessToken) {
+        showErrorModal("กรุณาเข้าสู่ระบบก่อน", "ต้องเข้าสู่ระบบ");
+        return;
+      }
+      try {
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+      } catch (_) {
+        return;
+      }
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
 
   $("slip-file")?.addEventListener("change", async (e) => {
     const file = e.target && e.target.files && e.target.files[0];
@@ -38400,7 +39423,7 @@
     updateFarmAvailability();
   });
 
-  ["powder-stuff-seq", "powder-price", "powder-qty", "powder-do-break", "powder-upgrade-9"].forEach((id) => {
+  ["powder-stuff-seq", "powder-price", "powder-qty", "powder-do-break"].forEach((id) => {
     $(id)?.addEventListener("input", () => {
       if (id === "powder-stuff-seq") schedulePowderStuffLookup();
       refreshPowderEstimate().catch(() => {});
@@ -38505,9 +39528,15 @@
       requireFeatureAccess(tab);
       return;
     }
-    if (tab !== "devplay" && !isDevPlayConnected()) {
+    if (tab !== "devplay" && tab !== "heartloop" && !isDevPlayConnected()) {
       showDevPlayRequiredModal();
       return;
+    }
+    if (tab === "heartloop" && !isDevPlayConnected() && !hasDevPlayCreds()) {
+      // No DevPlay: default the panel to "deposit another ID".
+      const other = $("heartloop-acct-other");
+      if (other) other.checked = true;
+      paintHeartLoop();
     }
     switchFarmTab(tab);
     if (window.matchMedia("(max-width: 860px)").matches) {
@@ -38596,6 +39625,13 @@
   $("upgrade-select-c-btn")?.addEventListener("click", () => quickSelectUpgradeTreasures("c"));
   $("upgrade-select-lv0-btn")?.addEventListener("click", () => quickSelectUpgradeTreasures("lv0"));
   $("upgrade-clear-btn")?.addEventListener("click", () => quickSelectUpgradeTreasures("clear"));
+
+  $("powder-target-shortcuts")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".powder-target-shortcut");
+    if (!btn || btn.disabled) return;
+    const n = Number(btn.dataset.powderTarget) || 0;
+    if (n > 0) setPowderTargetShortcut(n);
+  });
 
   $("powder-target-powder-minus")?.addEventListener("click", () => bumpPowderTarget(-1));
   $("powder-target-powder-plus")?.addEventListener("click", () => bumpPowderTarget(1));
@@ -39243,6 +40279,7 @@
     invite: ["Invite Pool", "คลังลิงก์เชิญเพื่อน"],
     idshop: ["ไอดีราคาถูก", "นำเข้า ปรับราคา และสถานะไอดีในร้าน"],
     hearts: ["คลังหัวใจ", "บัญชีช่วยส่งหัวใจ"],
+    intake: ["โควต้าเพื่อนใหม่", "ไอดีเกมที่รับเพื่อนใหม่ไปแล้ววันนี้ · รวมทุกฟังก์ชันหัวใจ"],
     proxy: ["Proxy", "พูลพร็อกซีของระบบ"],
     jobs: ["งาน & คิว", "งานที่รันอยู่ รอคิว และค้าง"],
     notices: ["ประกาศเว็บ", "แถบวิ่งด้านบนและป๊อปอัปแรกเข้า"],
@@ -39352,13 +40389,17 @@
       loadAdminAffiliate().catch(() => {});
       return loadAdminUsers();
     }
-    if (adminConsoleTab === "topups") return loadAdminTopups();
+    if (adminConsoleTab === "topups") {
+      loadAdminSlip2go();
+      return loadAdminTopups();
+    }
     if (adminConsoleTab === "packages") return loadAdminPackages();
     if (adminConsoleTab === "farmcaps") return loadAdminFarmCaps();
     if (adminConsoleTab === "features") return loadAdminFeatureLocks();
     if (adminConsoleTab === "invite") return loadAdminInvite();
     if (adminConsoleTab === "idshop") return loadIdshopAdminList();
     if (adminConsoleTab === "hearts") return loadAdminHearts();
+    if (adminConsoleTab === "intake") return loadAdminIntake();
     if (adminConsoleTab === "proxy") return loadAdminProxy();
     if (adminConsoleTab === "notices") return loadAdminNotices();
     if (adminConsoleTab === "redeem") return loadAdminRedeem();
@@ -39548,19 +40589,19 @@
       name: String($("admin-redeem-name")?.value || "").trim(),
       note: String($("admin-redeem-note")?.value || "").trim(),
       enabled: !!$("admin-redeem-enabled")?.checked,
-      max_per_user: Number($("admin-redeem-per-user")?.value || 1) || 1,
+      max_per_user: Math.max(1, Math.floor(Number($("admin-redeem-per-user")?.value) || 1)),
       reward_kind: kind,
-      token_amount: kind === "token" ? Number($("admin-redeem-token")?.value || 0) || 0 : 0,
-      days: kind === "rental" ? Number($("admin-redeem-days")?.value || 0) || 0 : 0,
-      hours: kind === "rental" ? Number($("admin-redeem-hours")?.value || 0) || 0 : 0,
-      minutes: kind === "rental" ? Number($("admin-redeem-minutes")?.value || 0) || 0 : 0,
+      token_amount: kind === "token" ? Math.max(0, Number($("admin-redeem-token")?.value || 0) || 0) : 0,
+      days: kind === "rental" ? Math.max(0, Number($("admin-redeem-days")?.value || 0) || 0) : 0,
+      hours: kind === "rental" ? Math.max(0, Number($("admin-redeem-hours")?.value || 0) || 0) : 0,
+      minutes: kind === "rental" ? Math.max(0, Number($("admin-redeem-minutes")?.value || 0) || 0) : 0,
       feature_scope: kind === "rental" && $("admin-redeem-scope")?.value === "selected" ? "selected" : "all",
       features: kind === "rental" ? adminRedeemSelectedFeatures() : [],
       new_users_only: !!$("admin-redeem-new-only")?.checked,
       allowlist_usernames: String($("admin-redeem-allowlist")?.value || ""),
       success_message: String($("admin-redeem-message")?.value || "").trim(),
     };
-    if (maxRaw) payload.max_redemptions = Number(maxRaw);
+    if (maxRaw) payload.max_redemptions = Math.max(1, Math.floor(Number(maxRaw) || 1));
     else if (editing) payload.clear_max_redemptions = true;
     if (starts) payload.starts_at = starts;
     else if (editing) payload.clear_starts_at = true;
@@ -39672,12 +40713,14 @@
       return;
     }
     const q = String($("admin-redeem-code-q")?.value || "").trim();
+    const sel = adminRedeemSelectedId;
     const data = await api(
       "/api/admin/redeem/campaigns/" +
-        encodeURIComponent(adminRedeemSelectedId) +
+        encodeURIComponent(sel) +
         "/codes" +
         (q ? "?q=" + encodeURIComponent(q) : "")
     );
+    if (sel !== adminRedeemSelectedId) return; // another campaign was picked meanwhile
     renderAdminRedeemCodes(data?.codes || []);
     const hint = $("admin-redeem-codes-hint");
     const camp = adminRedeemCampaigns.find((c) => c.id === adminRedeemSelectedId);
@@ -39687,10 +40730,12 @@
   async function loadAdminRedeemLog() {
     const q = String($("admin-redeem-log-q")?.value || "").trim();
     const params = new URLSearchParams();
-    if (adminRedeemSelectedId) params.set("campaign_id", adminRedeemSelectedId);
+    const sel = adminRedeemSelectedId;
+    if (sel) params.set("campaign_id", sel);
     if (q) params.set("q", q);
     const qs = params.toString();
     const data = await api("/api/admin/redeem/redemptions" + (qs ? "?" + qs : ""));
+    if (sel !== adminRedeemSelectedId) return;
     renderAdminRedeemLog(data?.redemptions || []);
   }
 
@@ -40267,8 +41312,8 @@
       body: {
         title,
         body: String($("admin-mailbox-auto-body")?.value || "").trim(),
-        visible_days: Number($("admin-mailbox-auto-visible-days")?.value || 7),
-        download_days: Number($("admin-mailbox-auto-download-days")?.value || 7),
+        visible_days: Math.max(1, Number($("admin-mailbox-auto-visible-days")?.value) || 7),
+        download_days: Math.max(1, Number($("admin-mailbox-auto-download-days")?.value) || 7),
         usernames: [],
       },
     });
@@ -40299,8 +41344,8 @@
       body: {
         title,
         body: String($("admin-mailbox-auto-body")?.value || "").trim(),
-        visible_days: Number($("admin-mailbox-auto-visible-days")?.value || 7),
-        download_days: Number($("admin-mailbox-auto-download-days")?.value || 7),
+        visible_days: Math.max(1, Number($("admin-mailbox-auto-visible-days")?.value) || 7),
+        download_days: Math.max(1, Number($("admin-mailbox-auto-download-days")?.value) || 7),
         ...mailboxAutoRuleFields(),
         enabled: mailboxAutoEditEnabled,
         keep_attachment_ids: mailboxAutoKeptFiles.map((row) => row.id).filter(Boolean),
@@ -40504,8 +41549,8 @@
       body: {
         title,
         body: String($("admin-mailbox-body")?.value || "").trim(),
-        visible_days: Number($("admin-mailbox-visible-days")?.value || 7),
-        download_days: Number($("admin-mailbox-download-days")?.value || 7),
+        visible_days: Math.max(1, Number($("admin-mailbox-visible-days")?.value) || 7),
+        download_days: Math.max(1, Number($("admin-mailbox-download-days")?.value) || 7),
         usernames: mailboxRecipients.map((row) => row.username),
       },
     });
@@ -40539,7 +41584,7 @@
     const id = adminRedeemSelectedId || String($("admin-redeem-campaign-id")?.value || "").trim();
     if (!id) throw new Error("เลือกหรือบันทึกแคมเปญก่อนสุ่มโค้ด");
     const custom = String($("admin-redeem-custom")?.value || "").trim();
-    const count = Number($("admin-redeem-gen-count")?.value || 1) || 1;
+    const count = Math.min(200, Math.max(1, Math.floor(Number($("admin-redeem-gen-count")?.value) || 1)));
     const data = await api("/api/admin/redeem/campaigns/" + encodeURIComponent(id) + "/generate", {
       method: "POST",
       body: { count, custom_code: custom || null },
@@ -40717,7 +41762,10 @@
       </div>`;
   }
 
+  let adminTopupReqGen = 0;
+  let adminTopupAppendBusy = false;
   async function loadAdminTopups({ append } = {}) {
+    if (append && adminTopupAppendBusy) return;
     if (!append) {
       adminTopupOffset = 0;
       adminTopupItems = [];
@@ -40742,7 +41790,16 @@
     qs.set("offset", String(adminTopupOffset));
     adminConsoleStatus("กำลังโหลดประวัติเติมเงิน…", "muted");
     if (!append) paintAdminTopupSkeleton(6);
-    const data = await api("/api/admin/topup/history?" + qs.toString());
+    const reqGen = ++adminTopupReqGen;
+    if (append) adminTopupAppendBusy = true;
+    let data;
+    try {
+      data = await api("/api/admin/topup/history?" + qs.toString());
+    } finally {
+      if (append) adminTopupAppendBusy = false;
+    }
+    // A newer load (preset/filter change) started meanwhile: drop this stale page.
+    if (reqGen !== adminTopupReqGen) return;
     adminTopupSummary = data?.summary || null;
     const items = Array.isArray(data?.items) ? data.items : [];
     adminTopupItems = append ? adminTopupItems.concat(items) : items;
@@ -41132,22 +42189,24 @@
       const kindClass = kind === "feature" ? "kind-feature" : "kind-full";
       const unit = pkg.duration_unit === "hours" || kind === "feature" ? "ชั่วโมง" : "วัน";
       const val = pkg.duration_value || pkg.days || pkg.hours || 1;
-      const title = pkg.label_th || pkg.id;
+      const pid = escapeHtml(String(pkg.id ?? ""));
+      const title = escapeHtml(String(pkg.label_th || pkg.id || ""));
+      const price = escapeHtml(String(pkg.price_baht ?? ""));
       const on = editingId && editingId === pkg.id;
-      return `<div class="admin-pkg-card${on ? " is-editing" : ""}" data-admin-pkg-edit="${pkg.id}">
+      return `<div class="admin-pkg-card${on ? " is-editing" : ""}" data-admin-pkg-edit="${pid}">
         <div class="admin-pkg-head">
-          <span class="admin-pkg-id-tag">${pkg.id}</span>
+          <span class="admin-pkg-id-tag">${pid}</span>
           <span class="admin-pkg-kind-tag ${kindClass}">${kindLabel}</span>
         </div>
         <div class="admin-pkg-body">
           <span class="admin-pkg-title">${title}</span>
-          <span class="admin-pkg-duration">${val} ${unit}</span>
+          <span class="admin-pkg-duration">${escapeHtml(String(val))} ${unit}</span>
         </div>
         <div class="admin-pkg-price-row">
-          <span class="admin-pkg-price">${pkg.price_baht} ฿ = ${pkg.price_baht} Token แลก</span>
+          <span class="admin-pkg-price">${price} ฿ = ${price} Token แลก</span>
           <div class="admin-pkg-actions">
-            <button type="button" class="btn btn-ghost btn-sm" data-admin-pkg-edit="${pkg.id}">แก้ไข</button>
-            <button type="button" class="admin-pkg-del-btn" data-admin-pkg-del="${pkg.id}">ลบ</button>
+            <button type="button" class="btn btn-ghost btn-sm" data-admin-pkg-edit="${pid}">แก้ไข</button>
+            <button type="button" class="admin-pkg-del-btn" data-admin-pkg-del="${pid}">ลบ</button>
           </div>
         </div>
       </div>`;
@@ -41498,7 +42557,8 @@
         const ready = data?.ready ? "พร้อม" : "ยังไม่พร้อม";
         const pool = data?.pool?.detail || data?.pool?.label || "";
         const poweredBy = data?.powered_by || data?.pool?.powered_by || "nettify.xyz";
-        const poweredUrl = data?.powered_by_url || data?.pool?.powered_by_url || "https://nettify.xyz";
+        let poweredUrl = data?.powered_by_url || data?.pool?.powered_by_url || "https://nettify.xyz";
+        if (!/^https?:\/\//i.test(String(poweredUrl))) poweredUrl = "https://nettify.xyz";
         const activeLabel = data?.label || data?.provider || poweredBy;
         const liveLabel = (live) => {
           if (!live) return { text: "ยังไม่เช็ค", color: "#94a3b8" };
@@ -42328,6 +43388,162 @@
       adminConsoleStatus("โหลด Invite Pool ไม่สำเร็จ: " + msg, "err");
     }
   }
+
+  // ---- Admin: shared new-friend quota per game account ----
+  function adminIntakeTime(iso) {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("th-TH", { dateStyle: "short", timeStyle: "short" });
+    } catch (_) {
+      return String(iso);
+    }
+  }
+
+  async function loadAdminIntake() {
+    const list = $("admin-intake-list");
+    const sum = $("admin-intake-summary");
+    const ev = $("admin-intake-evidence");
+    if (!list) return;
+    const q = ($("admin-intake-q")?.value || "").trim();
+    adminConsoleStatus("กำลังโหลดโควต้าเพื่อนใหม่…", "muted");
+    try {
+      const d = await api("/api/admin/friend-intake" + (q ? "?q=" + encodeURIComponent(q) : ""));
+      const accts = Array.isArray(d.accounts) ? d.accounts : [];
+      const full = accts.filter((a) => a.state === "full").length;
+      const near = accts.filter((a) => a.state === "near").length;
+      if (sum) {
+        sum.innerHTML =
+          '<div class="ai-tile"><b>' + formatNumTh(accts.length) + "</b><small>ไอดีที่ใช้วันนี้</small></div>" +
+          '<div class="ai-tile is-full"><b>' + formatNumTh(full) + "</b><small>เต็มแล้ว</small></div>" +
+          '<div class="ai-tile is-near"><b>' + formatNumTh(near) + "</b><small>ใกล้เต็ม</small></div>" +
+          '<div class="ai-tile"><b>' + formatNumTh(d.cap || 300) + "</b><small>เพดาน/ไอดี</small></div>" +
+          '<p class="ai-window">รอบวันนี้: ' + escapeHtml(adminIntakeTime(d.window_start)) + " → " + escapeHtml(adminIntakeTime(d.window_end)) +
+          " · รีเซ็ต " + escapeHtml(d.reset_th || "แบบนับย้อน") + " น. · " +
+          (d.enforce ? '<b class="ai-on">บล็อกอยู่</b>' : '<b class="ai-off">บันทึกอย่างเดียว (ไม่บล็อก)</b>') + "</p>";
+      }
+      list.innerHTML = accts.length
+        ? accts
+            .map((a) => {
+              const pct = Math.min(100, Math.round((a.used / (d.cap || 300)) * 100));
+              const kinds = (a.by_kind || []).map((k) => escapeHtml(k.label) + " " + formatNumTh(k.units)).join(" · ");
+              const jobs = (a.jobs || [])
+                .slice(0, 8)
+                .map(
+                  (j) =>
+                    "<li>" + escapeHtml(adminIntakeTime(j.at)) + " · " + escapeHtml(j.label) + " <b>+" + formatNumTh(j.units) +
+                    "</b> <code>#" + escapeHtml(String(j.job_id).slice(0, 8)) + "</code></li>"
+                )
+                .join("");
+              return (
+                '<details class="ai-acct is-' + escapeHtml(a.state) + '">' +
+                '<summary><span class="ai-id"><b>' + escapeHtml(a.mid || "(ไม่ทราบ MID)") + "</b>" +
+                (a.label ? " <small>" + escapeHtml(a.label) + "</small>" : "") +
+                (a.users?.length ? ' <small class="muted">· user: ' + escapeHtml(a.users.join(", ")) + "</small>" : "") +
+                '</span><span class="ai-num">' + formatNumTh(a.used) + "/" + formatNumTh(d.cap || 300) + "</span>" +
+                '<span class="ai-bar"><i style="width:' + pct + '%"></i></span>' +
+                '<span class="ai-kinds">' + kinds + " · ล่าสุด " + escapeHtml(adminIntakeTime(a.last_at)) + "</span></summary>" +
+                '<ul class="ai-jobs">' + jobs + "</ul>" +
+                '<button type="button" class="btn btn-ghost btn-sm" data-ai-reset-mid="' + escapeHtml(a.mid || "") +
+                '" data-ai-reset-acct="' + escapeHtml(a.acct_key || "") + '">ล้างโควต้าวันนี้ของไอดีนี้</button>' +
+                "</details>"
+              );
+            })
+            .join("")
+        : '<p class="muted">ยังไม่มีไอดีที่รับเพื่อนใหม่ในรอบวันนี้' + (q ? " (ตามคำค้น)" : "") + "</p>";
+      if (ev) {
+        const rows = Array.isArray(d.evidence) ? d.evidence : [];
+        ev.innerHTML = rows.length
+          ? '<ul class="ai-evidence">' +
+            rows
+              .slice()
+              .reverse()
+              .map(
+                (e) =>
+                  "<li><b>" + escapeHtml(e.label || e.account) + "</b> รับไม่ได้ " + escapeHtml(adminIntakeTime(e.failed_at)) +
+                  " → ใช้ได้อีก " + escapeHtml(adminIntakeTime(e.ok_at)) + "</li>"
+              )
+              .join("") +
+            "</ul>"
+          : '<p class="muted">ยังไม่มีข้อมูล</p>';
+      }
+      adminConsoleStatus("", "muted");
+    } catch (e) {
+      list.innerHTML = '<p class="muted">โหลดไม่สำเร็จ: ' + escapeHtml(e?.message || "") + "</p>";
+      adminConsoleStatus("โหลดโควต้าไม่สำเร็จ", "err");
+    }
+  }
+
+  $("admin-intake-refresh")?.addEventListener("click", () => loadAdminIntake());
+  $("admin-intake-search")?.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    loadAdminIntake();
+  });
+  $("admin-intake-list")?.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-ai-reset-mid]");
+    if (!btn) return;
+    const mid = btn.getAttribute("data-ai-reset-mid");
+    const acct = btn.getAttribute("data-ai-reset-acct");
+    const ok = await showJobConfirmModal({
+      title: "ล้างโควต้าวันนี้ของ " + (mid || "ไอดีนี้") + "?",
+      body: "ใช้เมื่อระบบบล็อกผิด — ไอดีนี้จะฝากงานหัวใจได้อีกทันที ถ้าเกมยังไม่รีเซ็ตจริง งานอาจล้ม (ระบบคืน Token ให้)",
+      confirmLabel: "ล้างโควต้า",
+    });
+    if (!ok) return;
+    try {
+      const r = await api("/api/admin/friend-intake/reset", { method: "POST", body: { mid: mid || null, acct_key: acct || null } });
+      adminConsoleStatus("ล้างแล้ว " + (r?.removed || 0) + " รายการ", "ok");
+    } catch (e) {
+      adminConsoleStatus("ล้างไม่สำเร็จ: " + (e?.message || ""), "err");
+    }
+    loadAdminIntake();
+  });
+
+  // ---- Admin: Slip2Go package status + outage list ----
+  async function loadAdminSlip2go() {
+    const el = $("admin-slip2go-body");
+    if (!el) return;
+    try {
+      const d = await api("/api/admin/slip2go/status");
+      const t = (iso) => {
+        try {
+          return new Date(iso).toLocaleString("th-TH", { dateStyle: "medium", timeStyle: "short" });
+        } catch (_) {
+          return String(iso || "—");
+        }
+      };
+      const days = d.days_left;
+      const warn = days != null && days < 7;
+      const alert = d.alert || {};
+      const down = alert.down_since && !alert.recovered_at;
+      const fails = Array.isArray(alert.failures) ? alert.failures : [];
+      el.innerHTML =
+        (d.error ? '<p class="s2g-bad">ดึงข้อมูล Slip2Go ไม่สำเร็จ: ' + escapeHtml(d.error) + "</p>" : "") +
+        '<div class="s2g-tiles">' +
+        '<div class="s2g-tile"><small>แพ็กเกจ</small><b>' + escapeHtml(d.package || "—") + "</b></div>" +
+        '<div class="s2g-tile' + (warn ? " is-warn" : "") + '"><small>หมดอายุ</small><b>' + escapeHtml(d.expires_at ? t(d.expires_at) : "—") +
+        "</b><span>" + (days != null ? "อีก " + escapeHtml(String(days)) + " วัน" : "") + (d.auto_renew ? " · ต่ออายุอัตโนมัติ" : " · ไม่ได้ตั้งต่ออัตโนมัติ") + "</span></div>" +
+        '<div class="s2g-tile"><small>ตรวจสลิปได้อีกประมาณ</small><b>' + formatNumTh(d.slips_left || 0) + " สลิป</b></div>" +
+        "</div>" +
+        (warn ? '<p class="s2g-bad">⚠️ แพ็กเกจ Slip2Go ใกล้หมดอายุ — ต่ออายุก่อนหมด ไม่งั้นลูกค้าจะเติมเงินด้วยสลิปไม่ได้</p>' : "") +
+        (down
+          ? '<p class="s2g-bad">🔴 ระบบตรวจสลิปขัดข้องตั้งแต่ ' + escapeHtml(t(alert.down_since)) + " (" + escapeHtml(alert.last_message || alert.last_code || "") + ")</p>"
+          : alert.recovered_at
+            ? '<p class="s2g-ok">✅ ใช้งานได้ปกติ (ขัดข้องล่าสุด ' + escapeHtml(t(alert.down_since)) + " → กลับมา " + escapeHtml(t(alert.recovered_at)) + ")</p>"
+            : "") +
+        (fails.length
+          ? "<p>ลูกค้าที่ส่งสลิปไม่ผ่านช่วงขัดข้อง (ควรแจ้งให้ส่งใหม่):</p><ul class=\"s2g-list\">" +
+            fails
+              .slice()
+              .reverse()
+              .map((f) => "<li>" + escapeHtml(t(f.at)) + " · <b>" + escapeHtml(f.username || String(f.user_id || "—").slice(0, 8)) + "</b> · " + escapeHtml(formatNumTh(f.amount_baht || 0)) + "฿</li>")
+              .join("") +
+            "</ul>"
+          : "");
+    } catch (e) {
+      el.innerHTML = '<p class="s2g-bad">โหลดไม่สำเร็จ: ' + escapeHtml(e?.message || "") + "</p>";
+    }
+  }
+  $("admin-slip2go-refresh")?.addEventListener("click", () => loadAdminSlip2go());
 
   async function loadAdminHearts() {
     const el = $("admin-hearts-stats");

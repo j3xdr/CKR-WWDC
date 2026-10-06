@@ -30,8 +30,8 @@
   <link rel="apple-touch-icon" href="assets/logo_180.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600&family=IBM+Plex+Sans+Thai:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="css/styles.css?v=20261002-hc1" />
-  <link rel="stylesheet" href="css/theme-basehub.css?v=20261006-botad3" />
+  <link rel="stylesheet" href="css/styles.css?v=20261006-bottour" />
+  <link rel="stylesheet" href="css/theme-basehub.css?v=20261006-bottour" />
   <script>
     (function () {
       var PALETTE = ["#3d348b", "#7678ed", "#f7b801", "#f18701", "#f35b04"];
@@ -98,7 +98,7 @@
           <span class="topbar-token-unit">Token</span>
         </button>
         <button type="button" class="topbar-token-pill topbar-bot-token-pill hidden" id="topbar-bot-token-pill" title="Token Bot · ร้านคีย์บอท Android" hidden>
-          <img src="https://api.crgwwdc.shop/android-updates/shop/token_bot.png" alt="" width="16" height="16" />
+          <img src="assets/token_bot.png" alt="" width="16" height="16" />
           <strong id="topbar-bot-token-value">0</strong>
           <span class="topbar-token-unit">Bot</span>
         </button>
@@ -881,7 +881,7 @@
                     </article>
                     <article class="hc-card hc-col-heartloop hc-card--best">
                       <header class="hc-card-head"><img src="assets/heartloop.png?v=20261001" alt="" width="36" height="36" loading="lazy" /><div><h4>HeartLoop</h4><p>ได้เยอะสุด คุ้มสุด ฝากยาวไม่ต้องเฝ้า</p></div><span class="hc-here">หน้านี้</span></header>
-                      <dl class="hc-rows"><div class="hc-row"><dt>ล็อกอิน</dt><dd>ฝากอีเมล/รหัส (ไม่ต้องเชื่อม)</dd></div><div class="hc-row"><dt>ได้สูงสุด</dt><dd><b class="hc-best">3,600–7,200 ดวง</b></dd></div><div class="hc-row"><dt>เวลา</dt><dd>12–24 ชม. อัตโนมัติ</dd></div><div class="hc-row"><dt>ราคา</dt><dd>50฿/12 ชม. · 100฿/24 ชม.<br><b class="hc-best">~0.014฿/ดวง · วันเช่าฟรี 5 ไอดี/วัน</b></dd></div></dl>
+                      <dl class="hc-rows"><div class="hc-row"><dt>ล็อกอิน</dt><dd>ฝากอีเมล/รหัส (ไม่ต้องเชื่อม)</dd></div><div class="hc-row"><dt>ได้สูงสุด</dt><dd><b class="hc-best">3,600–7,200 ดวง</b></dd></div><div class="hc-row"><dt>เวลา</dt><dd>12–24 ชม. อัตโนมัติ</dd></div><div class="hc-row"><dt>ราคา</dt><dd>25฿/6 ชม. · 50฿/12 ชม. · 100฿/24 ชม.<br><b class="hc-best">~0.014฿/ดวง · วันเช่าฟรี 5 ไอดี/วัน</b></dd></div></dl>
                       <button type="button" class="hc-go" data-hc-go="heartloop">ใช้ HeartLoop</button>
                     </article>
                   </div>
@@ -951,7 +951,7 @@
               <div class="farm-tab-panel hidden" id="farm-panel-heartloop" role="tabpanel" aria-labelledby="farm-tab-heartloop" hidden>
                 <style>
                   #farm-panel-heartloop{--hl-pink:#ff4da6;--hl-pink-strong:#ff6fb7;--hl-pink-bg:rgba(255,77,166,.12);--hl-soft-bg:rgba(255,255,255,.04)}
-                  .heartloop-packs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+                  .heartloop-packs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0}
                   .heartloop-pack{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;padding:14px 10px;border:2px solid var(--line);border-radius:14px;background:var(--card);color:var(--text);cursor:pointer;text-align:center;font:inherit;transition:border-color .15s,background .15s,box-shadow .15s}
                   .heartloop-pack:hover{border-color:var(--hl-pink)}
                   .heartloop-pack:focus-visible{outline:2px solid var(--hl-pink);outline-offset:2px}
@@ -964,14 +964,8 @@
                   .heartloop-preview-card .btn{white-space:normal;height:auto;min-height:40px;line-height:1.35}
                   .heartloop-preview-card p{margin:0}
                   .heartloop-slots-big{font-size:1.05rem;font-weight:700}
-                  .heartloop-custom{margin:10px 0;padding:10px 12px;border-radius:12px;background:var(--hl-soft-bg);border:1px solid var(--line)}
-                  .heartloop-custom > label{display:flex;gap:8px;align-items:flex-start;line-height:1.4;cursor:pointer}
-                  .heartloop-custom-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px}
-                  .heartloop-custom-row[hidden]{display:none}
-                  .heartloop-custom-row input[type=number]{width:72px;text-align:center;padding:6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:1.05rem}
-                  .heartloop-custom-row strong{color:var(--hl-pink-strong)}
                   .heartloop-clear{display:flex;gap:8px;align-items:flex-start;margin:12px 0;font-size:.92rem;line-height:1.4;cursor:pointer}
-                  .heartloop-clear input,.heartloop-custom > label input{flex:none;margin-top:3px}
+                  .heartloop-clear input{flex:none;margin-top:3px}
                   .heartloop-yield-hl{color:var(--hl-pink-strong);font-weight:800}
                   .hl-jobs{margin:14px 0 4px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--card)}
                   .hl-jobs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
@@ -1066,6 +1060,12 @@
                 </div>
 
                 <div class="heartloop-packs" id="heartloop-packs">
+                  <button type="button" class="heartloop-pack" data-hours="6">
+                    <span class="heartloop-pack-h">⏱ 6 ชั่วโมง</span>
+                    <span class="heartloop-pack-price" data-pack-price="6">25฿</span>
+                    <span class="heartloop-pack-list" data-pack-list="6" hidden></span>
+                    <span class="heartloop-pack-yield" data-pack-yield="6">สูงสุด 1,800 หัวใจ</span>
+                  </button>
                   <button type="button" class="heartloop-pack is-active" data-hours="12">
                     <span class="heartloop-pack-h">⏱ 12 ชั่วโมง</span>
                     <span class="heartloop-pack-price" data-pack-price="12">50฿</span>
@@ -1078,17 +1078,6 @@
                     <span class="heartloop-pack-list" data-pack-list="24" hidden></span>
                     <span class="heartloop-pack-yield" data-pack-yield="24">สูงสุด 7,200 หัวใจ</span>
                   </button>
-                </div>
-
-                <div class="heartloop-custom">
-                  <label><input type="checkbox" id="heartloop-custom-toggle" /> <span>กำหนดชั่วโมงเอง (ชม.ละ <span id="heartloop-perhour">5</span>฿ · แพ็คคุ้มกว่า)</span></label>
-                  <div class="heartloop-custom-row" id="heartloop-custom-row" hidden>
-                    <button type="button" class="ticket-step-btn" id="heartloop-hours-minus" aria-label="ลดชั่วโมง">−</button>
-                    <input type="number" id="heartloop-hours" min="1" max="24" value="6" />
-                    <button type="button" class="ticket-step-btn" id="heartloop-hours-plus" aria-label="เพิ่มชั่วโมง">+</button>
-                    <span>ชม.</span>
-                    <strong id="heartloop-custom-price">= 30฿</strong>
-                  </div>
                 </div>
 
                 <label class="heartloop-clear"><input type="checkbox" id="heartloop-clear" /> <span>ลบเพื่อนทั้งหมดก่อนเริ่ม (<b>แนะนำ</b> — เคลียร์ช่องให้เต็ม 300 จะได้หัวใจสูงสุด) · เพื่อนจริงจะถูกลบด้วย</span></label>
@@ -1123,9 +1112,17 @@
                       <img loading="lazy" src="assets/magic_powder.png" alt="" width="36" height="36" />
                       <div class="powder-goal-copy">
                         <strong>อยากได้ผงเท่าไหร่?</strong>
-                        <span class="muted">ระบบจะคำนวณงบเหรียญให้ (ประมาณ 8 ผง/กล่อง) · เพดานต่อรอบตั้งโดยแอดมิน</span>
+                        <span class="muted" id="powder-goal-cap-note">ระบบจะคำนวณงบเหรียญให้ (ประมาณ 8 ผง/กล่อง) · เพดาน 50,000 ผง/รอบ</span>
                       </div>
                     </div>
+                    <div class="powder-target-shortcuts" id="powder-target-shortcuts" role="group" aria-label="เป้าผงด่วน">
+                      <button type="button" class="powder-target-shortcut is-recommended" data-powder-target="10000">10k</button>
+                      <button type="button" class="powder-target-shortcut is-recommended" data-powder-target="20000">20k</button>
+                      <button type="button" class="powder-target-shortcut" data-powder-target="30000">30k</button>
+                      <button type="button" class="powder-target-shortcut" data-powder-target="40000">40k</button>
+                      <button type="button" class="powder-target-shortcut" data-powder-target="50000">50k</button>
+                    </div>
+                    <p class="powder-target-warn" id="powder-target-warn">การทำเยอะเกินอาจทำให้เกิด code 500 ซึ่งจะทำให้เข้าเกมไม่ได้ 24 ชม. ค่าที่แนะนำ 10,000–20,000</p>
                     <div class="ticket-stepper-controls powder-goal-stepper">
                       <button type="button" class="ticket-step-btn" id="powder-target-powder-minus" aria-label="ลดเป้าผง">−</button>
                       <input
@@ -1174,11 +1171,6 @@
                     <input type="checkbox" id="powder-do-break" checked />
                     <span>ย่อยทันทีหลังซื้อ</span>
                   </label>
-                  <label class="powder-up9-toggle" for="powder-upgrade-9">
-                    <input type="checkbox" id="powder-upgrade-9" />
-                    <span>ตีบวกสมบัติที่สุ่มได้ถึง +9 ก่อนย่อย</span>
-                  </label>
-                  <p class="powder-up9-hint muted" id="powder-upgrade-9-hint">ใช้ทรัพยากรตี · เป็นประมาณการ ไม่ใช่ยอดหักจริง</p>
                 </div>
 
                 <details class="powder-advanced">
@@ -1242,30 +1234,6 @@
                         </tr>
                       </tbody>
                     </table>
-                  </div>
-                  <div class="powder-up9-compare hidden" id="powder-up9-compare" hidden>
-                    <table class="powder-plan-table powder-up9-table">
-                      <thead>
-                        <tr>
-                          <th></th>
-                          <th class="powder-plan-th-coin">เหรียญ (ใช้)</th>
-                          <th class="powder-plan-th-powder">ผง (ได้)</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr>
-                          <td>ย่อยเลย</td>
-                          <td id="powder-up9-recycle-coin">—</td>
-                          <td id="powder-up9-recycle-powder">—</td>
-                        </tr>
-                        <tr>
-                          <td>ตี +9 ก่อน</td>
-                          <td id="powder-up9-upgrade-coin">—</td>
-                          <td id="powder-up9-upgrade-powder">—</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                    <p class="powder-up9-compare-note muted" id="powder-up9-compare-note"></p>
                   </div>
                   <p class="powder-plan-foot muted" id="powder-rounds-hint">เชื่อม DevPlay เพื่อดูแผน</p>
                   <div id="powder-summary" class="powder-run-summary hidden" hidden>
@@ -1703,13 +1671,17 @@
                 <div class="pcp-page" id="pc-program-page" aria-live="polite"></div>
                 <section class="pcp-card pcp-tour" id="pc-tour-wrap" hidden>
                   <div class="pcp-tour-head"><div><b>ทัวร์โปรแกรม · ดูก่อนซื้อ</b><span>ชี้หรือแตะเมนูในหน้าจอจำลอง เพื่อดูว่าแต่ละฟังก์ชันทำอะไร</span></div><a class="pcp-tour-full" href="/pc-tour" target="_blank" rel="noopener">เต็มจอ ↗</a></div>
-                  <iframe id="pc-tour-frame" title="ทัวร์โปรแกรม CRG CmiYC" loading="lazy" scrolling="no"></iframe>
+                  <iframe id="pc-tour-frame" title="ทัวร์โปรแกรม CRGWWDC.SHOP" loading="lazy" scrolling="no"></iframe>
                 </section>
                 <div class="pcp-page" id="pc-program-bottom"></div>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-bot_ad" role="tabpanel" aria-labelledby="menu-nav-bot_ad" hidden>
                 <div class="pcp-page" id="bot-ad-page" aria-live="polite"></div>
+                <section class="pcp-card pcp-tour" id="bot-tour-wrap" hidden>
+                  <div class="pcp-tour-head"><div><b>ดูตัวอย่างแผงลอย</b><span>ชี้หรือแตะในหน้าจอจำลอง เพื่อดูว่าแต่ละปุ่มทำอะไร</span></div><a class="pcp-tour-full" href="/bot-tour" target="_blank" rel="noopener">เต็มจอ ↗</a></div>
+                  <iframe id="bot-tour-frame" title="ทัวร์แผงลอย WWDC BOT" loading="lazy" scrolling="no"></iframe>
+                </section>
               </div>
 
               <div class="farm-tab-panel hidden" id="farm-panel-report_multi" role="tabpanel" aria-labelledby="menu-nav-report_multi" hidden>
@@ -3658,7 +3630,7 @@
         <div id="topup-token-section" class="topup-token-flow">
           <p class="cko-step-hint panel-hint">เลือกยอดแล้วกดถัดไปเพื่อสแกน QR</p>
           <div class="bad-topup-bonus">
-            <img src="https://api.crgwwdc.shop/android-updates/shop/token_bot.png" alt="" width="42" height="42" />
+            <img src="assets/token_bot.png" alt="" width="42" height="42" />
             <p>🎁 แถม Token Bot เท่ากับจำนวนที่เติม (เติม 300 ได้ Token Bot 300) ใช้ซื้อคีย์บอท Android ที่เมนู Bot-Ad · โค้ดและแอดมินปรับยอดไม่แถม</p>
           </div>
           <div id="topup-token-discount" class="token-promo-card hidden" hidden aria-live="polite"></div>
@@ -4229,6 +4201,10 @@
           <button type="button" class="admin-tab-btn" data-admin-console-tab="hearts" role="tab" aria-selected="false" title="คลังหัวใจ">
             <span class="admin-tab-icon" aria-hidden="true"><svg class="admin-tab-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-9.3-8.6C1 8 3 4.5 6.5 4.5c2 0 3.6 1.1 5.5 3 1.9-1.9 3.5-3 5.5-3C21 4.5 23 8 21.3 11.4 19 15.6 12 20 12 20z"/></svg></span>
             <span class="admin-tab-text">คลังหัวใจ</span>
+          </button>
+          <button type="button" class="admin-tab-btn" data-admin-console-tab="intake" role="tab" aria-selected="false" title="โควต้าเพื่อนใหม่">
+            <span class="admin-tab-icon" aria-hidden="true"><svg class="admin-tab-svg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg></span>
+            <span class="admin-tab-text">โควต้าเพื่อนใหม่</span>
           </button>
           <p class="admin-nav-label">ระบบ</p>
           <button type="button" class="admin-tab-btn" data-admin-console-tab="farmcaps" role="tab" aria-selected="false" title="เพดานฟาร์ม">
@@ -5285,6 +5261,11 @@
               </label>
               <input id="admin-idshop-bulk-price" class="admin-input" type="number" min="1" placeholder="ราคาชุด" />
               <button type="button" class="btn btn-primary btn-sm" id="admin-idshop-bulk-price-btn">ตั้งราคาชุด</button>
+              <select id="admin-idshop-export-status" class="admin-select" title="สถานะที่จะดึงออก">
+                <option value="listed" selected>ยังไม่ขาย (วางขายอยู่)</option>
+                <option value="unsold">ยังไม่ขายทั้งหมด (รวมพัก/กำลังสแกน)</option>
+              </select>
+              <button type="button" class="btn btn-ghost btn-sm" id="admin-idshop-export-btn" title="ดาวน์โหลด .txt รูปแบบ อีเมล[TAB]รหัส บรรทัดละไอดี — ใช้กับ VPS project ได้">⬇ ดึง .txt ไอดีที่ยังไม่ขาย</button>
             </div>
             <div id="admin-idshop-list" class="idshop-admin-table"></div>
             <nav id="admin-idshop-pager" class="idshop-pager" aria-label="หน้าสต็อกแอดมิน" hidden></nav>
@@ -5370,6 +5351,36 @@
                 </button>
               </div>
             </div>
+          </div>
+        </section>
+
+        <!-- PANE 5b2: shared new-friend quota per game account -->
+        <section class="admin-console-pane hidden" data-admin-console-pane="intake" hidden>
+          <div class="admin-card">
+            <div class="admin-card-head">
+              <div>
+                <h3 class="admin-card-title">โควต้ารับเพื่อนใหม่ต่อไอดีเกม</h3>
+                <p class="admin-card-desc">เกมจำกัดการรับเพื่อนใหม่ (รับ→ส่งหัวใจ→ลบ→รับใหม่) ต่อไอดี รวม ฟาร์มหัวใจ · HeartLoop · ฟาร์มใจ MID</p>
+              </div>
+              <div class="admin-card-actions">
+                <button type="button" class="btn btn-ghost btn-sm" id="admin-intake-refresh"><span>รีเฟรช</span></button>
+              </div>
+            </div>
+            <div id="admin-intake-summary" class="ai-summary"></div>
+            <form class="ai-search" id="admin-intake-search" autocomplete="off">
+              <input class="admin-input" id="admin-intake-q" placeholder="ค้นหา MID หรืออีเมลไอดีเกม" />
+              <button type="submit" class="btn btn-ghost btn-sm">ค้นหา</button>
+            </form>
+            <div id="admin-intake-list" class="ai-list"></div>
+          </div>
+          <div class="admin-card">
+            <div class="admin-card-head">
+              <div>
+                <h3 class="admin-card-title">หลักฐานเวลารีเซ็ต</h3>
+                <p class="admin-card-desc">ไอดีที่เคย "รับเพื่อนไม่ได้" แล้วต่อมาใช้ได้อีก — ใช้ยืนยัน/ปรับเวลารีเซ็ต (GAME_INTAKE_RESET_TH)</p>
+              </div>
+            </div>
+            <div id="admin-intake-evidence" class="ai-list"></div>
           </div>
         </section>
 
@@ -5479,18 +5490,18 @@
                   <input id="farm-dock-admin-powder-max-input" class="farm-dock-admin-heart-max-input" type="number" min="1" max="2000000" step="1" inputmode="numeric" />
                   <button type="button" id="farm-dock-admin-powder-max-save" class="btn btn-ghost btn-sm farm-dock-admin-heart-max-save">บันทึก</button>
                 </div>
-                <p id="farm-dock-admin-powder-max-msg" class="farm-dock-admin-heart-max-msg muted">ค่าเริ่มต้น 5,000 — แอดมินปรับเพิ่ม/ลดได้</p>
+                <p id="farm-dock-admin-powder-max-msg" class="farm-dock-admin-heart-max-msg muted">ค่าเริ่มต้น 50,000 — แอดมินปรับเพิ่ม/ลดได้</p>
               </div>
               <div id="farm-dock-admin-heartloop" class="farm-dock-admin-heart-max aj-setting">
                 <label class="farm-dock-admin-heart-max-label">ราคา HeartLoop (admin) · 1 Token = 1฿</label>
                 <div class="farm-dock-admin-heart-max-row" style="flex-wrap:wrap;gap:8px">
-                  <label style="font-size:.82rem">ต่อ ชม.<br /><input id="farm-dock-admin-hl-perhour" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
+                  <label style="font-size:.82rem">แพ็ค 6 ชม.<br /><input id="farm-dock-admin-hl-perhour" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
                   <label style="font-size:.82rem">แพ็ค 12 ชม.<br /><input id="farm-dock-admin-hl-pack12" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
                   <label style="font-size:.82rem">แพ็ค 24 ชม.<br /><input id="farm-dock-admin-hl-pack24" class="farm-dock-admin-heart-max-input" type="number" min="1" max="100000" step="1" style="width:80px" /></label>
                   <label style="font-size:.82rem">วันเช่าฟรี (ไอดี/24 ชม.)<br /><input id="farm-dock-admin-hl-rental-ids" class="farm-dock-admin-heart-max-input" type="number" min="0" max="100" step="1" style="width:80px" /></label>
                   <button type="button" id="farm-dock-admin-hl-save" class="btn btn-ghost btn-sm farm-dock-admin-heart-max-save">บันทึก</button>
                 </div>
-                <p id="farm-dock-admin-hl-msg" class="farm-dock-admin-heart-max-msg muted">ต่อ ชม. ใช้ตอนลูกค้าตั้งชั่วโมงเอง · แพ็ค 12/24 ควรถูกกว่า (ค่าเริ่มต้น 5 / 50 / 100฿) · ผู้มีวันเช่าฝากฟรีได้ตามจำนวนไอดีที่ตั้ง (ค่าเริ่มต้น 5, ใส่ 0 = วันเช่าไม่ครอบคลุม) เกินจากนั้นหัก Token</p>
+                <p id="farm-dock-admin-hl-msg" class="farm-dock-admin-heart-max-msg muted">ลูกค้าเลือกได้เฉพาะแพ็ค 6 / 12 / 24 ชม. (ค่าเริ่มต้น 25 / 50 / 100฿) · ผู้มีวันเช่าฝากฟรีได้ตามจำนวนไอดีที่ตั้ง (ค่าเริ่มต้น 5, ใส่ 0 = วันเช่าไม่ครอบคลุม) เกินจากนั้นหัก Token</p>
               </div>
                 <div class="aj-danger">
                   <div>
@@ -5505,6 +5516,16 @@
         </section>
 
         <section class="admin-console-pane hidden" data-admin-console-pane="topups" hidden>
+          <div class="admin-card" id="admin-slip2go-card">
+            <div class="admin-card-head">
+              <div>
+                <h3 class="admin-card-title">ระบบตรวจสลิป (Slip2Go)</h3>
+                <p class="admin-card-desc">แพ็กเกจ วันหมดอายุ และโควต้าคงเหลือ · ลูกค้าที่ส่งสลิปไม่ผ่านเพราะระบบขัดข้อง</p>
+              </div>
+              <div class="admin-card-actions"><button type="button" class="btn btn-ghost btn-sm" id="admin-slip2go-refresh"><span>รีเฟรช</span></button></div>
+            </div>
+            <div id="admin-slip2go-body" class="s2g-body"><p class="muted">กำลังโหลด…</p></div>
+          </div>
           <div class="admin-card">
             <div class="admin-card-head">
               <div>
@@ -6259,16 +6280,16 @@
   <script src="js/ckr_wiki.js?v=20260925-mh1"></script>
   <script src="js/ckr_quest_data.js?v=20260917-quest2"></script>
   <script src="js/guide_data.js?v=20260923-guide1"></script>
-  <script src="js/app.js?v=20261006-botad3"></script>
-  <script src="js/live_page.js?v=20261002-hl2"></script>
+  <script src="js/app.js?v=20261006-bottour"></script>
+  <script src="js/live_page.js?v=20261002-fix3"></script>
   <script src="js/admin_jobs.js?v=20260924-crg1"></script>
   <script src="js/account_tools.js?v=20260929-sq1"></script>
   <script src="js/acct_report.js?v=20260925-rm1"></script>
-  <script src="js/crgcode.js?v=20260924-crg7"></script>
-  <script src="js/pc_program.js?v=20260927-nav1"></script>
-  <script src="js/bot_ad.js?v=20261006-botad3"></script>
+  <script src="js/crgcode.js?v=20261002-audit1"></script>
+  <script src="js/pc_program.js?v=20261002-audit1"></script>
+  <script src="js/bot_ad.js?v=20261006-bottour"></script>
   <script src="js/report_multi.js?v=20260927-gi1"></script>
-  <script src="js/mid_heart.js?v=20261001-mh7"></script>
+  <script src="js/mid_heart.js?v=20261002-intake1"></script>
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=ckrTurnstileReady&render=explicit" async defer></script>
 </body>
 </html>
